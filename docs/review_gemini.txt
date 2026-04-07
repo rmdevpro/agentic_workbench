@@ -1,0 +1,39 @@
+I will begin by investigating the codebase and test files to provide a comprehensive evaluation of coverage, quality, and potential improvements.
+I will now examine the mock tests and their corresponding source files to identify specific instances of logic re-implementation and other quality issues.
+I have confirmed that the mock tests suffer from significant logic re-implementation, which prevents them from accurately testing the production code. I will now examine the live tests to evaluate the integration-level quality and identify any further issues.
+I have reviewed all the test files and identified several areas where coverage is lacking, particularly in `mcp-server.js`, `quorum.js`, and the more complex logic within `server.js`. I will now examine `mcp-server.js` to understand its functionality and determine the extent of the testing gap.
+The following is a comprehensive review of the **Blueprint (Hopper UI)** test suite, covering both the mock (unit) and live (integration) test directories.
+
+### 1. COVERAGE GAPS
+*   **`mcp-server.js` (Zero Coverage):** This is the primary entry point for the Claude CLI to interact with Blueprint via the MCP protocol. It handles JSON-RPC over `stdio`, tool dispatching, and HTTP communication with the main server. **None** of this logic is tested—neither the protocol parsing nor the tool schema definitions.
+*   **`quorum.js` (No Execution Tests):** While there is a mock test for the "tools" a junior agent can use, the core logic of `askQuorum` (the multi-model synthesis flow) is completely untested. There is no verification of how it handles multiple model responses or the lead model's synthesis phase.
+*   **`server.js` (Complex Business Logic):**
+    *   **Smart Compaction:** The `runSmartCompaction` flow (updating plans, triggering `/compact`, and resuming) is only tested for a "missing project" error. The actual multi-step state machine is not exercised.
+    *   **Compaction Monitoring:** The background logic in `checkCompactionNeeds` that monitors token usage and proactively triggers compaction is untested.
+*   **Startup & Config:** Functions like `trustWorkspaceDirs` and `registerMcpServer` are not verified, meaning configuration or permission-related startup failures could go unnoticed.
+
+### 2. TEST QUALITY
+*   **Logic Re-implementation (Critical Issue):** Several mock tests (specifically `auth.test.js`, `session-parsing.test.js`, and `quorum-tools.test.js`) **re-implement the production logic inside the test file** rather than `require()`-ing the source module.
+    *   *Example:* `auth.test.js` defines its own `checkAuthStatus()` function that is a copy-paste of the one in `server.js`. The test then verifies this local function. If the production code breaks or changes, the test will still pass because it is testing its own copy of the logic.
+*   **Weak Assertions:** Live tests frequently check for `res.status === 200` but fail to verify the side effect. For instance, `C17: Add webhook` checks that the request succeeded but doesn't verify the webhook was actually persisted in the database or settings.
+*   **Hardcoded Dependencies:** Integration tests rely on a pre-existing project named `ContextBroker`. If this project is missing from the environment, the entire live suite fails immediately.
+*   **Skipped "Happy Paths":** Core features like AI completions (`/v1/chat/completions`) and session summaries are explicitly skipped in the test suite to avoid API costs. While understandable, there are no "dry-run" or mocked-provider versions of these tests to verify the plumbing.
+
+### 3. BUGS IN TESTS
+*   **Race Conditions:**
+    *   **Phase F (WebSockets):** Tests rely on arbitrary `setTimeout` (10s) for message delivery. Under high load or slow PTY initialization, these will flake.
+    *   **Phase B (Sessions):** Test `B02` explicitly notes that "New sessions may not appear immediately" because the JSONL file isn't created until the first message. The test simply doesn't assert the session's presence, effectively making it a "no-op" test.
+*   **State Pollution (Missing Cleanup):** Tests in `Phase B`, `C`, and `D` create sessions, tasks, and settings change but do not delete them. Running the test suite multiple times on the same live server will result in hundreds of "Integration test task" entries and "test-plan-session" files.
+*   **Async Leaks:** In `phase-f-websocket.test.js`, if a WebSocket receives a message after `done()` has been called (e.g., due to a late event), it can cause the test runner to crash or report multiple completions.
+
+### 4. MISSING ERROR PATHS
+*   **CLI/System Failures:** There are no tests for scenarios where `execSync` fails (e.g., `tmux` is not installed, the `claude` CLI returns a non-zero exit code, or the system is out of disk space).
+*   **Upstream Failures:** No tests cover what happens when the Blueprint server is running but the external MCP servers it depends on are down.
+*   **Edge Case Input:** The OpenAI-compatible endpoint (`/v1/chat/completions`) lacks tests for malformed message arrays, empty content, or unsupported model names beyond the basic "missing messages" check.
+
+### 5. IMPROVEMENTS
+*   **Proper Mocking:** Refactor all mock tests to `require('../../source-file')`. Use `node:test`'s built-in `mock.method` or `mock.getter` to intercept `fs` and `child_process` calls instead of re-writing the logic in the test.
+*   **Hermetic Environments:** Integration tests should create a temporary "TestProject" folder and delete it in an `after()` hook to ensure a clean slate for every run.
+*   **Polling vs. Sleeping:** Replace `setTimeout` in WebSocket and Session tests with a `waitUntil(condition, timeout)` helper that polls the API/filesystem every 100ms.
+*   **MCP Transport Test:** Create a specific test for `mcp-server.js` that spawns the script as a child process and sends/receives JSON-RPC over `stdin`/`stdout`.
+*   **Mock Providers:** Implement a "mock" LLM provider mode in `openai-compat.js` that returns static responses when a specific environment variable is set, allowing the full "happy path" (completion -> session save -> token count) to be tested without external API calls.

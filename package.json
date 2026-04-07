@@ -1,0 +1,26 @@
+{
+  "name": "blueprint",
+  "version": "0.1.0",
+  "description": "Web-based CLI workbench for AI coding agents",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test tests/mock/*.test.js",
+    "test:live": "MAX_TMUX_SESSIONS=20 node --test tests/live/*.test.js",
+    "test:browser": "node --test-timeout 600000 --test tests/browser/*.test.js"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "0.10.0",
+    "@xterm/addon-web-links": "0.11.0",
+    "@xterm/xterm": "5.5.0",
+    "better-sqlite3": "11.8.1",
+    "express": "4.21.2",
+    "jquery": "^4.0.0",
+    "jqueryfiletree": "^2.1.4",
+    "node-pty": "^1.0.0",
+    "ws": "8.18.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.59.0"
+  }
+}

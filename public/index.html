@@ -1,0 +1,2102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blueprint</title>
+  <link rel="stylesheet" href="/lib/xterm/css/xterm.css">
+  <link rel="stylesheet" href="/lib/jqueryfiletree/jQueryFileTree.min.css">
+  <script src="/lib/jquery/jquery.min.js"></script>
+  <script src="/lib/jqueryfiletree/jQueryFileTree.min.js"></script>
+  <style>
+    :root {
+      --bg-primary: #0d1117;
+      --bg-secondary: #161b22;
+      --bg-tertiary: #21262d;
+      --bg-hover: #292e36;
+      --text-primary: #e6edf3;
+      --text-secondary: #8b949e;
+      --text-muted: #484f58;
+      --accent: #58a6ff;
+      --accent-hover: #79c0ff;
+      --border: #30363d;
+      --success: #3fb950;
+      --warning: #d29922;
+      --danger: #f85149;
+      --sidebar-width: 280px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+    }
+
+    /* ── Sidebar ────────────────────────────────────── */
+    #sidebar {
+      width: var(--sidebar-width);
+      min-width: var(--sidebar-width);
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    #sidebar-header {
+      padding: 16px 16px 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    #sidebar-header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; }
+
+    #sidebar-header button {
+      background: none; border: none; color: var(--text-secondary);
+      cursor: pointer; padding: 4px; border-radius: 4px; font-size: 14px;
+    }
+    #sidebar-header button:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+
+    #project-list { flex: 1; overflow-y: auto; padding: 8px 0; }
+    #project-list::-webkit-scrollbar { width: 6px; }
+    #project-list::-webkit-scrollbar-track { background: transparent; }
+    #project-list::-webkit-scrollbar-thumb { background: var(--bg-tertiary); border-radius: 3px; }
+
+    .project-group { margin-bottom: 4px; }
+
+    .project-header {
+      display: flex; align-items: center; padding: 8px 16px; cursor: pointer;
+      color: var(--text-secondary); font-size: 12px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.5px; user-select: none;
+    }
+    .project-header:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+    .project-header .arrow { margin-right: 6px; font-size: 10px; transition: transform 0.15s; }
+    .project-header.collapsed .arrow { transform: rotate(-90deg); }
+    .project-header .count {
+      margin-left: auto; background: var(--bg-tertiary); padding: 1px 6px;
+      border-radius: 10px; font-size: 11px; color: var(--text-muted);
+    }
+
+    .session-list { overflow: hidden; }
+    .session-list.collapsed { display: none; }
+
+    .session-item {
+      display: flex; flex-direction: column; padding: 8px 16px 8px 28px;
+      cursor: pointer; border-left: 2px solid transparent; transition: background 0.1s;
+    }
+    .session-item:hover { background: var(--bg-hover); }
+    .session-item.open { border-left-color: var(--accent); }
+    .session-item.active { background: var(--bg-tertiary); border-left-color: var(--accent-hover); }
+
+    .session-top-row { display: flex; align-items: center; gap: 4px; }
+
+    .session-name {
+      font-size: 13px; color: var(--text-primary); white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; line-height: 1.4; flex: 1;
+    }
+
+    .session-actions { display: none; gap: 2px; flex-shrink: 0; }
+    .session-item:hover .session-actions { display: flex; }
+
+    .session-action-btn {
+      background: none; border: none; color: var(--text-muted); cursor: pointer;
+      padding: 2px 4px; border-radius: 3px; font-size: 11px; line-height: 1;
+    }
+    .session-action-btn:hover { color: var(--text-primary); background: var(--bg-primary); }
+
+    .session-meta {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 11px; color: var(--text-muted); margin-top: 2px;
+    }
+    .session-meta .msg-count {
+      background: var(--bg-primary); padding: 0 5px; border-radius: 8px; font-size: 10px;
+    }
+    .session-meta .active-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: var(--success);
+    }
+
+    .new-session-btn {
+      display: flex; align-items: center; gap: 6px; padding: 8px 16px 8px 28px;
+      cursor: pointer; color: var(--accent); font-size: 13px;
+      border: none; background: none; width: 100%; text-align: left;
+    }
+    .new-session-btn:hover { background: var(--bg-hover); color: var(--accent-hover); }
+
+    /* ── Filter Bar ────────────────────────────────── */
+    #filter-bar {
+      display: flex; gap: 2px; padding: 8px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .filter-btn {
+      background: none; border: 1px solid var(--border); color: var(--text-secondary);
+      cursor: pointer; padding: 3px 10px; border-radius: 12px; font-size: 11px;
+    }
+    .filter-btn:hover { color: var(--text-primary); border-color: var(--text-muted); }
+    .filter-btn.active { background: var(--bg-tertiary); color: var(--text-primary); border-color: var(--accent); }
+
+    .session-item.archived .session-name { color: var(--text-muted); font-style: italic; }
+    .session-item.missing { opacity: 0.5; cursor: not-allowed; }
+    .project-header.missing { opacity: 0.6; }
+    .project-header.missing::after { content: ' (missing)'; font-size: 10px; color: var(--danger); font-weight: normal; text-transform: none; }
+
+    /* ── Right Panel ────────────────────────────────── */
+    #right-panel {
+      width: 0; overflow: hidden; background: var(--bg-secondary);
+      border-left: 1px solid var(--border); transition: width 0.2s;
+      display: flex; flex-direction: column;
+    }
+    #right-panel.open { width: 320px; min-width: 320px; }
+
+    #panel-header {
+      padding: 12px 16px; border-bottom: 1px solid var(--border);
+      display: flex; gap: 4px;
+    }
+    .panel-tab {
+      background: none; border: 1px solid var(--border); color: var(--text-secondary);
+      cursor: pointer; padding: 4px 12px; border-radius: 12px; font-size: 11px;
+    }
+    .panel-tab:hover { color: var(--text-primary); }
+    .panel-tab.active { background: var(--bg-tertiary); color: var(--text-primary); border-color: var(--accent); }
+
+    #panel-content { flex: 1; overflow-y: auto; padding: 12px 16px; }
+
+    .panel-section h3 {
+      font-size: 11px; text-transform: uppercase; color: var(--text-muted);
+      letter-spacing: 0.5px; margin-bottom: 8px;
+    }
+
+    #notes-editor {
+      width: 100%; min-height: 200px; background: var(--bg-primary);
+      border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary);
+      padding: 8px; font-size: 13px; font-family: inherit; resize: vertical; outline: none;
+    }
+    #notes-editor:focus { border-color: var(--accent); }
+
+    .task-item {
+      display: flex; align-items: center; gap: 8px; padding: 6px 0;
+      border-bottom: 1px solid var(--border); font-size: 13px;
+    }
+    .task-item.done .task-text { text-decoration: line-through; color: var(--text-muted); }
+    .task-checkbox { cursor: pointer; }
+    .task-text { flex: 1; }
+    .task-delete {
+      background: none; border: none; color: var(--text-muted); cursor: pointer;
+      font-size: 11px; visibility: hidden;
+    }
+    .task-item:hover .task-delete { visibility: visible; }
+    .task-delete:hover { color: var(--danger); }
+
+    #add-task-input {
+      width: 100%; padding: 8px; background: var(--bg-primary); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text-primary); font-size: 13px; margin-top: 8px; outline: none;
+    }
+    #add-task-input:focus { border-color: var(--accent); }
+
+    #panel-toggle {
+      position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+      background: var(--bg-secondary); border: 1px solid var(--border);
+      border-right: none; border-radius: 4px 0 0 4px;
+      color: var(--text-muted); cursor: pointer; padding: 8px 4px; font-size: 12px; z-index: 10;
+    }
+    #panel-toggle:hover { color: var(--text-primary); }
+
+    /* ── Settings Modal ─────────────────────────────── */
+    #settings-modal {
+      display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7); z-index: 999;
+      align-items: center; justify-content: center;
+    }
+    #settings-modal.visible { display: flex; }
+    #settings-modal .modal-content {
+      background: var(--bg-secondary); border: 1px solid var(--border);
+      border-radius: 12px; padding: 24px; width: 800px; max-width: 90vw; max-height: 80vh;
+      overflow-y: auto;
+    }
+    #settings-modal h2 { font-size: 16px; margin-bottom: 16px; }
+    .settings-group { margin-bottom: 20px; }
+    .settings-group h3 {
+      font-size: 12px; text-transform: uppercase; color: var(--text-muted);
+      letter-spacing: 0.5px; margin-bottom: 8px;
+    }
+    .setting-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 0; border-bottom: 1px solid var(--border);
+    }
+    .setting-row label { font-size: 13px; color: var(--text-secondary); }
+    .setting-row select, .setting-row input[type="number"] {
+      background: var(--bg-primary); border: 1px solid var(--border);
+      color: var(--text-primary); padding: 4px 8px; border-radius: 4px; font-size: 13px;
+    }
+    .setting-row input[type="checkbox"] { cursor: pointer; }
+    .settings-close {
+      float: right; background: none; border: none; color: var(--text-muted);
+      cursor: pointer; font-size: 18px;
+    }
+    .settings-close:hover { color: var(--text-primary); }
+
+    .mcp-server-item {
+      display: flex; align-items: center; gap: 8px; padding: 6px 0;
+      border-bottom: 1px solid var(--border); font-size: 12px;
+    }
+    .mcp-server-item .name { flex: 1; color: var(--text-primary); font-weight: 500; }
+    .mcp-server-item .type { color: var(--text-muted); }
+    .mcp-server-item .remove {
+      background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 11px;
+    }
+    .mcp-server-item .remove:hover { color: var(--danger); }
+
+    #add-mcp-form { display: flex; gap: 6px; margin-top: 8px; }
+    #add-mcp-form input {
+      flex: 1; padding: 6px 8px; background: var(--bg-primary); border: 1px solid var(--border);
+      color: var(--text-primary); border-radius: 4px; font-size: 12px;
+    }
+    #add-mcp-form button {
+      padding: 6px 12px; background: var(--accent); color: #fff; border: none;
+      border-radius: 4px; cursor: pointer; font-size: 12px;
+    }
+
+    #sidebar-footer {
+      padding: 8px 16px; border-top: 1px solid var(--border);
+    }
+    #sidebar-footer button {
+      background: none; border: none; color: var(--text-muted); cursor: pointer;
+      font-size: 13px; display: flex; align-items: center; gap: 6px; padding: 4px 0;
+    }
+    #sidebar-footer button:hover { color: var(--text-primary); }
+
+    /* ── Auth Modal ─────────────────────────────────── */
+    #auth-modal {
+      display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.8); z-index: 1000;
+      align-items: center; justify-content: center;
+    }
+    #auth-modal.visible { display: flex; }
+
+    #auth-modal .modal-content {
+      background: var(--bg-secondary); border: 1px solid var(--border);
+      border-radius: 12px; padding: 32px; max-width: 500px; width: 90%;
+      text-align: center; position: relative;
+    }
+    #auth-modal .modal-close {
+      position: absolute; top: 10px; right: 14px; background: none; border: none;
+      color: var(--text-secondary); font-size: 22px; cursor: pointer; padding: 4px 8px;
+    }
+    #auth-modal .modal-close:hover { color: var(--text-primary); }
+    #auth-modal h2 { font-size: 18px; margin-bottom: 8px; color: var(--warning); }
+    #auth-modal p { font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.5; }
+
+    #auth-modal .auth-link {
+      display: inline-block; padding: 10px 24px; background: var(--accent);
+      color: #fff; text-decoration: none; border-radius: 6px; font-size: 14px;
+      font-weight: 500; margin-bottom: 20px;
+    }
+    #auth-modal .auth-link:hover { background: var(--accent-hover); }
+
+    #auth-modal .code-input-group {
+      display: flex; gap: 8px; margin-top: 16px;
+    }
+    #auth-modal .code-input {
+      flex: 1; padding: 10px 12px; background: var(--bg-primary); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text-primary); font-size: 14px;
+      font-family: monospace; outline: none;
+    }
+    #auth-modal .code-input:focus { border-color: var(--accent); }
+    #auth-modal .code-submit {
+      padding: 10px 20px; background: var(--success); color: #fff; border: none;
+      border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500;
+    }
+    #auth-modal .code-submit:hover { opacity: 0.9; }
+    #auth-modal .code-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+    #auth-modal .step { color: var(--text-muted); font-size: 12px; margin-bottom: 4px; text-align: left; }
+
+    /* ── Main Area ──────────────────────────────────── */
+    #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+    /* ── Tab Bar ────────────────────────────────────── */
+    #tab-bar {
+      display: flex;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      min-height: 36px;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+    #tab-bar::-webkit-scrollbar { height: 0; }
+
+    .tab {
+      display: flex; align-items: center; gap: 6px;
+      padding: 0 12px; height: 36px;
+      font-size: 12px; color: var(--text-secondary);
+      border-right: 1px solid var(--border);
+      cursor: pointer; white-space: nowrap; user-select: none;
+      flex-shrink: 0; max-width: 200px;
+    }
+    .tab:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .tab.active {
+      background: var(--bg-primary); color: var(--text-primary);
+      border-bottom: 2px solid var(--accent); margin-bottom: -1px;
+    }
+    .tab .tab-name { overflow: hidden; text-overflow: ellipsis; }
+
+    .tab .tab-status {
+      width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+    }
+    .tab .tab-status.connected { background: var(--success); }
+    .tab .tab-status.disconnected { background: var(--danger); }
+    .tab .tab-status.connecting { background: var(--warning); animation: pulse 1s infinite; }
+
+    .tab .tab-close {
+      background: none; border: none; color: var(--text-muted); cursor: pointer;
+      font-size: 14px; line-height: 1; padding: 0 2px; border-radius: 3px; flex-shrink: 0;
+    }
+    .tab .tab-close:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    /* ── Terminal Area ──────────────────────────────── */
+    #terminal-area { flex: 1; position: relative; background: var(--bg-primary); }
+
+    .terminal-pane {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 28px;
+      display: none;
+    }
+    .terminal-pane.active { display: block; }
+
+    /* ── Status Bar ─────────────────────────────────── */
+    .status-bar {
+      position: absolute; bottom: 0; left: 0; right: 0; height: 28px;
+      background: var(--bg-secondary); border-top: 1px solid var(--border);
+      display: none; align-items: center; padding: 0 12px; gap: 16px;
+      font-size: 11px; color: var(--text-muted);
+    }
+    .status-bar.active { display: flex; }
+
+    .status-item { display: flex; align-items: center; gap: 4px; }
+    .status-item .label { color: var(--text-muted); }
+    .status-item .value { color: var(--text-secondary); }
+
+    .context-bar {
+      width: 80px; height: 6px; background: var(--bg-primary);
+      border-radius: 3px; overflow: hidden;
+    }
+    .context-bar .fill {
+      height: 100%; border-radius: 3px; transition: width 0.3s, background 0.3s;
+    }
+    .context-fill-green { background: var(--success); }
+    .context-fill-amber { background: var(--warning); }
+    .context-fill-red { background: var(--danger); }
+    .terminal-pane .xterm { padding: 4px; }
+
+    #empty-state {
+      display: flex; align-items: center; justify-content: center;
+      height: 100%; color: var(--text-muted); font-size: 14px;
+      flex-direction: column; gap: 8px;
+    }
+    #empty-state .hint { font-size: 12px; }
+  </style>
+</head>
+<body>
+
+  <div id="sidebar">
+    <div id="sidebar-header">
+      <h1>Blueprint</h1>
+      <div style="display:flex;gap:4px">
+        <button onclick="addProject()" title="Add Project">+</button>
+        <button onclick="loadState()" title="Refresh">&#x21bb;</button>
+      </div>
+    </div>
+    <div id="filter-bar">
+      <button class="filter-btn active" data-filter="active" onclick="setFilter('active')">Active</button>
+      <button class="filter-btn" data-filter="all" onclick="setFilter('all')">All</button>
+      <button class="filter-btn" data-filter="archived" onclick="setFilter('archived')">Archived</button>
+      <button class="filter-btn" data-filter="hidden" onclick="setFilter('hidden')">Hidden</button>
+      <select id="session-sort" style="margin-left:auto;background:var(--bg-primary);border:1px solid var(--border);color:var(--text-muted);font-size:10px;border-radius:4px;padding:2px 4px;cursor:pointer" onchange="sessionSortBy=this.value;renderSidebar()">
+        <option value="date">Date</option>
+        <option value="name">Name</option>
+        <option value="messages">Messages</option>
+      </select>
+    </div>
+    <div style="padding:4px 16px">
+      <input id="session-search" type="text" placeholder="Search sessions..."
+        style="width:100%;padding:6px 8px;background:var(--bg-primary);border:1px solid var(--border);
+        border-radius:6px;color:var(--text-primary);font-size:12px;outline:none">
+    </div>
+    <div id="project-list"></div>
+    <div id="sidebar-footer">
+      <button onclick="openSettings()">&#9881; Settings</button>
+    </div>
+  </div>
+
+  <div id="main">
+    <div id="tab-bar" style="position:relative">
+      <button id="panel-toggle" onclick="togglePanel()" title="Notes &amp; Tasks">&#9776;</button>
+    </div>
+    <div id="terminal-area">
+      <div id="empty-state">
+        <div>Select a session or create a new one</div>
+        <div class="hint">Pick a project from the sidebar to get started</div>
+      </div>
+      <div id="status-bar" class="status-bar"></div>
+    </div>
+  </div>
+
+  <div id="right-panel">
+    <div id="panel-header">
+      <button class="panel-tab active" data-panel="notes" onclick="switchPanel('notes')">Notes</button>
+      <button class="panel-tab" data-panel="tasks" onclick="switchPanel('tasks')">Tasks</button>
+      <button class="panel-tab" data-panel="claudemd" onclick="switchPanel('claudemd')">CLAUDE.md</button>
+      <button class="panel-tab" data-panel="messages" onclick="switchPanel('messages')">Messages</button>
+    </div>
+    <div id="panel-content">
+      <div id="panel-notes" class="panel-section">
+        <h3>Project Notes</h3>
+        <textarea id="notes-editor" placeholder="Shared notes for this project..."></textarea>
+      </div>
+      <div id="panel-tasks" class="panel-section" style="display:none">
+        <h3>Tasks</h3>
+        <div id="task-list"></div>
+        <input id="add-task-input" type="text" placeholder="Add a task... (Enter to add)">
+      </div>
+      <div id="panel-claudemd" class="panel-section" style="display:none">
+        <h3>Project CLAUDE.md</h3>
+        <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Instructions for this project. Saved to {project}/CLAUDE.md</p>
+        <textarea id="project-claude-md" style="width:100%;min-height:250px;background:var(--bg-primary);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:8px;font-size:12px;font-family:monospace;resize:vertical;outline:none" placeholder="Project-specific instructions for Claude..."></textarea>
+      </div>
+      <div id="panel-messages" class="panel-section" style="display:none">
+        <h3>Inter-Session Messages</h3>
+        <div id="message-list" style="font-size:12px;color:var(--text-secondary)">No messages yet</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="settings-modal">
+    <div class="modal-content">
+      <button class="settings-close" onclick="closeSettings()" title="Close settings">&#10005;</button>
+      <h2>Settings</h2>
+      <div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:8px">
+        <button class="filter-btn active" data-settings-tab="general" onclick="switchSettingsTab('general')">General</button>
+        <button class="filter-btn" data-settings-tab="prompts" onclick="switchSettingsTab('prompts')">System Prompts</button>
+      </div>
+
+      <div id="settings-general">
+      <div class="settings-group">
+        <h3>Appearance</h3>
+        <div class="setting-row">
+          <label>Theme</label>
+          <select id="setting-theme" onchange="applyTheme(this.value); saveSetting('theme', this.value)">
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+            <option value="blueprint-dark">Blueprint Dark</option>
+            <option value="blueprint-light">Blueprint Light</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <label>Terminal Font Size</label>
+          <input type="number" id="setting-font-size" min="10" max="24" value="14"
+            onchange="applyFontSize(parseInt(this.value)); saveSetting('font_size', parseInt(this.value))">
+        </div>
+        <div class="setting-row">
+          <label>Terminal Font</label>
+          <select id="setting-font-family" onchange="applyFontFamily(this.value); saveSetting('font_family', this.value)">
+            <option value="'Cascadia Code', 'Fira Code', monospace">Cascadia Code</option>
+            <option value="'Fira Code', monospace">Fira Code</option>
+            <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
+            <option value="'Source Code Pro', monospace">Source Code Pro</option>
+            <option value="Menlo, Monaco, monospace">Menlo/Monaco</option>
+            <option value="'Courier New', monospace">Courier New</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <h3>Claude Code</h3>
+        <div class="setting-row">
+          <label>Default Model</label>
+          <select id="setting-model" onchange="saveSetting('default_model', this.value)">
+            <option value="claude-opus-4-6">Opus 4.6</option>
+            <option value="claude-sonnet-4-6">Sonnet 4.6</option>
+            <option value="claude-haiku-4-5-20251001">Haiku 4.5</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <label>Thinking Level</label>
+          <select id="setting-thinking" onchange="saveSetting('thinking_level', this.value)">
+            <option value="none">None</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <h3>Keepalive</h3>
+        <div class="setting-row">
+          <label>Mode</label>
+          <select id="setting-keepalive-mode" onchange="saveSetting('keepalive_mode', this.value)">
+            <option value="always">Always (recommended)</option>
+            <option value="browser">While browser open</option>
+            <option value="idle">Stop after idle</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <label>Idle timeout (minutes)</label>
+          <input type="number" id="setting-idle-minutes" min="5" max="1440" value="30"
+            onchange="saveSetting('keepalive_idle_minutes', parseInt(this.value))">
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <h3>Quorum</h3>
+        <div class="setting-row">
+          <label>Lead Model (CLI)</label>
+          <select id="setting-quorum-lead" onchange="saveSetting('quorum_lead_model', this.value)">
+            <option value="claude-opus-4-6">Opus 4.6</option>
+            <option value="claude-sonnet-4-6">Sonnet 4.6</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <label>Fixed Junior</label>
+          <select id="setting-quorum-fixed" onchange="saveSetting('quorum_fixed_junior', JSON.parse(this.value))">
+            <option value='{"model":"claude-sonnet-4-6","provider":"anthropic"}'>Sonnet 4.6 (Anthropic)</option>
+            <option value='{"model":"claude-opus-4-6","provider":"anthropic"}'>Opus 4.6 (Anthropic)</option>
+            <option value='{"model":"claude-haiku-4-5-20251001","provider":"anthropic"}'>Haiku 4.5 (Anthropic)</option>
+          </select>
+        </div>
+        <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:4px">
+          <label>Additional Juniors <span style="font-size:10px;color:var(--text-muted)">(JSON array)</span></label>
+          <textarea id="setting-quorum-additional" style="width:100%;min-height:60px;padding:6px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:11px;font-family:monospace;outline:none"
+            onchange="saveSetting('quorum_additional_juniors', JSON.parse(this.value))"
+            placeholder='[{"model":"gpt-4o","provider":"openai","api_key_env":"OPENAI_API_KEY"}]'></textarea>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <h3>Features</h3>
+        <div class="setting-row">
+          <label>Tasks panel</label>
+          <input type="checkbox" id="setting-tasks" checked
+            onchange="saveSetting('tasks_enabled', this.checked)">
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <h3>MCP Servers</h3>
+        <div id="mcp-server-list"></div>
+        <div id="add-mcp-form">
+          <input type="text" id="mcp-name" placeholder="Name">
+          <input type="text" id="mcp-command" placeholder="Command (e.g. npx server)">
+          <button onclick="addMcpServer()">Add</button>
+        </div>
+      </div>
+      </div>
+
+      <div id="settings-prompts" style="display:none">
+        <div style="display:flex;gap:16px;height:calc(80vh - 140px)">
+          <div style="flex:1;display:flex;flex-direction:column">
+            <h3 style="font-size:12px;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.5px;margin-bottom:4px">Global CLAUDE.md</h3>
+            <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Applies to all sessions. ~/.claude/CLAUDE.md</p>
+            <textarea id="setting-global-claude-md" style="flex:1;width:100%;background:var(--bg-primary);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:8px;font-size:12px;font-family:monospace;resize:none;outline:none" placeholder="Global instructions for Claude..."></textarea>
+            <button onclick="saveGlobalClaudeMd()" style="margin-top:6px;padding:4px 12px;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;cursor:pointer;font-size:12px;align-self:flex-start">Save</button>
+          </div>
+          <div style="width:1px;background:var(--border)"></div>
+          <div style="flex:1;display:flex;flex-direction:column">
+            <h3 style="font-size:12px;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.5px;margin-bottom:4px">Default Project Template</h3>
+            <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Applied to new projects without a CLAUDE.md</p>
+            <textarea id="setting-project-template" style="flex:1;width:100%;background:var(--bg-primary);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:8px;font-size:12px;font-family:monospace;resize:none;outline:none" placeholder="Default project instructions..."></textarea>
+            <button onclick="saveProjectTemplate()" style="margin-top:6px;padding:4px 12px;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;cursor:pointer;font-size:12px;align-self:flex-start">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="auth-modal">
+    <div class="modal-content">
+      <button class="modal-close" onclick="dismissAuthModal()" title="Close">&times;</button>
+      <h2>Authentication Required</h2>
+      <p>Your session token has expired. Authenticate once to restore all sessions.</p>
+      <div class="step">Step 1: Click below to open the authentication page</div>
+      <a id="auth-link" class="auth-link" href="#" target="_blank" rel="noopener">Authenticate with Claude</a>
+      <div class="step" style="margin-top:16px">Step 2: After authenticating, paste the code below</div>
+      <div class="code-input-group">
+        <input id="auth-code-input" class="code-input" type="text" placeholder="Paste authorization code here" autocomplete="off">
+        <button id="auth-code-submit" class="code-submit" onclick="submitAuthCode()">Submit</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/lib/xterm/lib/xterm.js"></script>
+  <script src="/lib/xterm-fit/lib/addon-fit.js"></script>
+  <script src="/lib/xterm-web-links/lib/addon-web-links.js"></script>
+  <script>
+    // ── State ────────────────────────────────────────
+    const tabs = new Map();
+    window.tabs = tabs; // expose for test instrumentation
+    let activeTabId = null;
+    let projectState = [];
+    let sessionFilter = 'active';
+    let sessionSortBy = 'date';
+    const expandedProjects = new Set(); // Track which projects are expanded (default: all collapsed)
+    const HEARTBEAT_MS = 30000;
+    const REFRESH_MS = 30000;
+    const MAX_RECONNECT_DELAY = 30000;
+    let _settingsCache = {};
+    function db_getSetting(key) { return _settingsCache[key] || null; }
+
+    function setFilter(filter) {
+      sessionFilter = filter;
+      document.querySelectorAll('.filter-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.filter === filter);
+      });
+      renderSidebar();
+    }
+
+    const TERM_THEME = {
+      background: '#0d1117', foreground: '#e6edf3', cursor: '#58a6ff',
+      selectionBackground: '#264f78',
+      black: '#484f58', red: '#ff7b72', green: '#3fb950', yellow: '#d29922',
+      blue: '#58a6ff', magenta: '#bc8cff', cyan: '#39d353', white: '#e6edf3',
+      brightBlack: '#6e7681', brightRed: '#ffa198', brightGreen: '#56d364',
+      brightYellow: '#e3b341', brightBlue: '#79c0ff', brightMagenta: '#d2a8ff',
+      brightCyan: '#56d364', brightWhite: '#f0f6fc',
+    };
+
+    // ── Sidebar ──────────────────────────────────────
+
+    async function loadState() {
+      try {
+        const res = await fetch('/api/state');
+        const data = await res.json();
+        projectState = data.projects;
+        if (data.workspace) window._workspace = data.workspace;
+
+        // Resolve temp tab IDs: if a new_* tab exists but no matching session in state,
+        // find the new real session (active tmux, same project) and migrate the tab
+        for (const [tabId, tab] of tabs) {
+          if (!tabId.startsWith('new_')) continue;
+          // Check if this temp ID still exists in state
+          let found = false;
+          for (const p of projectState) {
+            if (p.sessions.some(s => s.id === tabId)) { found = true; break; }
+          }
+          if (!found) {
+            // Temp ID resolved — find the new real session
+            for (const p of projectState) {
+              if (p.name !== tab.project) continue;
+              const realSession = p.sessions.find(s => !s.id.startsWith('new_') && s.active && !tabs.has(s.id));
+              if (realSession) {
+                // Migrate tab to real ID
+                tabs.delete(tabId);
+                tab.id = realSession.id;
+                tabs.set(realSession.id, tab);
+                if (activeTabId === tabId) activeTabId = realSession.id;
+                // Update tab name
+                const tabEl = document.querySelector(`[data-tab-id="${tabId}"]`);
+                if (tabEl) tabEl.dataset.tabId = realSession.id;
+                // Update pane ID
+                const pane = document.getElementById(`pane-${tabId}`);
+                if (pane) pane.id = `pane-${realSession.id}`;
+                console.log(`[session-resolve] Tab migrated: ${tabId} → ${realSession.id}`);
+                document.dispatchEvent(new CustomEvent('session-ready', { detail: { id: realSession.id, project: tab.project } }));
+                renderTabs();
+                pollTokenUsage();
+                break;
+              }
+            }
+          }
+        }
+
+        // Auto-expand all projects on first load
+        if (expandedProjects.size === 0 && projectState.length > 0) {
+          for (const p of projectState) expandedProjects.add(p.name);
+        }
+
+        renderSidebar();
+      } catch (err) {
+        console.error('Failed to load state:', err);
+      }
+    }
+
+    function renderSidebar() {
+      // Skip re-render if state hasn't changed (prevents DOM detach during clicks)
+      const stateHash = JSON.stringify(projectState.map(p => ({
+        n: p.name, m: p.missing,
+        s: p.sessions.map(s => ({ id: s.id, name: s.name, active: s.active, state: s.state, mc: s.messageCount, ts: s.timestamp }))
+      }))) + sessionFilter + sessionSortBy + activeTabId + [...tabs.keys()].join(',');
+      if (stateHash === renderSidebar._lastHash) return;
+      renderSidebar._lastHash = stateHash;
+
+      const container = document.getElementById('project-list');
+      container.innerHTML = '';
+
+      for (const project of projectState) {
+        const group = document.createElement('div');
+        group.className = 'project-group';
+
+        const header = document.createElement('div');
+        const isExpanded = expandedProjects.has(project.name);
+        header.className = 'project-header' + (project.missing ? ' missing' : '') + (isExpanded ? '' : ' collapsed');
+        const filteredCount = project.sessions.filter(s => {
+          const state = s.state || (s.archived ? 'archived' : 'active');
+          if (sessionFilter === 'active') return state === 'active';
+          if (sessionFilter === 'archived') return state === 'archived';
+          if (sessionFilter === 'all') return state !== 'hidden';
+          if (sessionFilter === 'hidden') return state === 'hidden';
+          return true;
+        }).length;
+        header.innerHTML = `
+          <span class="arrow">&#9660;</span>
+          <span>${escHtml(project.name)}</span>
+          <span class="count">${filteredCount}</span>
+        `;
+        header.addEventListener('click', () => {
+          if (expandedProjects.has(project.name)) {
+            expandedProjects.delete(project.name);
+          } else {
+            expandedProjects.add(project.name);
+          }
+          header.classList.toggle('collapsed');
+          sessionList.classList.toggle('collapsed');
+        });
+        group.appendChild(header);
+
+        const sessionList = document.createElement('div');
+        sessionList.className = 'session-list' + (isExpanded ? '' : ' collapsed');
+
+        const filtered = project.sessions.filter(s => {
+          const state = s.state || (s.archived ? 'archived' : 'active');
+          if (sessionFilter === 'active') return state === 'active';
+          if (sessionFilter === 'archived') return state === 'archived';
+          if (sessionFilter === 'all') return state !== 'hidden';
+          if (sessionFilter === 'hidden') return state === 'hidden';
+          return true;
+        });
+
+        // Sort
+        if (sessionSortBy === 'name') filtered.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        else if (sessionSortBy === 'messages') filtered.sort((a, b) => b.messageCount - a.messageCount);
+        // else date — already sorted by server
+
+        for (const session of filtered) {
+          const item = document.createElement('div');
+          item.className = 'session-item';
+          if (session.archived) item.classList.add('archived');
+          if (session.state === 'hidden') item.classList.add('hidden');
+          if (session.project_missing) item.classList.add('missing');
+          const tabId = session.id;
+          if (tabs.has(tabId)) item.classList.add('open');
+          if (activeTabId === tabId) item.classList.add('active');
+
+          const archiveBtn = session.archived
+            ? `<button class="session-action-btn unarchive" title="Unarchive" data-id="${escHtml(session.id)}">&#8634;</button>`
+            : `<button class="session-action-btn archive" title="Archive" data-id="${escHtml(session.id)}">&#9744;</button>`;
+          const summaryBtn = `<button class="session-action-btn summary" title="Summarize" data-id="${escHtml(session.id)}" data-project="${escHtml(project.name)}">&#9432;</button>`;
+
+          item.innerHTML = `
+            <div class="session-top-row">
+              <span class="session-name">${escHtml(session.name)}</span>
+              <span class="session-actions">
+                ${summaryBtn}
+                <button class="session-action-btn rename" title="Config" data-id="${escHtml(session.id)}">&#9998;</button>
+                ${archiveBtn}
+              </span>
+            </div>
+            <div class="session-meta">
+              ${session.active ? '<span class="active-dot"></span>' : ''}
+              <span>${timeAgo(session.timestamp)}</span>
+              <span class="msg-count">${session.messageCount}</span>
+            </div>
+          `;
+          item.addEventListener('click', (e) => {
+            if (e.target.closest('.session-action-btn')) return;
+            if (session.project_missing) {
+              alert('Project directory not found — it may have been moved or deleted.');
+              return;
+            }
+            openSession(session, project.name);
+          });
+          item.querySelector('.rename').addEventListener('click', (e) => {
+            e.stopPropagation();
+            renameSession(session.id, session.name);
+          });
+          const archEl = item.querySelector('.archive, .unarchive');
+          if (archEl) {
+            archEl.addEventListener('click', (e) => {
+              e.stopPropagation();
+              archiveSession(session.id, !session.archived);
+            });
+          }
+          // Delete button removed — see GitHub Issue #457 (zombie session fix)
+          item.querySelector('.summary').addEventListener('click', (e) => {
+            e.stopPropagation();
+            summarizeSession(session.id, project.name, session.name);
+          });
+          sessionList.appendChild(item);
+        }
+
+        const newBtn = document.createElement('button');
+        newBtn.className = 'new-session-btn';
+        newBtn.innerHTML = '+ New Session';
+        newBtn.addEventListener('click', () => createSession(project.name));
+        sessionList.appendChild(newBtn);
+
+        group.appendChild(sessionList);
+        container.appendChild(group);
+      }
+    }
+
+    // ── Tab Management ───────────────────────────────
+
+    function openSession(session, projectName) {
+      const tabId = session.id;
+
+      // If already open, just switch to it
+      if (tabs.has(tabId)) {
+        switchTab(tabId);
+        return;
+      }
+
+      // Resume session on server, then open tab
+      fetch(`/api/sessions/${session.id}/resume`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project: projectName }),
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) { alert('Error: ' + data.error); return; }
+        createTab(tabId, data.tmux, session.name, projectName);
+      })
+      .catch(err => console.error('Failed to open session:', err));
+    }
+
+    function createSession(projectName) {
+      // Prevent duplicate modals from double-click
+      if (document.querySelector('[id^="new-session-overlay-"]')) return;
+      // Show prompt-first modal instead of creating session immediately
+      const overlay = document.createElement('div');
+      const overlayId = 'new-session-overlay-' + Date.now();
+      overlay.id = overlayId;
+      overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center';
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+      overlay.innerHTML = `
+        <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:24px;width:480px" onclick="event.stopPropagation()">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <h3 style="font-size:14px;margin:0">New Session</h3>
+            <button style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px" title="Close" onclick="document.getElementById('${overlayId}').remove()">&#10005;</button>
+          </div>
+          <div style="margin-bottom:16px">
+            <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">What would you like to work on?</label>
+            <textarea id="new-session-prompt" maxlength="4096" style="width:100%;min-height:80px;padding:8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:13px;font-family:inherit;resize:vertical;outline:none;box-sizing:border-box" placeholder="Describe what you'd like to do..." autofocus></textarea>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:8px">
+            <button onclick="document.getElementById('${overlayId}').remove()" style="padding:6px 16px;background:var(--bg-tertiary);color:var(--text-secondary);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:13px">Cancel</button>
+            <button id="new-session-submit" style="padding:6px 16px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:13px">Start Session</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+
+      // Focus the textarea
+      setTimeout(() => document.getElementById('new-session-prompt')?.focus(), 50);
+
+      // Handle submit
+      document.getElementById('new-session-submit').addEventListener('click', async () => {
+        const prompt = document.getElementById('new-session-prompt').value.trim();
+        if (!prompt) { document.getElementById('new-session-prompt').focus(); return; }
+
+        // Disable button while creating
+        const btn = document.getElementById('new-session-submit');
+        btn.textContent = 'Creating...';
+        btn.disabled = true;
+
+        try {
+          const res = await fetch('/api/sessions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ project: projectName, prompt }),
+          });
+          const data = await res.json();
+          if (data.error) { alert('Error: ' + data.error); btn.textContent = 'Start Session'; btn.disabled = false; return; }
+
+          overlay.remove();
+          createTab(data.id, data.tmux, data.name, projectName);
+
+          // Poll for JSONL to appear
+          const poll = setInterval(() => loadState(), 3000);
+          setTimeout(() => clearInterval(poll), 30000);
+        } catch (err) {
+          console.error('Failed to create session:', err);
+          btn.textContent = 'Start Session';
+          btn.disabled = false;
+        }
+      });
+
+      // Allow Ctrl+Enter to submit
+      document.getElementById('new-session-prompt').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+          document.getElementById('new-session-submit').click();
+        }
+      });
+    }
+
+    function createTab(tabId, tmuxSession, name, project) {
+      // Remove empty state
+      const emptyState = document.getElementById('empty-state');
+      if (emptyState) emptyState.remove();
+
+      // Create terminal pane
+      const paneEl = document.createElement('div');
+      paneEl.className = 'terminal-pane';
+      paneEl.id = `pane-${tabId}`;
+      document.getElementById('terminal-area').appendChild(paneEl);
+
+      // Create xterm instance with saved preferences
+      const savedFontSize = parseInt(db_getSetting('font_size')) || 14;
+      const savedFontFamily = db_getSetting('font_family') || "'Cascadia Code', 'Fira Code', 'JetBrains Mono', Menlo, Monaco, monospace";
+      const savedTheme = db_getSetting('theme');
+      const term = new Terminal({
+        cursorBlink: true, fontSize: savedFontSize,
+        fontFamily: savedFontFamily,
+        theme: (THEMES[savedTheme] || THEMES.dark).term,
+        allowProposedApi: true,
+        scrollback: 10000,
+        fastScrollSensitivity: 5,
+        scrollSensitivity: 3,
+      });
+      const fitAddon = new FitAddon.FitAddon();
+      term.loadAddon(fitAddon);
+      term.loadAddon(new WebLinksAddon.WebLinksAddon());
+      term.open(paneEl);
+
+      const tab = {
+        id: tabId, tmux: tmuxSession, name, project,
+        term, fitAddon, ws: null, status: 'disconnected',
+        paneEl, reconnectTimer: null, reconnectDelay: 1000, heartbeat: null,
+        dataDisposable: null, resizeDisposable: null,
+      };
+      tabs.set(tabId, tab);
+
+      switchTab(tabId);
+      connectTab(tabId);
+      renderTabs();
+      renderSidebar();
+      setTimeout(pollTokenUsage, 3000);
+    }
+
+    function switchTab(tabId) {
+      activeTabId = tabId;
+
+      // Hide all panes, show active
+      for (const [id, tab] of tabs) {
+        tab.paneEl.classList.toggle('active', id === tabId);
+      }
+
+      // Fit the active terminal
+      const tab = tabs.get(tabId);
+      if (tab && tab.fitAddon) {
+        setTimeout(() => { const t = tabs.get(tabId); if (t?.fitAddon) t.fitAddon.fit(); }, 10);
+        tab.term.focus();
+      }
+
+      renderTabs();
+      renderSidebar();
+    }
+
+    function closeTab(tabId) {
+      const tab = tabs.get(tabId);
+      if (!tab) return;
+
+      // Disconnect WebSocket
+      if (tab.reconnectTimer) clearTimeout(tab.reconnectTimer);
+      if (tab.heartbeat) clearInterval(tab.heartbeat);
+      if (tab.dataDisposable) tab.dataDisposable.dispose();
+      if (tab.resizeDisposable) tab.resizeDisposable.dispose();
+      if (tab.ws) { tab.ws.onclose = null; tab.ws.close(); }
+      tab.term.dispose();
+      tab.paneEl.remove();
+      tabs.delete(tabId);
+
+      // Switch to another tab or show empty state
+      if (activeTabId === tabId) {
+        const remaining = [...tabs.keys()];
+        if (remaining.length > 0) {
+          switchTab(remaining[remaining.length - 1]);
+        } else {
+          activeTabId = null;
+          showEmptyState();
+          updateStatusBar();
+        }
+      }
+
+      renderTabs();
+      renderSidebar();
+    }
+
+    function showEmptyState() {
+      const area = document.getElementById('terminal-area');
+      if (!document.getElementById('empty-state')) {
+        const el = document.createElement('div');
+        el.id = 'empty-state';
+        el.innerHTML = '<div>Select a session or create a new one</div><div class="hint">Pick a project from the sidebar to get started</div>';
+        area.appendChild(el);
+      }
+    }
+
+    function renderTabs() {
+      const bar = document.getElementById('tab-bar');
+      // Preserve the panel toggle button before clearing
+      const panelBtn = document.getElementById('panel-toggle');
+      bar.innerHTML = '';
+
+      for (const [id, tab] of tabs) {
+        const el = document.createElement('div');
+        el.className = 'tab' + (id === activeTabId ? ' active' : '');
+        el.dataset.tabId = id;
+        el.innerHTML = `
+          <span class="tab-status ${tab.status}"></span>
+          <span class="tab-name">${escHtml(tab.name)}</span>
+          <button class="tab-close" title="Close tab">&#10005;</button>
+        `;
+        el.addEventListener('click', (e) => {
+          if (e.target.closest('.tab-close')) return;
+          switchTab(id);
+        });
+        el.querySelector('.tab-close').addEventListener('click', (e) => {
+          e.stopPropagation();
+          closeTab(id);
+        });
+        bar.appendChild(el);
+      }
+
+      // Re-add panel toggle button
+      if (panelBtn) {
+        bar.appendChild(panelBtn);
+      } else {
+        const btn = document.createElement('button');
+        btn.id = 'panel-toggle';
+        btn.onclick = togglePanel;
+        btn.title = 'Notes & Tasks';
+        btn.innerHTML = '&#9776;';
+        bar.appendChild(btn);
+      }
+    }
+
+    // ── Terminal Connection ───────────────────────────
+
+    function connectTab(tabId) {
+      const tab = tabs.get(tabId);
+      if (!tab) return;
+
+      tab.status = 'connecting';
+      renderTabs();
+
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(`${proto}//${location.host}/ws/${tab.tmux}`);
+      ws.binaryType = 'arraybuffer';
+      tab.ws = ws;
+
+      ws.onopen = () => {
+        tab.status = 'connected';
+        tab.reconnectDelay = 1000;
+        renderTabs();
+        updateStatusBar();
+
+        // Send initial size
+        tab.fitAddon.fit();
+        const dims = tab.fitAddon.proposeDimensions();
+        if (dims) {
+          ws.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
+        }
+
+        // Wire terminal input
+        if (tab.dataDisposable) tab.dataDisposable.dispose();
+        tab.dataDisposable = tab.term.onData((data) => {
+          if (tab.ws && tab.ws.readyState === WebSocket.OPEN) tab.ws.send(data);
+        });
+
+        if (tab.resizeDisposable) tab.resizeDisposable.dispose();
+        tab.resizeDisposable = tab.term.onResize(({ cols, rows }) => {
+          if (tab.ws && tab.ws.readyState === WebSocket.OPEN) {
+            tab.ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+          }
+        });
+
+        // Heartbeat
+        if (tab.heartbeat) clearInterval(tab.heartbeat);
+        tab.heartbeat = setInterval(() => {
+          if (tab.ws && tab.ws.readyState === WebSocket.OPEN) {
+            tab.ws.send(JSON.stringify({ type: 'ping' }));
+          }
+        }, HEARTBEAT_MS);
+      };
+
+      ws.onmessage = (event) => {
+        if (typeof event.data === 'string') {
+          if (event.data.startsWith('{')) {
+            try {
+              const msg = JSON.parse(event.data);
+              if (msg.type === 'pong') return;
+              if (msg.type === 'token_update') {
+                tab._statusData = msg.data;
+                if (tabId === activeTabId) updateStatusBar();
+                return;
+              }
+              if (msg.type === 'settings_update') {
+                tab._settingsData = msg;
+                if (tabId === activeTabId) updateStatusBar();
+                return;
+              }
+              if (msg.type === 'error') {
+                tab.term.write(`\r\n\x1b[31m[Error: ${msg.message}]\x1b[0m\r\n`);
+                // If tmux session doesn't exist, stop reconnecting
+                if (msg.message && msg.message.includes('No tmux session')) {
+                  tab.noReconnect = true;
+                }
+                return;
+              }
+            } catch {}
+          }
+          checkForAuthIssue(tabId, event.data);
+          tab.term.write(event.data);
+        } else {
+          tab.term.write(new Uint8Array(event.data));
+        }
+      };
+
+      ws.onclose = () => {
+        tab.status = 'disconnected';
+        if (tab.heartbeat) { clearInterval(tab.heartbeat); tab.heartbeat = null; }
+        renderTabs();
+
+        // Auto-reconnect if tab still exists and tmux session wasn't missing
+        if (tabs.has(tabId) && !tab.noReconnect) {
+          tab.reconnectTimer = setTimeout(() => {
+            if (tabs.has(tabId)) connectTab(tabId);
+          }, tab.reconnectDelay);
+          tab.reconnectDelay = Math.min(tab.reconnectDelay * 2, MAX_RECONNECT_DELAY);
+        }
+      };
+
+      ws.onerror = () => { tab.status = 'disconnected'; renderTabs(); };
+    }
+
+    // ── Rename / Delete ──────────────────────────────
+
+    async function renameSession(sessionId, currentName) {
+      // Open session config editor
+      const overlay = document.createElement('div');
+      const overlayId = 'config-overlay-' + Date.now();
+      overlay.id = overlayId;
+      overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center';
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+      // Fetch current config
+      let config = { name: currentName, state: 'active', notes: '' };
+      try {
+        const res = await fetch(`/api/sessions/${sessionId}/config`);
+        config = await res.json();
+      } catch {}
+
+      overlay.innerHTML = `
+        <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:24px;width:400px" onclick="event.stopPropagation()">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <h3 style="font-size:14px;margin:0">Session Config</h3>
+            <button style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px" title="Close" onclick="document.getElementById('${overlayId}').remove()">&#10005;</button>
+          </div>
+
+          <div style="margin-bottom:12px">
+            <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Name</label>
+            <div style="position:relative">
+              <input id="cfg-name" type="text" value="${escHtml(config.name || '')}" style="width:100%;padding:6px 28px 6px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box">
+              <button onclick="document.getElementById('cfg-name').value='';document.getElementById('cfg-name').focus()" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:2px 4px" title="Clear">&#10005;</button>
+            </div>
+          </div>
+
+          <div style="margin-bottom:12px">
+            <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">State</label>
+            <select id="cfg-state" style="width:100%;padding:6px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:13px">
+              <option value="active" ${config.state === 'active' ? 'selected' : ''}>Active</option>
+              <option value="archived" ${config.state === 'archived' ? 'selected' : ''}>Archived</option>
+              <option value="hidden" ${config.state === 'hidden' ? 'selected' : ''}>Hidden</option>
+            </select>
+          </div>
+
+          <div style="margin-bottom:16px">
+            <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Session Notes</label>
+            <div style="position:relative">
+              <textarea id="cfg-notes" style="width:100%;min-height:80px;padding:6px 28px 6px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;font-family:inherit;resize:vertical;outline:none;box-sizing:border-box" placeholder="Private notes for this session...">${escHtml(config.notes || '')}</textarea>
+              <button onclick="document.getElementById('cfg-notes').value='';document.getElementById('cfg-notes').focus()" style="position:absolute;right:4px;top:6px;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:2px 4px" title="Clear">&#10005;</button>
+            </div>
+          </div>
+
+          <button onclick="saveSessionConfig('${sessionId}', '${overlayId}')" style="padding:6px 16px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:13px">Save</button>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+    }
+
+    async function saveSessionConfig(sessionId, overlayId) {
+      const config = {
+        name: document.getElementById('cfg-name').value.trim(),
+        state: document.getElementById('cfg-state').value,
+        notes: document.getElementById('cfg-notes').value,
+      };
+
+      await fetch(`/api/sessions/${sessionId}/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      });
+
+      const tab = tabs.get(sessionId);
+      if (tab && config.name) tab.name = config.name;
+
+      document.getElementById(overlayId).remove();
+      loadState();
+      renderTabs();
+    }
+
+    async function archiveSession(sessionId, archived) {
+      try {
+        await fetch(`/api/sessions/${sessionId}/archive`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ archived }),
+        });
+        loadState();
+      } catch (err) {
+        console.error('Failed to archive:', err);
+      }
+    }
+
+    /* DISABLED: Hard deletion causes zombie sessions. /api/state re-syncs JSONL
+     * files from disk into the DB on every call, so deleted sessions reappear.
+     * The temp-ID resolver then mis-pairs orphaned files with new sessions.
+     * Use archive/hidden state instead. See: GitHub Issue #457
+     *
+     * async function deleteSession(sessionId, projectName, sessionName) {
+     *   if (!confirm(`Delete "${sessionName}"?`)) return;
+     *   try {
+     *     await fetch(`/api/sessions/${sessionId}?project=${encodeURIComponent(projectName)}`, {
+     *       method: 'DELETE',
+     *     });
+     *     if (tabs.has(sessionId)) closeTab(sessionId);
+     *     loadState();
+     *   } catch (err) {
+     *     console.error('Failed to delete:', err);
+     *   }
+     * }
+     */
+
+    // ── Right Panel ──────────────────────────────────
+
+    let panelOpen = false;
+    let activePanel = 'notes';
+    let notesSaveTimer = null;
+    let currentPanelProject = null;
+
+    function togglePanel() {
+      panelOpen = !panelOpen;
+      document.getElementById('right-panel').classList.toggle('open', panelOpen);
+      if (panelOpen) loadPanelData();
+      // Refit active terminal
+      setTimeout(() => {
+        if (activeTabId && tabs.has(activeTabId)) tabs.get(activeTabId).fitAddon.fit();
+      }, 250);
+    }
+
+    function switchPanel(panel) {
+      activePanel = panel;
+      document.querySelectorAll('.panel-tab').forEach(b => b.classList.toggle('active', b.dataset.panel === panel));
+      document.getElementById('panel-notes').style.display = panel === 'notes' ? '' : 'none';
+      document.getElementById('panel-tasks').style.display = panel === 'tasks' ? '' : 'none';
+      document.getElementById('panel-claudemd').style.display = panel === 'claudemd' ? '' : 'none';
+      document.getElementById('panel-messages').style.display = panel === 'messages' ? '' : 'none';
+      loadPanelData();
+    }
+
+    function getCurrentProject() {
+      if (!activeTabId || !tabs.has(activeTabId)) return null;
+      return tabs.get(activeTabId).project;
+    }
+
+    async function loadPanelData() {
+      const project = getCurrentProject();
+      if (!project) return;
+      currentPanelProject = project;
+
+      if (activePanel === 'notes') {
+        try {
+          const res = await fetch(`/api/projects/${project}/notes`);
+          const data = await res.json();
+          document.getElementById('notes-editor').value = data.notes || '';
+        } catch {}
+      } else if (activePanel === 'tasks') {
+        loadTasks(project);
+      } else if (activePanel === 'claudemd') {
+        try {
+          const res = await fetch(`/api/projects/${project}/claude-md`);
+          const data = await res.json();
+          document.getElementById('project-claude-md').value = data.content || '';
+        } catch {}
+      } else if (activePanel === 'messages') {
+        loadMessages(project);
+      }
+    }
+
+    // Auto-save notes on typing
+    document.getElementById('notes-editor').addEventListener('input', () => {
+      if (notesSaveTimer) clearTimeout(notesSaveTimer);
+      notesSaveTimer = setTimeout(async () => {
+        const project = getCurrentProject();
+        if (!project) return;
+        const notes = document.getElementById('notes-editor').value;
+        await fetch(`/api/projects/${project}/notes`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ notes }),
+        });
+      }, 1000);
+    });
+
+    // Tasks
+    async function loadTasks(project) {
+      try {
+        const res = await fetch(`/api/projects/${project}/tasks`);
+        const data = await res.json();
+        renderTasks(data.tasks || []);
+      } catch {}
+    }
+
+    function renderTasks(tasks) {
+      const container = document.getElementById('task-list');
+      container.innerHTML = '';
+      for (const task of tasks) {
+        const item = document.createElement('div');
+        item.className = 'task-item' + (task.status === 'done' ? ' done' : '');
+        item.innerHTML = `
+          <input type="checkbox" class="task-checkbox" ${task.status === 'done' ? 'checked' : ''}>
+          <span class="task-text">${escHtml(task.text)}</span>
+          <button class="task-delete" title="Delete">&#10005;</button>
+        `;
+        item.querySelector('.task-checkbox').addEventListener('change', async (e) => {
+          const endpoint = e.target.checked ? 'complete' : 'reopen';
+          await fetch(`/api/tasks/${task.id}/${endpoint}`, { method: 'PUT' });
+          loadTasks(getCurrentProject());
+        });
+        item.querySelector('.task-delete').addEventListener('click', async () => {
+          await fetch(`/api/tasks/${task.id}`, { method: 'DELETE' });
+          loadTasks(getCurrentProject());
+        });
+        container.appendChild(item);
+      }
+    }
+
+    document.getElementById('add-task-input').addEventListener('keydown', async (e) => {
+      if (e.key !== 'Enter') return;
+      const input = e.target;
+      const text = input.value.trim();
+      if (!text) return;
+      const project = getCurrentProject();
+      if (!project) return;
+      await fetch(`/api/projects/${project}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      input.value = '';
+      loadTasks(project);
+    });
+
+    // Messages
+    async function loadMessages(project) {
+      try {
+        const res = await fetch(`/api/projects/${project}/messages`);
+        const data = await res.json();
+        const container = document.getElementById('message-list');
+        if (!data.messages || data.messages.length === 0) {
+          container.innerHTML = '<div style="color:var(--text-muted)">No messages yet</div>';
+          return;
+        }
+        container.innerHTML = data.messages.map(m => `
+          <div style="padding:4px 0;border-bottom:1px solid var(--border)">
+            <div style="font-size:11px;color:var(--text-muted)">${m.from_session ? m.from_session.substring(0,8) : 'human'} → ${m.to_session ? m.to_session.substring(0,8) : 'all'} · ${timeAgo(m.created_at)}</div>
+            <div style="font-size:12px;color:var(--text-secondary)">${escHtml(m.content).substring(0, 200)}</div>
+          </div>
+        `).join('');
+      } catch {}
+    }
+
+    // Reload panel when switching tabs
+    const origSwitchTab = switchTab;
+    switchTab = function(tabId) {
+      origSwitchTab(tabId);
+      if (panelOpen) loadPanelData();
+    };
+
+    // ── Auth Modal ────────────────────────────────────
+
+    let authModalVisible = false;
+    let authTriggerTabId = null;
+    let ptyOutputBuffer = new Map(); // tabId → recent output for URL detection
+    window.ptyOutputBuffer = ptyOutputBuffer; // expose for test instrumentation
+
+    const OAUTH_URL_START = 'https://claude.com/cai/oauth/authorize?';
+    const AUTH_ERROR_PATTERN = /OAuth token has expired|authentication_error|Not logged in/;
+
+    function checkForAuthIssue(tabId, data) {
+      if (authModalVisible) return;
+
+      // Buffer recent output per tab for URL detection
+      const buf = (ptyOutputBuffer.get(tabId) || '') + data;
+      ptyOutputBuffer.set(tabId, buf.slice(-4000)); // keep last 4KB for long URLs
+
+      const fullBuf = ptyOutputBuffer.get(tabId);
+
+      // The CLI prints the OAuth URL wrapped across multiple terminal lines, then
+      // "Paste code here" below it. We need both markers present to extract the full URL.
+      // Strip ANSI escapes for reliable text matching
+      const cleanBuf = fullBuf.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/[\x07]/g, '');
+
+      const urlStart = cleanBuf.indexOf(OAUTH_URL_START);
+      if (urlStart === -1) return;
+
+      const pasteIdx = cleanBuf.indexOf('Paste', urlStart + 50);
+      if (pasteIdx === -1) return; // URL not fully received yet — wait for more data
+
+      // Extract everything between URL start and "Paste", strip whitespace to rejoin wrapped lines
+      const rawUrl = cleanBuf.substring(urlStart, pasteIdx);
+      const cleanUrl = rawUrl
+        .replace(/[\x00-\x1f]/g, '')               // control chars
+        .replace(/\s+/g, '')                        // all whitespace/newlines from wrapping
+        .replace(/[&?]+$/, '');                     // trailing & or ?
+
+      showAuthModal(cleanUrl, tabId);
+      ptyOutputBuffer.delete(tabId);
+    }
+
+    function showAuthModal(url, tabId) {
+      authModalVisible = true;
+      authTriggerTabId = tabId;
+
+      // Clean URL: remove ANSI escape sequences and trailing junk
+      let cleanUrl = url.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/[\x07\x1b\x00-\x1f]/g, '');
+      cleanUrl = cleanUrl.replace(/[&?]+$/, ''); // strip trailing & or ?
+
+      document.getElementById('auth-link').href = cleanUrl;
+      document.getElementById('auth-code-input').value = '';
+      document.getElementById('auth-modal').classList.add('visible');
+      document.getElementById('auth-code-input').focus();
+    }
+
+    function dismissAuthModal() {
+      document.getElementById('auth-modal').classList.remove('visible');
+      authModalVisible = false;
+      authTriggerTabId = null;
+    }
+
+    function submitAuthCode() {
+      const code = document.getElementById('auth-code-input').value.trim();
+      if (!code) return;
+
+      // Send the code to whichever session triggered the auth
+      if (authTriggerTabId && tabs.has(authTriggerTabId)) {
+        const tab = tabs.get(authTriggerTabId);
+        if (tab.ws && tab.ws.readyState === WebSocket.OPEN) {
+          tab.ws.send(code + '\r');
+        }
+      } else if (window._loginWs && window._loginWs.readyState === WebSocket.OPEN) {
+        window._loginWs.send(code + '\r');
+      }
+
+      // Dismiss modal after a short delay to let the CLI process
+      document.getElementById('auth-code-submit').disabled = true;
+      document.getElementById('auth-code-submit').textContent = 'Authenticating...';
+
+      setTimeout(() => {
+        document.getElementById('auth-modal').classList.remove('visible');
+        document.getElementById('auth-code-submit').disabled = false;
+        document.getElementById('auth-code-submit').textContent = 'Submit';
+        authModalVisible = false;
+        authTriggerTabId = null;
+      }, 3000);
+    }
+
+    // Allow Enter to submit the code
+    document.getElementById('auth-code-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') submitAuthCode();
+    });
+
+    // Click outside auth modal to dismiss
+    document.getElementById('auth-modal').addEventListener('click', (e) => {
+      if (e.target.id === 'auth-modal') dismissAuthModal();
+    });
+
+    // Escape key closes settings modal or auth modal
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (document.getElementById('settings-modal').classList.contains('visible')) {
+          closeSettings();
+        } else if (authModalVisible) {
+          dismissAuthModal();
+        }
+      }
+    });
+
+    // ── Helpers ───────────────────────────────────────
+
+    function timeAgo(timestamp) {
+      const seconds = Math.floor((Date.now() - new Date(timestamp)) / 1000);
+      if (seconds < 0 || seconds < 60) return 'just now';
+      if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+      if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+      return `${Math.floor(seconds / 86400)}d ago`;
+    }
+
+    function escHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    // ── Resize observer for terminal area ────────────
+    const resizeObserver = new ResizeObserver(() => {
+      if (activeTabId && tabs.has(activeTabId)) {
+        tabs.get(activeTabId).fitAddon.fit();
+      }
+    });
+    resizeObserver.observe(document.getElementById('terminal-area'));
+
+    // ── Status Bar ────────────────────────────────────
+
+    function updateStatusBar() {
+      const bar = document.getElementById('status-bar');
+      if (!activeTabId || !tabs.has(activeTabId)) {
+        bar.classList.remove('active');
+        return;
+      }
+      bar.classList.add('active');
+
+      const tab = tabs.get(activeTabId);
+      const statusData = tab._statusData || {};
+      const model = statusData.model || 'unknown';
+      const inputTokens = statusData.input_tokens || 0;
+      const maxTokens = statusData.max_tokens || 200000;
+      const pct = maxTokens > 0 ? Math.min(100, (inputTokens / maxTokens) * 100) : 0;
+
+      const modelShort = model.includes('opus') ? 'Opus' :
+        model.includes('sonnet') ? 'Sonnet' :
+        model.includes('haiku') ? 'Haiku' : model.substring(0, 15);
+
+      const fillClass = pct < 60 ? 'context-fill-green' : pct < 85 ? 'context-fill-amber' : 'context-fill-red';
+      const tokenStr = inputTokens > 1000 ? `${Math.round(inputTokens / 1000)}k` : inputTokens;
+      const maxStr = maxTokens > 1000 ? `${Math.round(maxTokens / 1000)}k` : maxTokens;
+
+      const thinkingLevel = db_getSetting('thinking_level') || 'none';
+      bar.innerHTML = `
+        <span class="status-item"><span class="label">Model:</span> <span class="value">${escHtml(modelShort)}</span></span>
+        <span class="status-item"><span class="label">Mode:</span> <span class="value">bypass</span></span>
+        ${thinkingLevel !== 'none' ? `<span class="status-item"><span class="label">Thinking:</span> <span class="value">${escHtml(thinkingLevel)}</span></span>` : ''}
+        <span class="status-item">
+          <span class="label">Context:</span>
+          <span class="value">${tokenStr} / ${maxStr}</span>
+          <span class="context-bar"><span class="fill ${fillClass}" style="width:${pct}%"></span></span>
+          <span class="value">${pct.toFixed(0)}%</span>
+        </span>
+        <span class="status-item" style="margin-left:auto"><span class="value">${tab.status}</span></span>
+      `;
+    }
+
+    async function pollTokenUsage() {
+      if (!activeTabId || !tabs.has(activeTabId)) return;
+      const tab = tabs.get(activeTabId);
+      if (!tab.project) return;
+      // Skip token API call for new_ sessions (no JSONL yet) but still update status bar
+      if (tab.id.startsWith('new_')) { updateStatusBar(); return; }
+
+      try {
+        const res = await fetch(`/api/sessions/${tab.id}/tokens?project=${encodeURIComponent(tab.project)}`);
+        const data = await res.json();
+        tab._statusData = data;
+        updateStatusBar();
+      } catch {}
+    }
+
+    // Token updates pushed via WS (token_update messages). Keep pollTokenUsage
+    // only for initial load and tab switches — no periodic interval needed.
+
+    // Update on tab switch
+    const _origSwitchTab2 = switchTab;
+    switchTab = function(tabId) {
+      _origSwitchTab2(tabId);
+      updateStatusBar();
+      pollTokenUsage();
+    };
+
+    // ── CLAUDE.md auto-save ────────────────────────────
+
+    let claudeMdSaveTimer = null;
+    document.getElementById('project-claude-md').addEventListener('input', () => {
+      if (claudeMdSaveTimer) clearTimeout(claudeMdSaveTimer);
+      claudeMdSaveTimer = setTimeout(async () => {
+        const project = getCurrentProject();
+        if (!project) return;
+        await fetch(`/api/projects/${project}/claude-md`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: document.getElementById('project-claude-md').value }),
+        });
+      }, 1500);
+    });
+
+    async function saveGlobalClaudeMd() {
+      await fetch('/api/claude-md/global', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: document.getElementById('setting-global-claude-md').value }),
+      });
+    }
+
+    async function saveProjectTemplate() {
+      await saveSetting('default_project_claude_md', document.getElementById('setting-project-template').value);
+    }
+
+    // ── Session Search ────────────────────────────────
+
+    let searchTimer = null;
+    document.getElementById('session-search').addEventListener('input', (e) => {
+      if (searchTimer) clearTimeout(searchTimer);
+      const q = e.target.value.trim();
+      if (q.length < 2) { renderSidebar(); return; }
+      searchTimer = setTimeout(async () => {
+        try {
+          const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+          const data = await res.json();
+          renderSearchResults(data.results);
+        } catch {}
+      }, 300);
+    });
+
+    function renderSearchResults(results) {
+      // Invalidate renderSidebar hash so clearing search triggers a re-render
+      renderSidebar._lastHash = null;
+      const container = document.getElementById('project-list');
+      container.innerHTML = '';
+      if (results.length === 0) {
+        container.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:12px">No matches found</div>';
+        return;
+      }
+      for (const r of results) {
+        const item = document.createElement('div');
+        item.className = 'session-item';
+        item.style.cursor = 'pointer';
+        item.innerHTML = `
+          <div class="session-top-row">
+            <span class="session-name">${escHtml(r.name)}</span>
+          </div>
+          <div class="session-meta">
+            <span>${escHtml(r.project)}</span>
+            <span class="msg-count">${r.matchCount} matches</span>
+          </div>
+          <div class="search-snippet" style="font-size:11px;color:var(--text-muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+            ${escHtml(r.matches[0]?.text || '')}
+          </div>
+        `;
+        item.addEventListener('click', () => {
+          document.getElementById('session-search').value = '';
+          openSession({ id: r.sessionId, name: r.name }, r.project);
+          renderSidebar();
+        });
+        container.appendChild(item);
+      }
+    }
+
+    // ── Session Summary ──────────────────────────────
+
+    async function summarizeSession(sessionId, projectName, sessionName) {
+      const modal = document.getElementById('auth-modal');
+      // Reuse auth modal structure for summary display
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center';
+      const overlayId = 'summary-overlay-' + Date.now();
+      overlay.id = overlayId;
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) overlay.remove();
+      });
+      overlay.innerHTML = `
+        <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:24px;max-width:500px;width:90%" onclick="event.stopPropagation()">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <h3 style="font-size:14px;margin:0">${escHtml(sessionName)}</h3>
+            <button class="close-btn" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px" title="Close" onclick="document.getElementById('${overlayId}').remove()">&#10005;</button>
+          </div>
+          <div style="color:var(--text-muted);font-size:13px;display:flex;align-items:center;gap:8px" id="summary-content"><span class="summary-spinner" style="display:inline-block;width:14px;height:14px;border:2px solid var(--text-muted);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite"></span> Generating summary...</div>
+          <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+
+      try {
+        const res = await fetch(`/api/sessions/${sessionId}/summary`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project: projectName }),
+        });
+        const data = await res.json();
+        const el = document.getElementById('summary-content');
+        if (data.summary) {
+          let html = `<div style="margin-bottom:12px;line-height:1.5">${escHtml(data.summary)}</div>`;
+          if (data.recentMessages?.length) {
+            html += '<div style="font-size:11px;color:var(--text-muted);margin-top:8px">Recent messages:</div>';
+            for (const m of data.recentMessages) {
+              const label = m.role === 'user' ? 'Human' : 'Claude';
+              html += `<div style="font-size:11px;padding:4px 0;border-bottom:1px solid var(--border)"><strong>${label}:</strong> ${escHtml(m.text.substring(0, 150))}${m.text.length > 150 ? '...' : ''}</div>`;
+            }
+          }
+          el.innerHTML = html;
+        } else {
+          el.textContent = data.error || 'Failed to generate summary';
+        }
+      } catch (err) {
+        document.getElementById('summary-content').textContent = 'Error: ' + err.message;
+      }
+    }
+
+    // ── Settings ──────────────────────────────────────
+
+    // ── Appearance ────────────────────────────────────
+
+    const LIGHT_THEME = {
+      background: '#ffffff', foreground: '#1e1e1e', cursor: '#0066cc',
+      selectionBackground: '#add6ff',
+      black: '#000000', red: '#cd3131', green: '#008000', yellow: '#795e26',
+      blue: '#0451a5', magenta: '#bc05bc', cyan: '#0598bc', white: '#e5e5e5',
+      brightBlack: '#666666', brightRed: '#cd3131', brightGreen: '#14ce14',
+      brightYellow: '#b5ba00', brightBlue: '#0451a5', brightMagenta: '#bc05bc',
+      brightCyan: '#0598bc', brightWhite: '#a5a5a5',
+    };
+
+    const LIGHT_CSS = {
+      '--bg-primary': '#f5f5f5', '--bg-secondary': '#ffffff', '--bg-tertiary': '#e8e8e8',
+      '--bg-hover': '#ebebeb', '--text-primary': '#1e1e1e', '--text-secondary': '#555555',
+      '--text-muted': '#999999', '--border': '#d1d1d1', '--accent': '#0066cc',
+    };
+
+    // Blueprint Dark — deep navy with bright white/blue lines, high contrast
+    const BLUEPRINT_DARK_THEME = {
+      background: '#081220', foreground: '#e0eeff', cursor: '#5cb0ff',
+      selectionBackground: '#1e3a5f',
+      black: '#081220', red: '#ff7080', green: '#60d888', yellow: '#f0c850',
+      blue: '#5cb0ff', magenta: '#b090e0', cyan: '#58d0e0', white: '#e0eeff',
+      brightBlack: '#2a4a6e', brightRed: '#ff98a8', brightGreen: '#80f0a0',
+      brightYellow: '#ffe070', brightBlue: '#80c8ff', brightMagenta: '#c8b0f0',
+      brightCyan: '#78e8f0', brightWhite: '#ffffff',
+    };
+
+    const BLUEPRINT_DARK_CSS = {
+      '--bg-primary': '#081220', '--bg-secondary': '#0c1a30', '--bg-tertiary': '#122240',
+      '--bg-hover': '#182c50', '--text-primary': '#f0f6ff', '--text-secondary': '#c0d8f0',
+      '--text-muted': '#e0ecff', '--border': '#1a3458', '--accent': '#e0ecff',
+      '--accent-hover': '#f0f6ff', '--success': '#60d888', '--warning': '#f0c850', '--danger': '#ff7080',
+    };
+
+    // Blueprint Light — light blueprint paper with dark blue text, high contrast like traditional light theme
+    const BLUEPRINT_LIGHT_THEME = {
+      background: '#e8f0f8', foreground: '#0e2a4e', cursor: '#1a4a80',
+      selectionBackground: '#b0cce8',
+      black: '#0e2a4e', red: '#b01030', green: '#186830', yellow: '#6a5010',
+      blue: '#1a4a80', magenta: '#6a2098', cyan: '#106068', white: '#e8f0f8',
+      brightBlack: '#3a6090', brightRed: '#d02040', brightGreen: '#208840',
+      brightYellow: '#887020', brightBlue: '#2868a8', brightMagenta: '#8838b8',
+      brightCyan: '#188088', brightWhite: '#f4f8fc',
+    };
+
+    const BLUEPRINT_LIGHT_CSS = {
+      '--bg-primary': '#e8f0f8', '--bg-secondary': '#f0f4fa', '--bg-tertiary': '#d8e4f0',
+      '--bg-hover': '#d0dcea', '--text-primary': '#0e2a4e', '--text-secondary': '#2a5080',
+      '--text-muted': '#5a88b0', '--border': '#b8cce0', '--accent': '#1a5a9e',
+      '--accent-hover': '#2070b8', '--success': '#208840', '--warning': '#887020', '--danger': '#d02040',
+    };
+
+    const THEMES = {
+      dark: { css: null, term: TERM_THEME },
+      light: { css: LIGHT_CSS, term: LIGHT_THEME },
+      'blueprint-dark': { css: BLUEPRINT_DARK_CSS, term: BLUEPRINT_DARK_THEME },
+      'blueprint-light': { css: BLUEPRINT_LIGHT_CSS, term: BLUEPRINT_LIGHT_THEME },
+    };
+
+    function applyTheme(theme) {
+      const root = document.documentElement;
+      const config = THEMES[theme] || THEMES.dark;
+
+      // Clear all custom properties first
+      const allKeys = new Set([
+        ...Object.keys(LIGHT_CSS),
+        ...Object.keys(BLUEPRINT_DARK_CSS),
+        ...Object.keys(BLUEPRINT_LIGHT_CSS),
+      ]);
+      allKeys.forEach(k => root.style.removeProperty(k));
+
+      // Apply new theme CSS variables
+      if (config.css) {
+        Object.entries(config.css).forEach(([k, v]) => root.style.setProperty(k, v));
+      }
+
+      // Apply terminal theme
+      for (const [, tab] of tabs) {
+        tab.term.options.theme = config.term;
+      }
+    }
+
+    function applyFontSize(size) {
+      for (const [, tab] of tabs) {
+        tab.term.options.fontSize = size;
+        tab.fitAddon.fit();
+      }
+    }
+
+    function applyFontFamily(family) {
+      for (const [, tab] of tabs) {
+        tab.term.options.fontFamily = family;
+        tab.fitAddon.fit();
+      }
+    }
+
+    async function loadAppearanceSettings() {
+      try {
+        const res = await fetch('/api/settings');
+        const s = await res.json();
+        _settingsCache = s;
+        if (s.theme) applyTheme(s.theme);
+        if (s.font_size) applyFontSize(s.font_size);
+        if (s.font_family) applyFontFamily(s.font_family);
+      } catch {}
+    }
+
+    // ── Add Project ──────────────────────────────────
+
+    async function addProject() {
+      const overlayId = 'dir-picker-' + Date.now();
+      const overlay = document.createElement('div');
+      overlay.id = overlayId;
+      overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center';
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+      overlay.innerHTML = `
+        <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:24px;width:550px;max-height:80vh;display:flex;flex-direction:column" onclick="event.stopPropagation()">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <h3 style="font-size:14px;margin:0">Add Project</h3>
+            <button style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px" title="Close" onclick="document.getElementById('${overlayId}').remove()">&#10005;</button>
+          </div>
+          <div id="jqft-tree" style="overflow-y:auto;min-height:300px;max-height:50vh;background:var(--bg-primary);border:1px solid var(--border);border-radius:6px;padding:4px"></div>
+          <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+            <input id="picker-path" type="text" readonly placeholder="Click a folder above" style="flex:1;padding:6px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;font-family:monospace">
+            <input id="picker-name" type="text" placeholder="Name" style="width:120px;padding:6px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px">
+            <button style="padding:6px 16px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:13px" onclick="pickerSelect('${overlayId}')">Add</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+
+      // Initialize jQuery File Tree
+      $('#jqft-tree').fileTree({
+        root: (window._workspace || '/workspace/projects').replace(/\/?$/, '/'),
+        script: '/api/jqueryfiletree',
+        folderEvent: 'click',
+        expandSpeed: 200,
+        collapseSpeed: 200,
+        multiFolder: false,
+        onlyFolders: true,
+      }, function(path) {
+        // Item selected — put path in input
+        document.getElementById('picker-path').value = path;
+        document.getElementById('picker-name').value = path.replace(/\/$/, '').split('/').filter(Boolean).pop();
+      });
+      // Also capture directory clicks via event delegation
+      $('#jqft-tree').on('click', 'a', function() {
+        const rel = $(this).attr('rel');
+        if (rel) {
+          document.getElementById('picker-path').value = rel;
+          document.getElementById('picker-name').value = rel.replace(/\/$/, '').split('/').filter(Boolean).pop();
+        }
+      });
+    }
+
+    async function pickerSelect(overlayId) {
+      const path = document.getElementById('picker-path').value.trim();
+      const name = document.getElementById('picker-name').value.trim() || path.split('/').filter(Boolean).pop();
+      if (!path || path === '/') { alert('Select a directory first'); return; }
+      try {
+        const res = await fetch('/api/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path, name }),
+        });
+        const data = await res.json();
+        if (data.error) { alert('Error: ' + data.error); return; }
+        document.getElementById(overlayId).remove();
+        loadState();
+      } catch (err) { alert('Error: ' + err.message); }
+    }
+
+    function switchSettingsTab(tab) {
+      document.querySelectorAll('[data-settings-tab]').forEach(b => b.classList.toggle('active', b.dataset.settingsTab === tab));
+      document.getElementById('settings-general').style.display = tab === 'general' ? '' : 'none';
+      document.getElementById('settings-prompts').style.display = tab === 'prompts' ? '' : 'none';
+    }
+
+    async function openSettings() {
+      document.getElementById('settings-modal').classList.add('visible');
+      // Load current settings
+      try {
+        const res = await fetch('/api/settings');
+        const s = await res.json();
+        document.getElementById('setting-model').value = s.default_model || 'claude-sonnet-4-6';
+        document.getElementById('setting-thinking').value = s.thinking_level || 'none';
+        document.getElementById('setting-keepalive-mode').value = s.keepalive_mode || 'always';
+        document.getElementById('setting-idle-minutes').value = s.keepalive_idle_minutes || 30;
+        document.getElementById('setting-tasks').checked = s.tasks_enabled !== false;
+        document.getElementById('setting-project-template').value = s.default_project_claude_md || '';
+        if (s.theme) document.getElementById('setting-theme').value = s.theme;
+        if (s.font_size) document.getElementById('setting-font-size').value = s.font_size;
+        if (s.font_family) document.getElementById('setting-font-family').value = s.font_family;
+      } catch {}
+      // Load global CLAUDE.md
+      try {
+        const gres = await fetch('/api/claude-md/global');
+        const gdata = await gres.json();
+        document.getElementById('setting-global-claude-md').value = gdata.content || '';
+      } catch {}
+      loadMcpServers();
+    }
+
+    function closeSettings() {
+      document.getElementById('settings-modal').classList.remove('visible');
+    }
+
+    async function saveSetting(key, value) {
+      _settingsCache[key] = value;
+      await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, value }),
+      });
+    }
+
+    async function loadMcpServers() {
+      try {
+        const res = await fetch('/api/mcp-servers');
+        const data = await res.json();
+        const container = document.getElementById('mcp-server-list');
+        const servers = data.servers || {};
+        const names = Object.keys(servers);
+        if (names.length === 0) {
+          container.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:4px 0">No MCP servers configured</div>';
+          return;
+        }
+        container.innerHTML = names.map(name => {
+          const s = servers[name];
+          const type = s.command ? 'stdio' : s.url ? 'sse' : 'unknown';
+          const detail = s.command ? s.command + ' ' + (s.args || []).join(' ') : s.url || '';
+          return `<div class="mcp-server-item">
+            <span class="name">${escHtml(name)}</span>
+            <span class="type">${type}</span>
+            <button class="remove" onclick="removeMcpServer('${escHtml(name)}')" title="Remove">&#10005;</button>
+          </div>`;
+        }).join('');
+      } catch {}
+    }
+
+    async function addMcpServer() {
+      const name = document.getElementById('mcp-name').value.trim();
+      const command = document.getElementById('mcp-command').value.trim();
+      if (!name || !command) return;
+
+      const parts = command.split(/\s+/);
+      const res = await fetch('/api/mcp-servers');
+      const data = await res.json();
+      const servers = data.servers || {};
+      servers[name] = { command: parts[0], args: parts.slice(1) };
+
+      await fetch('/api/mcp-servers', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ servers }),
+      });
+
+      document.getElementById('mcp-name').value = '';
+      document.getElementById('mcp-command').value = '';
+      loadMcpServers();
+    }
+
+    async function removeMcpServer(name) {
+      const res = await fetch('/api/mcp-servers');
+      const data = await res.json();
+      const servers = data.servers || {};
+      delete servers[name];
+
+      await fetch('/api/mcp-servers', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ servers }),
+      });
+      loadMcpServers();
+    }
+
+    // ── Proactive Auth Check ───────────────────────────
+
+    async function checkAuth() {
+      try {
+        const res = await fetch('/api/auth/status');
+        const status = await res.json();
+        if (!status.valid) {
+          showAuthBanner(status.reason);
+        } else {
+          hideAuthBanner();
+        }
+      } catch (err) {
+        console.error('Auth check failed:', err);
+      }
+    }
+
+    function showAuthBanner(reason) {
+      let banner = document.getElementById('auth-banner');
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'auth-banner';
+        banner.style.cssText = `
+          background: var(--bg-tertiary); border-bottom: 2px solid var(--warning);
+          padding: 10px 16px; font-size: 13px; color: var(--warning);
+          display: flex; align-items: center; gap: 8px;
+        `;
+        document.getElementById('main').insertBefore(banner, document.getElementById('tab-bar'));
+      }
+      banner.innerHTML = `
+        <span style="font-size:16px">&#9888;</span>
+        <span>Not authenticated — open any session and run <code style="background:var(--bg-primary);padding:2px 6px;border-radius:3px;font-size:12px">/login</code> to authenticate all sessions</span>
+      `;
+    }
+
+    function hideAuthBanner() {
+      const banner = document.getElementById('auth-banner');
+      if (banner) banner.remove();
+    }
+
+    // ── Init ─────────────────────────────────────────
+    loadState();
+    setInterval(loadState, REFRESH_MS);
+    setTimeout(checkAuth, 1000);
+    setInterval(checkAuth, 60000);
+    loadAppearanceSettings();
+  </script>
+</body>
+</html>

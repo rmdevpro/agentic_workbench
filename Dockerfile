@@ -1,0 +1,53 @@
+FROM node:22-slim
+
+RUN apt-get update && apt-get install -y \
+    git curl ca-certificates python3 make g++ tmux ssh openssh-client gosu jq \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Docker CLI (for building/deploying from within sessions)
+# Requires docker socket mount: -v /var/run/docker.sock:/var/run/docker.sock
+RUN curl -fsSL https://download.docker.com/linux/static/stable/$(uname -m)/docker-27.5.1.tgz \
+    | tar xz --strip-components=1 -C /usr/local/bin docker/docker \
+    && mkdir -p /usr/local/lib/docker/cli-plugins \
+    && curl -fsSL "https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-$(uname -m)" \
+       -o /usr/local/lib/docker/cli-plugins/docker-compose \
+    && chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+# Install Claude CLI
+ARG NPM_REGISTRY=http://192.168.1.110:4873
+RUN npm config set registry ${NPM_REGISTRY}
+RUN npm install -g @anthropic-ai/claude-code
+
+# Copy and install app dependencies
+WORKDIR /app
+COPY hopper-ui/package.json .
+RUN npm install
+
+# Copy app source
+COPY hopper-ui/ .
+
+# Create non-root user (Claude CLI refuses --dangerously-skip-permissions as root)
+RUN useradd -m -s /bin/bash hopper && \
+    mkdir -p /home/hopper/.claude /home/hopper/.blueprint /workspace && \
+    chown -R hopper:hopper /home/hopper /workspace /app
+
+# Pre-create settings to skip bypass permissions prompt and onboarding
+RUN mkdir -p /home/hopper/.claude && \
+    echo '{"skipDangerousModePermissionPrompt":true,"hasCompletedOnboarding":true,"theme":"dark","preferredTheme":"dark"}' > /home/hopper/.claude/settings.json && \
+    echo '{"skipDangerousModePermissionPrompt":true,"hasCompletedOnboarding":true,"theme":"dark","hasPickedTheme":true,"preferredTheme":"dark"}' > /home/hopper/.claude/settings.local.json && \
+    chown -R hopper:hopper /home/hopper
+
+# Entrypoint ensures runtime directories exist after volume mounts
+COPY hopper-ui/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENV HOME=/home/hopper
+ENV CLAUDE_HOME=/home/hopper/.claude
+ENV BLUEPRINT_DATA=/home/hopper/.blueprint
+
+WORKDIR /workspace
+EXPOSE 3000
+
+# Entrypoint runs as root to handle docker socket permissions, then drops to hopper via gosu
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["node", "/app/server.js"]

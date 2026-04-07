@@ -1,0 +1,32 @@
+I will read `safe-exec.js` and `webhooks.js` to investigate the security concerns.
+Based on a detailed trace of `safe-exec.js` and `webhooks.js`, here is the security verification:
+
+### 1. Command Injection: `claudeExec`
+**Status:** **SECURE**
+The use of `execFileSync('claude', allArgs, ...)` (line 42) prevents shell injection.
+*   **Trace:** When you pass `['$(whoami)']`, Node.js executes the binary `claude` directly via `execve()`. The string `$(whoami)` is passed as a literal argument in the `argv` array. Because there is no shell (`/bin/sh`) involved in the execution of `claude` itself, the shell expansion never occurs.
+
+### 2. Path Traversal: `resolveProjectPath`
+**Status:** **PARTIALLY SECURE (Robust Against Traversal, Weak Against Redirection)**
+The check at line 25 effectively blocks `../../` escapes.
+*   **Trace:** `resolve('/workspace', '../../../etc/passwd')` resolves to `'/etc/passwd'`.
+*   **Line 25 check:** `!resolved.startsWith('/workspace' + '/')` evaluates to `true` (since it starts with `/etc`), triggering the "Path traversal blocked" error.
+*   **Edge Case:** URL-encoded paths like `%2e%2e%2f` are not decoded by `path.resolve`. If the input is not pre-decoded by your web framework, `resolve` treats them as literal filenames. If they *are* decoded before reaching this function, the `startsWith` check still correctly blocks them.
+
+### 3. SSRF: `webhooks.js`
+**Status:** **VULNERABLE**
+The SSRF fix in `curlFetch` was **not** applied to `webhooks.js`.
+*   **Trace:** `sendWebhook(url, payload)` (line 53) directly parses the `url` and passes the hostname to `http.request` (line 61).
+*   **Failure:** There is no check for private IP ranges (127.0.0.1, 169.254.x.x, etc.) in `webhooks.js`. An attacker could register a webhook to probe internal services or hit the cloud metadata service.
+
+### 4. `tmuxCreateClaude` Injection
+**Status:** **VULNERABLE**
+This function is highly susceptible to shell injection via `cwd` and `claudeArgs`.
+*   **Vulnerability 1 (cwd):** Line 86: `const cmd = "cd '${cwd}' && ...";`. If `cwd` is `'/tmp\' && touch /tmp/pwned #'`, the resulting command is `cd '/tmp' && touch /tmp/pwned #' ...`, executing the injected command.
+*   **Vulnerability 2 (claudeArgs):** Line 85: `allArgs.map(a => a.includes(' ') ? "'${a}'" : a)`. This only quotes arguments containing spaces.
+    *   **Attack:** If an attacker passes a `claudeArgs` element like `;whoami;`, it contains no spaces, so it remains unquoted.
+    *   **Trace:** `cmd` becomes `... exec claude ;whoami;`. When `tmux` starts the session, the shell interprets the semicolon and executes `whoami`.
+
+**Recommendation:**
+1.  Apply the private IP blacklist from `curlFetch` to `sendWebhook` in `webhooks.js`.
+2.  Use a robust shell-escaping library (like `shell-quote`) or avoid shell interpolation entirely in `tmuxCreateClaude` by passing arguments to tmux in a way that avoids a shell intermediary.

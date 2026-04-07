@@ -1,0 +1,264 @@
+1. GET / — API — Serves the static UI from `public/`.
+2. GET /lib/xterm/* — API — Serves xterm.js assets from `node_modules/@xterm/xterm`.
+3. GET /lib/xterm-fit/* — API — Serves xterm fit addon assets.
+4. GET /lib/xterm-web-links/* — API — Serves xterm web-links addon assets.
+5. POST /api/projects — API — Add a project by git-cloning into WORKSPACE or symlinking a local path, then trust it.
+6. GET /api/auth/status — API — Return Claude CLI auth validity and expiry details.
+7. POST /api/auth/login — API — Run a Claude CLI probe to validate login (non-interactive).
+8. GET /api/keepalive/status — API — Return keepalive status plus current browser count.
+9. PUT /api/keepalive/mode — API — Set keepalive mode (always/browser/idle) and idle minutes.
+10. GET /api/state — API — List projects and sessions with derived metadata (timestamps, counts, active tmux).
+11. POST /api/sessions — API — Create a new tmux-backed Claude CLI session for a project.
+12. POST /api/sessions/:sessionId/resume — API — Resume a Claude session in a tmux session if not already running.
+13. PUT /api/sessions/:sessionId/name — API — Rename a session in DB.
+14. DELETE /api/sessions/:sessionId — API — Kill tmux session, delete JSONL file, and remove DB session.
+15. GET /api/sessions/:sessionId/config — API — Fetch session config (name/state/model_override/notes).
+16. PUT /api/sessions/:sessionId/config — API — Update session name/state/model_override/notes.
+17. PUT /api/sessions/:sessionId/archive — API — Legacy archive toggle (maps to state).
+18. GET /api/projects/:name/notes — API — Read project notes from DB.
+19. PUT /api/projects/:name/notes — API — Write project notes to DB.
+20. GET /api/sessions/:id/notes — API — Read session notes from DB.
+21. PUT /api/sessions/:id/notes — API — Write session notes to DB.
+22. GET /api/projects/:name/tasks — API — List tasks for a project.
+23. POST /api/projects/:name/tasks — API — Add a task to a project.
+24. PUT /api/tasks/:id/complete — API — Mark a task done.
+25. PUT /api/tasks/:id/reopen — API — Reopen a completed task.
+26. DELETE /api/tasks/:id — API — Delete a task.
+27. GET /api/projects/:name/messages — API — List recent inter-session messages for a project.
+28. POST /api/projects/:name/messages — API — Send an inter-session message and optionally deliver via bridge file.
+29. GET /api/settings — API — Return merged defaults + stored settings.
+30. PUT /api/settings — API — Store a setting and apply keepalive changes immediately.
+31. GET /api/claude-md/global — API — Read global `~/.claude/CLAUDE.md`.
+32. PUT /api/claude-md/global — API — Write global `~/.claude/CLAUDE.md`.
+33. GET /api/projects/:name/claude-md — API — Read project `CLAUDE.md`, creating from template if missing.
+34. PUT /api/projects/:name/claude-md — API — Write project `CLAUDE.md`.
+35. GET /api/mcp-servers — API — Read `CLAUDE_HOME/settings.json` MCP server config.
+36. PUT /api/mcp-servers — API — Replace `mcpServers` in `CLAUDE_HOME/settings.json`.
+37. GET /api/search — API — Search session JSONL content across projects.
+38. POST /api/sessions/:sessionId/summary — API — Generate a short session summary via Claude CLI.
+39. GET /api/sessions/:sessionId/tokens — API — Parse session JSONL for last assistant usage stats.
+40. POST /api/sessions/:sessionId/smart-compact — API — Run smart compaction workflow for a session.
+41. GET /api/mcp/tools — API — List internal MCP tools and schemas.
+42. POST /api/mcp/call — API — Execute an internal MCP tool by name.
+43. GET /api/mcp/external/tools — API — List internal + admin MCP tools for external consumers.
+44. POST /api/mcp/external/call — API — Execute internal/admin MCP tool via HTTP/SSE gateway.
+45. GET /v1/models — API — OpenAI-compatible model listing.
+46. POST /v1/chat/completions — API — OpenAI-compatible chat completions routed to Claude CLI.
+47. GET /api/webhooks — API — List outbound webhook configurations.
+48. PUT /api/webhooks — API — Replace webhook list.
+49. POST /api/webhooks — API — Append a webhook entry.
+50. DELETE /api/webhooks/:index — API — Remove a webhook by index.
+51. POST /api/quorum/ask — API — Run a multi-model quorum and return result file paths.
+
+52. blueprint_search_sessions — MCP — Search session JSONL content with snippets.
+53. blueprint_summarize_session — MCP — Generate AI summary of a session.
+54. blueprint_list_sessions — MCP — List session metadata for a project.
+55. blueprint_get_project_notes — MCP — Fetch project notes from DB.
+56. blueprint_get_session_notes — MCP — Fetch session notes from DB.
+57. blueprint_get_tasks — MCP — List project tasks.
+58. blueprint_add_task — MCP — Create a project task as “agent”.
+59. blueprint_complete_task — MCP — Mark task done.
+60. blueprint_get_project_claude_md — MCP — Read project `CLAUDE.md`.
+61. blueprint_read_plan — MCP — Read session plan file (`.blueprint/plans/{id}.md`).
+62. blueprint_update_plan — MCP — Write session plan file.
+63. blueprint_smart_compaction — MCP — Trigger smart compaction via API.
+64. blueprint_ask_quorum — MCP — Trigger quorum round via API.
+65. blueprint_send_message — MCP — Write message bridge file, record DB message, and try to deliver to tmux session.
+66. blueprint_create_session — MCP — Admin tool to create a new tmux-backed session.
+67. blueprint_delete_session — MCP — Admin tool to kill tmux, delete JSONL, and remove session from DB.
+68. blueprint_set_session_state — MCP — Admin tool to set session state (active/archived/hidden).
+69. blueprint_get_token_usage — MCP — Admin tool to fetch token usage via API.
+70. blueprint_set_project_notes — MCP — Admin tool to write project notes.
+71. blueprint_set_project_claude_md — MCP — Admin tool to write project `CLAUDE.md`.
+72. blueprint_list_projects — MCP — Admin tool to list projects from DB.
+73. blueprint_update_settings — MCP — Admin tool to update settings.
+
+74. WebSocket upgrade /ws/:tmux — WebSocket — Accepts upgrades only for `/ws/{tmux}` paths.
+75. WS invalid path — WebSocket — Destroys socket when URL doesn’t match `/ws/:tmux`.
+76. WS missing tmux — WebSocket — Sends `{type:"error"}` and closes when tmux session not found.
+77. WS attach tmux — WebSocket — Spawns `tmux attach-session` via node-pty and streams output.
+78. WS resize control — WebSocket — Accepts JSON `{type:"resize", cols, rows}` to resize PTY.
+79. WS ping/pong — WebSocket — Accepts `{type:"ping"}` and responds `{type:"pong"}`.
+80. WS input passthrough — WebSocket — Forwards raw client data to PTY stdin.
+81. WS PTY exit — WebSocket — Sends “Session detached” and closes when PTY exits.
+82. WS close cleanup — WebSocket — Decrements browser count, updates keepalive, kills PTY.
+83. WS error cleanup — WebSocket — Logs error and kills PTY.
+84. WS client auto-reconnect — WebSocket — UI backs off reconnect up to 30s.
+85. WS client heartbeat — WebSocket — UI sends ping every 30s while connected.
+
+86. Sidebar project list — UI — Renders projects with collapsible headers and session counts.
+87. Session filters — UI — Filter sessions by active/all/archived/hidden.
+88. Session sort — UI — Sort by date/name/message count.
+89. Session search — UI — Debounced search and results list in sidebar.
+90. Add project — UI — Prompts for git URL or local path and calls `/api/projects`.
+91. Refresh state — UI — Manual refresh button calling `/api/state`.
+92. New session — UI — Create session per project and open a tab.
+93. Open session — UI — Resume session, open terminal tab, and connect WebSocket.
+94. Session actions — UI — Rename/config, archive/unarchive, summarize, delete.
+95. Session summary modal — UI — Shows AI summary and recent messages.
+96. Tabs bar — UI — Shows open sessions with connection status and close buttons.
+97. Terminal panes — UI — Xterm instances per tab with fit addon and web links.
+98. Empty state — UI — Shown when no tabs are open.
+99. Right panel toggle — UI — Opens/closes Notes/Tasks/CLAUDE.md/Messages panel and refits terminal.
+100. Project notes editor — UI — Auto-saves notes to `/api/projects/:name/notes`.
+101. Tasks panel — UI — List/add/complete/reopen/delete tasks.
+102. Project CLAUDE.md editor — UI — Auto-saves to `/api/projects/:name/claude-md`.
+103. Messages panel — UI — Lists inter-session messages.
+104. Status bar — UI — Shows model, context usage, and connection state.
+105. Token usage polling — UI — Polls `/api/sessions/:id/tokens` every 15s for active tab.
+106. Theme toggle — UI — Switch between dark and light terminal + UI theme.
+107. Terminal font size — UI — Persisted font size setting.
+108. Terminal font family — UI — Persisted font family setting.
+109. Settings modal — UI — General and System Prompts tabs.
+110. Default model setting — UI — Saves `default_model`.
+111. Thinking level setting — UI — Saves `thinking_level`.
+112. Keepalive mode setting — UI — Saves `keepalive_mode`.
+113. Keepalive idle minutes — UI — Saves `keepalive_idle_minutes`.
+114. Quorum lead model — UI — Saves `quorum_lead_model`.
+115. Quorum fixed junior — UI — Saves `quorum_fixed_junior`.
+116. Quorum additional juniors — UI — Saves `quorum_additional_juniors` JSON.
+117. Tasks panel toggle — UI — Saves `tasks_enabled` (feature flag).
+118. MCP servers list — UI — Displays configured MCP servers.
+119. MCP server add/remove — UI — Updates `/api/mcp-servers`.
+120. Global CLAUDE.md — UI — Reads/writes `/api/claude-md/global`.
+121. Project template — UI — Saves `default_project_claude_md`.
+122. Auth banner — UI — Periodic auth status checks show warning banner.
+123. Auth modal — UI — Extracts OAuth URL from terminal output and accepts auth code.
+124. Auth code submission — UI — Sends code to triggering session over WS.
+125. Resize observer — UI — Fits terminal on container resize.
+126. Session state config — UI — Session config overlay allows name/state/model override/notes.
+127. Inter-tab panel refresh — UI — Reloads right panel on tab switch.
+
+128. DB init/migrations — DB — Creates schema and runs ALTER TABLE migrations for notes/state/model_override.
+129. DB.getProjects — DB — List projects ordered by name.
+130. DB.getProject — DB — Fetch project by name.
+131. DB.ensureProject — DB — Insert-or-ignore project and return it.
+132. DB.getSessionsForProject — DB — List sessions for a project.
+133. DB.getSession — DB — Fetch session by ID.
+134. DB.upsertSession — DB — Insert/update session with name and updated_at.
+135. DB.renameSession — DB — Update session name.
+136. DB.archiveSession — DB — Update archived flag.
+137. DB.deleteSession — DB — Delete a session record.
+138. DB.getProjectNotes — DB — Fetch project notes.
+139. DB.setProjectNotes — DB — Store project notes.
+140. DB.getSessionNotes — DB — Fetch session notes.
+141. DB.setSessionNotes — DB — Store session notes.
+142. DB.getTasks — DB — List tasks for a project.
+143. DB.addTask — DB — Insert task and return summary.
+144. DB.completeTask — DB — Mark task done and set completed_at.
+145. DB.reopenTask — DB — Mark task todo and clear completed_at.
+146. DB.deleteTask — DB — Remove task row.
+147. DB.getUnreadMessages — DB — Fetch unread messages for a session.
+148. DB.getRecentMessages — DB — Fetch last 50 messages for a project.
+149. DB.sendMessage — DB — Insert message row and return ID.
+150. DB.markMessageRead — DB — Mark message read.
+151. DB.getSessionFull — DB — Fetch session with project name join.
+152. DB.setSessionState — DB — Set state + archived flag + updated_at.
+153. DB.setSessionModelOverride — DB — Store per-session model override.
+154. DB.getSetting — DB — Fetch a setting value with default fallback.
+155. DB.setSetting — DB — Upsert a setting.
+156. DB.getAllSettings — DB — Parse and return all settings.
+
+157. PORT — Config — HTTP server port (default 3000).
+158. CLAUDE_HOME — Config — Base path for Claude CLI config and sessions.
+159. WORKSPACE — Config — Root directory for projects and `.blueprint`.
+160. HOME — Config — Used for `~/.claude.json` trust and global CLAUDE.md.
+161. BLUEPRINT_DATA — Config — DB storage directory (default `~/.blueprint`).
+162. BLUEPRINT_PORT — Config — MCP stdio server HTTP base port for API calls.
+163. KEEPALIVE_MODE — Config — Initial keepalive mode.
+164. KEEPALIVE_IDLE_MINUTES — Config — Keepalive idle timeout.
+165. ANTHROPIC_API_KEY — Config — Default Anthropic key for quorum juniors.
+166. OPENAI_API_KEY — Config — Default OpenAI key for quorum juniors.
+167. quorum_fixed_junior.api_key_env — Config — Override env var for junior provider key.
+168. quorum_* .base_url — Config — Custom API base URL for quorum providers.
+169. default_model — Config — Default Claude model for new sessions.
+170. thinking_level — Config — Stored thinking level (UI).
+171. keepalive_mode — Config — Stored keepalive mode.
+172. keepalive_idle_minutes — Config — Stored keepalive idle minutes.
+173. tasks_enabled — Config — UI feature flag for tasks panel.
+174. default_project_claude_md — Config — Template content for new project CLAUDE.md.
+175. theme — Config — UI theme selection.
+176. font_size — Config — UI terminal font size.
+177. font_family — Config — UI terminal font family.
+178. quorum_lead_model — Config — Claude model for quorum lead.
+179. quorum_additional_juniors — Config — JSON array of extra quorum models.
+180. webhooks — Config — JSON list of outbound webhook configs.
+181. mcpServers — Config — MCP server registry in `settings.json`.
+182. skipDangerousModePermissionPrompt — Config — Auto-set in Claude settings.json.
+183. Trusted workspace dirs — Config — Auto-populates `~/.claude.json` trust entries.
+184. MCP server auto-registration — Config — Writes blueprint MCP server into `settings.json` on startup.
+185. Compaction monitor — Config — Periodic (30s) scan to nudge/auto-compact sessions.
+186. Keepalive refresh cadence — Config — Schedules refresh based on token expiry heuristics.
+
+187. Error: /api/projects missing path — Error — Returns 400 `{error:"path required"}`.
+188. Error: /api/projects clone target exists — Error — Returns 409 when target dir already exists.
+189. Error: /api/projects local path missing — Error — Returns 404 `{error:"Path does not exist"}`.
+190. Error: /api/projects unexpected — Error — Returns 500 with error message.
+191. Error: /api/auth/status read failure — Error — Returns `{valid:false, reason}` on read/parse errors.
+192. Error: /api/auth/status no_credentials — Error — Missing access token in credentials.
+193. Error: /api/auth/status invalid_credentials — Error — Access/refresh token marked expired.
+194. Error: /api/auth/status expired_no_refresh — Error — Access token expired without refresh token.
+195. Error: /api/auth/status no_credentials_file — Error — Credentials file missing/unreadable.
+196. Error: /api/auth/login failure — Error — Returns `{valid:false, reason}` on CLI error.
+197. Error: /api/keepalive/mode invalid — Error — Returns 400 when mode not in allowed set.
+198. Error: /api/state failure — Error — Returns 500 with error message.
+199. Error: /api/sessions missing project — Error — Returns 400 `{error:"project required"}`.
+200. Error: /api/sessions create failure — Error — Returns 500 with error message (e.g., stat/exec failure).
+201. Error: /api/sessions/:id/resume missing project — Error — Returns 400 `{error:"project required"}`.
+202. Error: /api/sessions/:id/resume failure — Error — Returns 500 with error message.
+203. Error: /api/sessions/:id/name missing name — Error — Returns 400 `{error:"name required"}`.
+204. Error: /api/sessions/:id/name failure — Error — Returns 500 with error message.
+205. Error: /api/sessions/:id delete missing project — Error — Returns 400 `{error:"project required"}`.
+206. Error: /api/sessions/:id delete failure — Error — Returns 500 with error message.
+207. Error: /api/sessions/:id/config not found — Error — Returns 404 `{error:"session not found"}`.
+208. Error: /api/sessions/:id/config update failure — Error — Returns 500 with error message.
+209. Error: /api/sessions/:id/archive failure — Error — Returns 500 with error message.
+210. Error: /api/projects/:name/notes not found — Error — Returns 404 `{error:"project not found"}`.
+211. Error: /api/projects/:name/tasks not found — Error — Returns 404 `{error:"project not found"}`.
+212. Error: /api/projects/:name/tasks missing text — Error — Returns 400 `{error:"text required"}`.
+213. Error: /api/projects/:name/messages not found — Error — Returns 404 `{error:"project not found"}`.
+214. Error: /api/projects/:name/messages missing content — Error — Returns 400 `{error:"content required"}`.
+215. Error: /api/settings missing key — Error — Returns 400 `{error:"key required"}`.
+216. Error: /api/claude-md/global write failure — Error — Returns 500 with error message.
+217. Error: /api/projects/:name/claude-md write failure — Error — Returns 500 with error message.
+218. Error: /api/mcp-servers write failure — Error — Returns 500 with error message.
+219. Error: /api/search failure — Error — Returns 500 with error message.
+220. Error: /api/sessions/:id/summary missing project — Error — Returns 400 `{error:"project required"}`.
+221. Error: /api/sessions/:id/summary failure — Error — Returns 500 with truncated error message.
+222. Error: /api/sessions/:id/tokens missing project — Error — Returns `{tokens:null}` when query missing.
+223. Error: /api/sessions/:id/tokens parse failure — Error — Returns zeroed usage on exceptions.
+224. Error: /api/sessions/:id/smart-compact missing project — Error — Returns 400 `{error:"project required"}`.
+225. Error: /api/sessions/:id/smart-compact failure — Error — Returns 500 with error message.
+226. Error: /api/mcp/call unknown tool — Error — Returns 404 `{error:"Unknown tool: ..."}`.
+227. Error: /api/mcp/call tool failure — Error — Returns 500 with error message.
+228. Error: /api/mcp/external/call forward failure — Error — Returns 500 on internal forwarding failure.
+229. Error: /api/mcp/external/call unknown tool — Error — Returns 404 `{error:"Unknown tool: ..."}`.
+230. Error: /api/mcp/external/call admin failure — Error — Returns 500 with error message.
+231. Error: /api/webhooks invalid payload — Error — Returns 400 when webhooks is not an array.
+232. Error: /api/webhooks missing url — Error — Returns 400 `{error:"url required"}`.
+233. Error: /api/webhooks delete out of range — Error — Returns 404 `{error:"not found"}`.
+234. Error: /api/quorum/ask missing question — Error — Returns 400 `{error:"question required"}`.
+235. Error: /api/quorum/ask missing project — Error — Returns 400 `{error:"project required"}`.
+236. Error: /api/quorum/ask failure — Error — Returns 500 with error message.
+237. Error: /v1/chat/completions missing messages — Error — Returns 400 invalid_request_error.
+238. Error: /v1/chat/completions no user message — Error — Returns 400 invalid_request_error.
+239. Error: /v1/chat/completions CLI failure — Error — Returns 500 server_error with CLI message.
+240. Error: /v1/chat/completions handler failure — Error — Returns 500 server_error with message.
+241. Error: mcp-server JSON-RPC unknown method — Error — Returns -32601.
+242. Error: mcp-server tools/call failure — Error — Returns isError with “Error: …”.
+243. Error: quorum tool read_file path traversal — Error — Returns “path outside project directory”.
+244. Error: quorum tool read_file missing — Error — Returns “file not found”.
+245. Error: quorum tool list_files failure — Error — Returns “cannot list”.
+246. Error: quorum tool search_files no matches — Error — Returns “No matches found”.
+247. Error: quorum tool web_search failure — Error — Returns “Web search failed”.
+248. Error: quorum tool web_fetch failure — Error — Returns “failed to fetch”.
+249. Error: quorum Anthropic agent missing API key — Error — Returns “no API key configured”.
+250. Error: quorum OpenAI-compat agent missing API key — Error — Returns “no API key configured”.
+251. Error: quorum API error — Error — Returns “API Error: …”.
+252. Error: WS missing tmux — Error — Sends error message then closes connection.
+253. Error: WS server-side error — Error — Logs and kills PTY, client sees disconnect.
+254. Error: UI add project failure — Error — Alerts on server error response.
+255. Error: UI open session failure — Error — Logs failure to open session.
+256. Error: UI create session failure — Error — Alerts/console errors on failure.
+257. Error: UI summarize session failure — Error — Shows “Failed to generate summary” or error message.
+258. Error: UI auth check failure — Error — Logs auth check failure to console.
