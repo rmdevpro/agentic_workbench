@@ -51,6 +51,9 @@ run_as_hopper() {
   # Register Blueprint MCP server globally (user scope — survives project changes)
   claude mcp add-json --scope user blueprint '{"command":"node","args":["/app/mcp-server.js"],"env":{"BLUEPRINT_PORT":"3000"}}' 2>/dev/null || true
 
+  # Register Playwright MCP server (headless Chromium for browser automation)
+  claude mcp add-json --scope user playwright '{"command":"npx","args":["@playwright/mcp@latest","--headless"]}' 2>/dev/null || true
+
   # Install Blueprint slash commands as global skills
   if [ -d /app/config/skills ]; then
     mkdir -p "$CLAUDE/skills"
