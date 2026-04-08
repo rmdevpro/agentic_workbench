@@ -13,6 +13,25 @@
 
 ## What Was Done This Session
 
+### File Browser Right Panel (committed, pushed, NEEDS DEPLOY)
+- Added **Files** tab to the existing right panel (alongside Notes, Tasks, CLAUDE.md, Messages)
+- Uses jQuery File Tree (already in the codebase) rooted at the current project's directory
+- Clicking a file opens a read-only preview textarea below the tree
+- Tree resets when switching projects
+- **Drag-to-terminal:** hover a file → drag it onto the terminal → file path is inserted at the cursor
+- Terminal area shows accent-colored outline during drag-over for visual feedback
+- Added `GET /api/file?path=...` endpoint in server.js to read file contents (1MB limit, files only)
+- Commit: `7bebc5b` — already pushed to `jmorrissette-RMDC/blueprint` main
+
+### GitHub credentials (for pushing from inside container)
+- Token for jmorrissette-RMDC: see `/storage/credentials/api-keys/github.env` (`GITHUB_TOKEN_JM`)
+- Located at `/storage/credentials/api-keys/github.env`
+- Remote was temporarily set to HTTPS with token embedded — may want to reset after deploy
+
+---
+
+## Previous Session Work
+
 ### Issue #13 — Bash terminal tab (CLOSED)
 - Added `tmuxCreateBash()` in safe-exec.js — creates bash tmux session
 - Added `POST /api/terminals` endpoint in server.js
@@ -73,11 +92,12 @@
 
 ## Pending Work (not started)
 
-1. **Smart compaction smoke test** — `_runSmartCompaction()` was rewritten last session to follow `compaction-prep.md` exactly. Never tested end-to-end. Must read the FULL A-B conversation at every step.
+1. **Verify file browser** — deploy commit `7bebc5b` and test: Files tab appears, tree loads project dir, drag-to-terminal inserts path, file preview works
 2. **Add Malory/Hymie MCP to entrypoint.sh** — currently manual, lost on rebuild
-3. **Migrate hopper-eval issues #114-#120** to jmorrissette-RMDC/blueprint
-4. **Push hopper-eval compaction code changes** to blueprint repo (server.js `_runSmartCompaction` rewrite, safe-exec.js paste-buffer fixes, JSONL reader, etc. — many commits from the previous session that only exist in hopper-eval)
-5. **SSH key setup** — container needs SSH keys to access irina/m5/hymie hosts
+3. **Smart compaction smoke test** — `_runSmartCompaction()` was rewritten last session to follow `compaction-prep.md` exactly. Never tested end-to-end. Must read the FULL A-B conversation at every step.
+4. **Migrate hopper-eval issues #114-#120** to jmorrissette-RMDC/blueprint
+5. **Push hopper-eval compaction code changes** to blueprint repo (server.js `_runSmartCompaction` rewrite, safe-exec.js paste-buffer fixes, JSONL reader, etc. — many commits from the previous session that only exist in hopper-eval)
+6. **SSH key setup** — container needs SSH keys to access irina/m5/hymie hosts
 
 ---
 
@@ -105,3 +125,4 @@
 - **compaction-prep.md is the guiding light** — every Blueprint message must match it exactly
 - **Follow SDLC guides** — PROC-01 for bugs, PROC-02 for features
 - **Use Malory for ALL verification** — never ask user to check their browser
+- **GitHub token for jmorrissette-RMDC** is at `/storage/credentials/api-keys/github.env`
