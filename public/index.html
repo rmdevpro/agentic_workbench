@@ -849,6 +849,12 @@
         newBtn.addEventListener('click', () => createSession(project.name));
         sessionList.appendChild(newBtn);
 
+        const termBtn = document.createElement('button');
+        termBtn.className = 'new-session-btn';
+        termBtn.innerHTML = '+ Terminal';
+        termBtn.addEventListener('click', () => openTerminal(project.name));
+        sessionList.appendChild(termBtn);
+
         group.appendChild(sessionList);
         container.appendChild(group);
       }
@@ -947,6 +953,21 @@
           document.getElementById('new-session-submit').click();
         }
       });
+    }
+
+    async function openTerminal(projectName) {
+      try {
+        const res = await fetch('/api/terminals', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project: projectName }),
+        });
+        const data = await res.json();
+        if (data.error) { alert('Error: ' + data.error); return; }
+        createTab(data.id, data.tmux, data.name, projectName);
+      } catch (err) {
+        console.error('Failed to create terminal:', err);
+      }
     }
 
     function createTab(tabId, tmuxSession, name, project) {
@@ -1621,8 +1642,8 @@
       if (!activeTabId || !tabs.has(activeTabId)) return;
       const tab = tabs.get(activeTabId);
       if (!tab.project) return;
-      // Skip token API call for new_ sessions (no JSONL yet) but still update status bar
-      if (tab.id.startsWith('new_')) { updateStatusBar(); return; }
+      // Skip token API call for sessions with no JSONL
+      if (tab.id.startsWith('new_') || tab.id.startsWith('term_')) { updateStatusBar(); return; }
 
       try {
         const res = await fetch(`/api/sessions/${tab.id}/tokens?project=${encodeURIComponent(tab.project)}`);

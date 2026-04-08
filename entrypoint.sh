@@ -48,6 +48,9 @@ run_as_hopper() {
     echo "[entrypoint] Created settings.json"
   fi
 
+  # Register Blueprint MCP server globally (user scope — survives project changes)
+  claude mcp add-json --scope user blueprint '{"command":"node","args":["/app/mcp-server.js"],"env":{"BLUEPRINT_PORT":"3000"}}' 2>/dev/null || true
+
   # Verify Claude CLI credentials (non-interactive)
   if [ -f "$CLAUDE/.credentials.json" ]; then
     timeout 15 claude --print --no-session-persistence "ok" > /dev/null 2>&1 && \

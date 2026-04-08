@@ -389,6 +389,34 @@ app.post('/api/sessions', async (req, res) => {
   }
 });
 
+// ── API: Create plain bash terminal ───────────────────────────────────────
+
+app.post('/api/terminals', async (req, res) => {
+  try {
+    const { project } = req.body;
+    if (!project) return res.status(400).json({ error: 'project required' });
+
+    const dbProject = db.getProject(project);
+    const projectPath = dbProject ? dbProject.path : safe.resolveProjectPath(project);
+    try {
+      await stat(projectPath);
+    } catch {
+      return res.status(410).json({ error: 'Project directory not found' });
+    }
+
+    const termId = `term_${Date.now()}`;
+    const tmux = tmuxName(termId);
+
+    await enforceTmuxLimit();
+    safe.tmuxCreateBash(tmux, projectPath);
+
+    res.json({ id: termId, tmux, project, name: 'Terminal' });
+  } catch (err) {
+    console.error('Error creating terminal:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── API: Resume session ────────────────────────────────────────────────────
 
 app.post('/api/sessions/:sessionId/resume', async (req, res) => {
