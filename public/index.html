@@ -1469,7 +1469,7 @@
     // File Browser
     let fileBrowserInitialized = false;
 
-    function loadFiles() {
+    async function loadFiles() {
       if (fileBrowserInitialized) return;
       fileBrowserInitialized = true;
 
@@ -1477,17 +1477,54 @@
       treeEl.innerHTML = '';
       closeFileViewer();
 
-      $(treeEl).fileTree({
-        root: '/workspace/',
-        script: '/api/jqueryfiletree',
-        folderEvent: 'click',
-        expandSpeed: 150,
-        collapseSpeed: 150,
-        multiFolder: true,
-        onlyFolders: false,
-      }, function(filePath) {
-        openFileBrowserFile(filePath);
-      });
+      // Fetch actual volume mounts from container
+      let mounts = [];
+      try {
+        const res = await fetch('/api/mounts');
+        mounts = await res.json();
+      } catch {}
+      if (mounts.length === 0) mounts = [{ path: '/', type: 'unknown' }];
+
+      // Create a collapsible tree for each mount
+      for (const mount of mounts) {
+        const section = document.createElement('div');
+        section.style.cssText = 'margin-bottom:4px';
+        const header = document.createElement('div');
+        header.style.cssText = 'font-size:12px;font-family:monospace;color:var(--text-secondary);padding:4px 6px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:4px';
+        header.innerHTML = '<span class="mount-arrow" style="font-size:10px;transition:transform 0.15s">&#9654;</span> ' + mount.path;
+        const treeContainer = document.createElement('div');
+        treeContainer.style.cssText = 'display:none;padding-left:4px';
+        section.appendChild(header);
+        section.appendChild(treeContainer);
+        treeEl.appendChild(section);
+
+        // Click header to expand/collapse mount
+        header.addEventListener('click', function() {
+          const arrow = header.querySelector('.mount-arrow');
+          if (treeContainer.style.display === 'none') {
+            treeContainer.style.display = '';
+            arrow.style.transform = 'rotate(90deg)';
+            // Init tree on first expand
+            if (!treeContainer.dataset.initialized) {
+              treeContainer.dataset.initialized = '1';
+              $(treeContainer).fileTree({
+                root: mount.path.replace(/\/?$/, '/'),
+                script: '/api/jqueryfiletree',
+                folderEvent: 'click',
+                expandSpeed: 150,
+                collapseSpeed: 150,
+                multiFolder: true,
+                onlyFolders: false,
+              }, function(filePath) {
+                openFileBrowserFile(filePath);
+              });
+            }
+          } else {
+            treeContainer.style.display = 'none';
+            arrow.style.transform = '';
+          }
+        });
+      }
 
       // Make file links draggable — delegate so it works after tree expansion
       $(treeEl).on('dragstart', 'li.file a', function(e) {
