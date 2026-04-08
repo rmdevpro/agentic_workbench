@@ -404,7 +404,7 @@ app.post('/api/terminals', async (req, res) => {
       return res.status(410).json({ error: 'Project directory not found' });
     }
 
-    const termId = `term_${Date.now()}`;
+    const termId = `t_${Date.now()}`;
     const tmux = tmuxName(termId);
 
     await enforceTmuxLimit();

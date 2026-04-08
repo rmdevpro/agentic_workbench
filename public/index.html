@@ -1648,7 +1648,7 @@
       const tab = tabs.get(activeTabId);
       if (!tab.project) return;
       // Skip token API call for sessions with no JSONL
-      if (tab.id.startsWith('new_') || tab.id.startsWith('term_')) { updateStatusBar(); return; }
+      if (tab.id.startsWith('new_') || tab.id.startsWith('t_')) { updateStatusBar(); return; }
 
       try {
         const res = await fetch(`/api/sessions/${tab.id}/tokens?project=${encodeURIComponent(tab.project)}`);
