@@ -460,7 +460,6 @@
       <button class="panel-tab active" data-panel="files" onclick="switchPanel('files')">Files</button>
       <button class="panel-tab" data-panel="notes" onclick="switchPanel('notes')">Notes</button>
       <button class="panel-tab" data-panel="tasks" onclick="switchPanel('tasks')">Tasks</button>
-      <button class="panel-tab" data-panel="claudemd" onclick="switchPanel('claudemd')">CLAUDE.md</button>
       <button class="panel-tab" data-panel="messages" onclick="switchPanel('messages')">Messages</button>
     </div>
     <div id="panel-content">
@@ -472,11 +471,6 @@
         <h3>Tasks</h3>
         <div id="task-list"></div>
         <input id="add-task-input" type="text" placeholder="Add a task... (Enter to add)">
-      </div>
-      <div id="panel-claudemd" class="panel-section" style="display:none">
-        <h3>Project CLAUDE.md</h3>
-        <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Instructions for this project. Saved to {project}/CLAUDE.md</p>
-        <textarea id="project-claude-md" style="width:100%;min-height:250px;background:var(--bg-primary);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:8px;font-size:12px;font-family:monospace;resize:vertical;outline:none" placeholder="Project-specific instructions for Claude..."></textarea>
       </div>
       <div id="panel-messages" class="panel-section" style="display:none">
         <h3>Inter-Session Messages</h3>
@@ -1357,7 +1351,6 @@
       document.querySelectorAll('.panel-tab').forEach(b => b.classList.toggle('active', b.dataset.panel === panel));
       document.getElementById('panel-notes').style.display = panel === 'notes' ? '' : 'none';
       document.getElementById('panel-tasks').style.display = panel === 'tasks' ? '' : 'none';
-      document.getElementById('panel-claudemd').style.display = panel === 'claudemd' ? '' : 'none';
       document.getElementById('panel-messages').style.display = panel === 'messages' ? '' : 'none';
       document.getElementById('panel-files').style.display = panel === 'files' ? '' : 'none';
       loadPanelData();
@@ -1385,12 +1378,6 @@
         } catch {}
       } else if (activePanel === 'tasks') {
         loadTasks(project);
-      } else if (activePanel === 'claudemd') {
-        try {
-          const res = await fetch(`/api/projects/${project}/claude-md`);
-          const data = await res.json();
-          document.getElementById('project-claude-md').value = data.content || '';
-        } catch {}
       } else if (activePanel === 'messages') {
         loadMessages(project);
       }
@@ -1761,21 +1748,6 @@
       pollTokenUsage();
     };
 
-    // ── CLAUDE.md auto-save ────────────────────────────
-
-    let claudeMdSaveTimer = null;
-    document.getElementById('project-claude-md').addEventListener('input', () => {
-      if (claudeMdSaveTimer) clearTimeout(claudeMdSaveTimer);
-      claudeMdSaveTimer = setTimeout(async () => {
-        const project = getCurrentProject();
-        if (!project) return;
-        await fetch(`/api/projects/${project}/claude-md`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: document.getElementById('project-claude-md').value }),
-        });
-      }, 1500);
-    });
 
     async function saveGlobalClaudeMd() {
       await fetch('/api/claude-md/global', {
