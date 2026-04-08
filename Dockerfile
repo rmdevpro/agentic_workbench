@@ -1,7 +1,7 @@
 FROM node:22-slim
 
 RUN apt-get update && apt-get install -y \
-    git curl ca-certificates python3 make g++ tmux ssh openssh-client gosu jq \
+    git curl ca-certificates python3 make g++ tmux ssh openssh-client gosu jq sudo \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Docker CLI (for building/deploying from within sessions)
@@ -29,7 +29,8 @@ COPY . .
 # Create non-root user (Claude CLI refuses --dangerously-skip-permissions as root)
 RUN useradd -m -s /bin/bash hopper && \
     mkdir -p /home/hopper/.claude /home/hopper/.blueprint /workspace && \
-    chown -R hopper:hopper /home/hopper /workspace /app
+    chown -R hopper:hopper /home/hopper /workspace /app && \
+    echo 'hopper ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/hopper
 
 # Pre-create settings to skip bypass permissions prompt and onboarding
 RUN mkdir -p /home/hopper/.claude && \
