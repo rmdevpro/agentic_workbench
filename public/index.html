@@ -84,6 +84,12 @@
       margin-left: auto; background: var(--bg-tertiary); padding: 1px 6px;
       border-radius: 10px; font-size: 11px; color: var(--text-muted);
     }
+    .project-header .term-btn {
+      margin-left: 6px; background: none; border: none; color: var(--text-muted);
+      cursor: pointer; font-size: 12px; padding: 1px 4px; border-radius: 4px;
+      font-family: monospace; line-height: 1;
+    }
+    .project-header .term-btn:hover { color: var(--accent); background: var(--bg-hover); }
 
     .session-list { overflow: hidden; }
     .session-list.collapsed { display: none; }
@@ -757,7 +763,12 @@
           <span class="arrow">&#9660;</span>
           <span>${escHtml(project.name)}</span>
           <span class="count">${filteredCount}</span>
+          <button class="term-btn" title="Open terminal">&gt;_</button>
         `;
+        header.querySelector('.term-btn').addEventListener('click', (e) => {
+          e.stopPropagation();
+          openTerminal(project.name);
+        });
         header.addEventListener('click', () => {
           if (expandedProjects.has(project.name)) {
             expandedProjects.delete(project.name);
@@ -848,12 +859,6 @@
         newBtn.innerHTML = '+ New Session';
         newBtn.addEventListener('click', () => createSession(project.name));
         sessionList.appendChild(newBtn);
-
-        const termBtn = document.createElement('button');
-        termBtn.className = 'new-session-btn';
-        termBtn.innerHTML = '+ Terminal';
-        termBtn.addEventListener('click', () => openTerminal(project.name));
-        sessionList.appendChild(termBtn);
 
         group.appendChild(sessionList);
         container.appendChild(group);
