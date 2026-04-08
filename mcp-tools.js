@@ -59,6 +59,198 @@ function registerMcpRoutes(app) {
             required: ['project'],
           },
         },
+        {
+          name: 'blueprint_ask_quorum',
+          description: 'Ask a question to the quorum (multi-model consensus). Returns aggregated response.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              question: { type: 'string', description: 'The question to ask' },
+              project: { type: 'string', description: 'Project context' },
+              mode: { type: 'string', description: 'Mode: "new" or "followup"', default: 'new' },
+            },
+            required: ['question', 'project'],
+          },
+        },
+        {
+          name: 'blueprint_smart_compaction',
+          description: 'Trigger smart compaction on a session. Runs the full prep/compact/recovery flow.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              session_id: { type: 'string', description: 'Session UUID to compact' },
+              project: { type: 'string', description: 'Project name' },
+            },
+            required: ['session_id', 'project'],
+          },
+        },
+        {
+          name: 'blueprint_send_message',
+          description: 'Send a message to another session. Content is delivered via bridge file.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              to_session: { type: 'string', description: 'Target session UUID' },
+              project: { type: 'string', description: 'Project name' },
+              content: { type: 'string', description: 'Message content' },
+            },
+            required: ['to_session', 'project', 'content'],
+          },
+        },
+        {
+          name: 'blueprint_get_token_usage',
+          description: 'Get token usage for a session — input tokens, model, max context, percentage used.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              session_id: { type: 'string', description: 'Session UUID' },
+              project: { type: 'string', description: 'Project name' },
+            },
+            required: ['session_id', 'project'],
+          },
+        },
+        {
+          name: 'blueprint_set_session_config',
+          description: 'Set session configuration — name, state (active/archived/hidden), notes.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              session_id: { type: 'string', description: 'Session UUID' },
+              name: { type: 'string', description: 'New session name' },
+              state: { type: 'string', description: 'Session state: active, archived, hidden' },
+              notes: { type: 'string', description: 'Session notes' },
+            },
+            required: ['session_id'],
+          },
+        },
+        {
+          name: 'blueprint_reopen_task',
+          description: 'Reopen a completed task.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              task_id: { type: 'string', description: 'Task ID to reopen' },
+            },
+            required: ['task_id'],
+          },
+        },
+        {
+          name: 'blueprint_delete_task',
+          description: 'Delete a task.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              task_id: { type: 'string', description: 'Task ID to delete' },
+            },
+            required: ['task_id'],
+          },
+        },
+        {
+          name: 'blueprint_set_project_notes',
+          description: 'Set notes for a project.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              project: { type: 'string', description: 'Project name' },
+              notes: { type: 'string', description: 'Notes content' },
+            },
+            required: ['project', 'notes'],
+          },
+        },
+        {
+          name: 'blueprint_set_session_notes',
+          description: 'Set notes for a session.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              session_id: { type: 'string', description: 'Session UUID' },
+              notes: { type: 'string', description: 'Notes content' },
+            },
+            required: ['session_id', 'notes'],
+          },
+        },
+        {
+          name: 'blueprint_get_project_notes',
+          description: 'Get notes for a project.',
+          inputSchema: {
+            type: 'object',
+            properties: { project: { type: 'string', description: 'Project name' } },
+            required: ['project'],
+          },
+        },
+        {
+          name: 'blueprint_get_session_notes',
+          description: 'Get notes for a session.',
+          inputSchema: {
+            type: 'object',
+            properties: { session_id: { type: 'string', description: 'Session UUID' } },
+            required: ['session_id'],
+          },
+        },
+        {
+          name: 'blueprint_get_tasks',
+          description: 'Get all tasks for a project.',
+          inputSchema: {
+            type: 'object',
+            properties: { project: { type: 'string', description: 'Project name' } },
+            required: ['project'],
+          },
+        },
+        {
+          name: 'blueprint_add_task',
+          description: 'Add a new task to a project.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              project: { type: 'string', description: 'Project name' },
+              text: { type: 'string', description: 'Task description' },
+            },
+            required: ['project', 'text'],
+          },
+        },
+        {
+          name: 'blueprint_complete_task',
+          description: 'Mark a task as completed.',
+          inputSchema: {
+            type: 'object',
+            properties: { task_id: { type: 'string', description: 'Task ID' } },
+            required: ['task_id'],
+          },
+        },
+        {
+          name: 'blueprint_read_plan',
+          description: 'Read a session plan file.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              session_id: { type: 'string', description: 'Session UUID' },
+              project: { type: 'string', description: 'Project name' },
+            },
+            required: ['session_id', 'project'],
+          },
+        },
+        {
+          name: 'blueprint_update_plan',
+          description: 'Write/update a session plan file.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              session_id: { type: 'string', description: 'Session UUID' },
+              project: { type: 'string', description: 'Project name' },
+              content: { type: 'string', description: 'Plan file content (markdown)' },
+            },
+            required: ['session_id', 'project', 'content'],
+          },
+        },
+        {
+          name: 'blueprint_get_project_claude_md',
+          description: 'Read the CLAUDE.md file for a project.',
+          inputSchema: {
+            type: 'object',
+            properties: { project: { type: 'string', description: 'Project name' } },
+            required: ['project'],
+          },
+        },
       ],
     });
   });
@@ -135,6 +327,36 @@ function registerMcpRoutes(app) {
           result = { saved: true, path: planFile };
           break;
         }
+        case 'blueprint_get_token_usage': {
+          result = await sessionUtils.getTokenUsage(args.session_id, args.project);
+          break;
+        }
+        case 'blueprint_set_session_config': {
+          if (args.name !== undefined) db.renameSession(args.session_id, args.name);
+          if (args.state !== undefined) db.setSessionState(args.session_id, args.state);
+          if (args.notes !== undefined) db.setSessionNotes(args.session_id, args.notes);
+          result = { saved: true };
+          break;
+        }
+        case 'blueprint_reopen_task':
+          db.reopenTask(args.task_id);
+          result = { reopened: true };
+          break;
+        case 'blueprint_delete_task':
+          db.deleteTask(args.task_id);
+          result = { deleted: true };
+          break;
+        case 'blueprint_set_project_notes': {
+          const project = db.getProject(args.project);
+          if (!project) throw new Error('Project not found');
+          db.setProjectNotes(project.id, args.notes);
+          result = { saved: true };
+          break;
+        }
+        case 'blueprint_set_session_notes':
+          db.setSessionNotes(args.session_id, args.notes);
+          result = { saved: true };
+          break;
         case 'blueprint_smart_compaction': {
           // Forward to the server's smart compaction endpoint
           const r = await fetch(`http://localhost:${process.env.BLUEPRINT_PORT || 3000}/api/sessions/${args.session_id || 'current'}/smart-compact`, {
