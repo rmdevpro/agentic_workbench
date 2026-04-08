@@ -763,9 +763,14 @@
           <span class="arrow">&#9660;</span>
           <span>${escHtml(project.name)}</span>
           <span class="count">${filteredCount}</span>
+          <button class="term-btn new-btn" title="New session">+</button>
           <button class="term-btn" title="Open terminal">&gt;_</button>
         `;
-        header.querySelector('.term-btn').addEventListener('click', (e) => {
+        header.querySelector('.new-btn').addEventListener('click', (e) => {
+          e.stopPropagation();
+          createSession(project.name);
+        });
+        header.querySelector('.term-btn:not(.new-btn)').addEventListener('click', (e) => {
           e.stopPropagation();
           openTerminal(project.name);
         });
@@ -853,12 +858,6 @@
           });
           sessionList.appendChild(item);
         }
-
-        const newBtn = document.createElement('button');
-        newBtn.className = 'new-session-btn';
-        newBtn.innerHTML = '+ New Session';
-        newBtn.addEventListener('click', () => createSession(project.name));
-        sessionList.appendChild(newBtn);
 
         group.appendChild(sessionList);
         container.appendChild(group);
