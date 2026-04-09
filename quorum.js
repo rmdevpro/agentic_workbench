@@ -1,242 +1,177 @@
-/**
- * Blueprint Ask Quorum
- *
- * Lead: Claude CLI (configured model)
- * Fixed Junior: configurable (default Sonnet via API)
- * Additional Juniors: configurable list of API models
- *
- * Each junior runs as a ReAct agent with:
- *   - read_file, list_files, search_files (CWD read-only)
- *   - web_search, web_fetch
- *   - write_response (temp dir)
- */
+'use strict';
 
-const { mkdirSync, writeFileSync, readFileSync, readdirSync, statSync } = require('fs');
-const { join, relative } = require('path');
+const { mkdir, writeFile, readFile, readdir, stat } = require('fs/promises');
+const { join, relative, sep } = require('path');
 const { randomUUID } = require('crypto');
 const http = require('http');
 const https = require('https');
 const db = require('./db');
 const safe = require('./safe-exec');
+const config = require('./config');
+const logger = require('./logger');
+
 const QUORUM_DIR = join(db.DATA_DIR, 'quorum');
 
-// ── Tool definitions for junior agents ─────────────────────────────────────
-
 const JUNIOR_TOOLS = [
-  {
-    name: 'read_file',
-    description: 'Read a file from the project directory. Returns file content.',
-    input_schema: {
-      type: 'object',
-      properties: { path: { type: 'string', description: 'Relative path from project root' } },
-      required: ['path'],
-    },
-  },
-  {
-    name: 'list_files',
-    description: 'List files and directories at a path. Returns names with type indicators.',
-    input_schema: {
-      type: 'object',
-      properties: { path: { type: 'string', description: 'Relative path (empty string for root)' } },
-      required: ['path'],
-    },
-  },
-  {
-    name: 'search_files',
-    description: 'Search for a pattern in project files using grep. Returns matching lines with file paths.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        pattern: { type: 'string', description: 'Search pattern (regex)' },
-        glob: { type: 'string', description: 'Optional file glob filter (e.g. "*.py")' },
-      },
-      required: ['pattern'],
-    },
-  },
-  {
-    name: 'web_search',
-    description: 'Search the web for information. Returns search result snippets.',
-    input_schema: {
-      type: 'object',
-      properties: { query: { type: 'string', description: 'Search query' } },
-      required: ['query'],
-    },
-  },
-  {
-    name: 'web_fetch',
-    description: 'Fetch content from a URL. Returns the text content of the page.',
-    input_schema: {
-      type: 'object',
-      properties: { url: { type: 'string', description: 'URL to fetch' } },
-      required: ['url'],
-    },
-  },
+  { name: 'read_file', description: 'Read a file from the project directory.', input_schema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } },
+  { name: 'list_files', description: 'List files and directories at a path.', input_schema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } },
+  { name: 'search_files', description: 'Search for a pattern in project files using grep.', input_schema: { type: 'object', properties: { pattern: { type: 'string' }, glob: { type: 'string' } }, required: ['pattern'] } },
+  { name: 'web_search', description: 'Search the web for information.', input_schema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] } },
+  { name: 'web_fetch', description: 'Fetch content from a URL.', input_schema: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] } },
 ];
 
-// ── Tool implementations ───────────────────────────────────────────────────
-
-function executeTool(toolName, input, cwd, tempDir) {
+async function executeTool(toolName, input, cwd, tempDir) {
   switch (toolName) {
     case 'read_file': {
-      const { sep } = require('path');
       const fullPath = join(cwd, input.path);
-      // Prevent path traversal — check with separator to avoid prefix-match bypass
       if (!fullPath.startsWith(cwd + sep) && fullPath !== cwd) return 'Error: path outside project directory';
       try {
-        const content = readFileSync(fullPath, 'utf-8');
+        const content = await readFile(fullPath, 'utf-8');
         return content.length > 10000 ? content.substring(0, 10000) + '\n...[truncated]' : content;
-      } catch { return `Error: file not found: ${input.path}`; }
+      } catch (err) {
+        if (err.code === 'ENOENT') return `Error: file not found: ${input.path}`;
+        return `Error: cannot read file: ${err.message}`;
+      }
     }
     case 'list_files': {
-      const { sep } = require('path');
       const fullPath = join(cwd, input.path || '');
       if (!fullPath.startsWith(cwd + sep) && fullPath !== cwd) return 'Error: path outside project directory';
       try {
-        const entries = readdirSync(fullPath, { withFileTypes: true });
-        return entries.slice(0, 100).map(e =>
-          `${e.isDirectory() ? '[dir] ' : '      '}${e.name}`
-        ).join('\n');
-      } catch { return `Error: cannot list: ${input.path}`; }
+        const entries = await readdir(fullPath, { withFileTypes: true });
+        return entries.slice(0, 100).map(e => `${e.isDirectory() ? '[dir] ' : '      '}${e.name}`).join('\n');
+      } catch (err) {
+        if (err.code === 'ENOENT') return `Error: directory not found: ${input.path}`;
+        return `Error: cannot list: ${err.message}`;
+      }
     }
-    case 'search_files': {
-      return safe.grepSearch(input.pattern, cwd, input.glob);
-    }
+    case 'search_files':
+      return await safe.grepSearchAsync(input.pattern, cwd, input.glob);
     case 'web_search': {
       try {
-        const { execFileSync } = require('child_process');
-        const result = execFileSync('curl', [
-          '-s', `https://api.duckduckgo.com/?q=${encodeURIComponent(input.query)}&format=json&no_html=1`
-        ], { encoding: 'utf-8', timeout: 10000 });
+        const result = await safe.curlFetchAsync(`https://api.duckduckgo.com/?q=${encodeURIComponent(input.query)}&format=json&no_html=1`);
         const data = JSON.parse(result);
         const results = [];
         if (data.AbstractText) results.push(`Summary: ${data.AbstractText}`);
-        if (data.RelatedTopics) {
-          for (const t of data.RelatedTopics.slice(0, 5)) {
-            if (t.Text) results.push(`- ${t.Text}`);
-          }
-        }
+        if (data.RelatedTopics) for (const t of data.RelatedTopics.slice(0, 5)) { if (t.Text) results.push(`- ${t.Text}`); }
         return results.length > 0 ? results.join('\n') : 'No results found.';
-      } catch { return 'Web search failed'; }
+      } catch (err) {
+        if (err instanceof SyntaxError) return 'Web search returned invalid JSON';
+        return `Web search failed: ${err.message}`;
+      }
     }
     case 'web_fetch': {
-      return safe.curlFetch(input.url).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').substring(0, 10000);
+      const raw = await safe.curlFetchAsync(input.url);
+      return raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').substring(0, 10000);
     }
     default:
       return `Unknown tool: ${toolName}`;
   }
 }
 
-// ── API-based ReAct agent ──────────────────────────────────────────────────
+function getQuorumSettings() {
+  let lead, fixedJunior, additionalJuniors;
+  try {
+    lead = JSON.parse(db.getSetting('quorum_lead_model', '"opus"'));
+  } catch (err) {
+    if (err instanceof SyntaxError) { lead = 'opus'; }
+    else throw err;
+  }
+  try {
+    fixedJunior = JSON.parse(db.getSetting('quorum_fixed_junior', '"sonnet"'));
+  } catch (err) {
+    if (err instanceof SyntaxError) { fixedJunior = 'sonnet'; }
+    else throw err;
+  }
+  try {
+    additionalJuniors = JSON.parse(db.getSetting('quorum_additional_juniors', '[]'));
+  } catch (err) {
+    if (err instanceof SyntaxError) { additionalJuniors = []; }
+    else throw err;
+  }
+  return { lead, fixedJunior, additionalJuniors };
+}
 
 async function runJuniorAgent(modelConfig, question, cwd, tempDir) {
-  const systemPrompt = `You are a junior member of a technical quorum. You have been given a question to answer independently.
-
-You have access to tools to examine the project codebase and search the web. Use them as needed to give a thorough, well-informed answer.
-
-When you have your answer ready, state it clearly. Be thorough but concise.`;
-
-  // String config (e.g. "sonnet") = Claude CLI model
-  if (typeof modelConfig === 'string') {
-    return await runClaudeCliJunior(modelConfig, systemPrompt, question, cwd);
-  }
-
+  const systemPrompt = `You are a junior member of a technical quorum. Answer the question thoroughly and concisely.`;
+  if (typeof modelConfig === 'string') return await runClaudeCliJunior(modelConfig, systemPrompt, question, cwd);
   const provider = modelConfig.provider || 'anthropic';
-
-  // Anthropic provider or missing = Claude CLI
-  if (provider === 'anthropic' || provider === 'anthropic-cli') {
-    const model = modelConfig.model || 'sonnet';
-    return await runClaudeCliJunior(model, systemPrompt, question, cwd);
-  }
-
-  // Everything else = OpenAI-compatible API
+  if (provider === 'anthropic' || provider === 'anthropic-cli') return await runClaudeCliJunior(modelConfig.model || 'sonnet', systemPrompt, question, cwd);
   return await runOpenAICompatAgent(modelConfig, systemPrompt, question, cwd, tempDir);
 }
 
 async function runClaudeCliJunior(model, systemPrompt, question, cwd) {
   const prompt = `${systemPrompt}\n\n## Question\n\n${question}`;
-  const args = [
-    '--print',
-    '--permission-mode', 'dontAsk',
-    '--tools', 'Read,Grep,Glob,WebSearch,WebFetch',
-    '--allowedTools', 'Read', 'Grep', 'Glob', 'WebSearch', 'WebFetch',
-    '--model', model,
-    '--no-session-persistence',
-    prompt,
-  ];
+  const claudeTimeout = config.get('claude.defaultTimeoutMs', 120000);
   try {
-    return (await safe.claudeExecAsync(args, { cwd, timeout: 120000 })).trim();
+    return (await safe.claudeExecAsync([
+      '--print', '--permission-mode', 'dontAsk', '--model', model, '--no-session-persistence', prompt,
+    ], { cwd, timeout: claudeTimeout })).trim();
   } catch (err) {
     return `CLI Error: ${err.message?.substring(0, 500)}`;
   }
 }
 
-async function runOpenAICompatAgent(config, systemPrompt, question, cwd, tempDir) {
-  const apiKey = config.api_key || process.env[config.api_key_env || 'OPENAI_API_KEY'] || '';
-  if (!apiKey) return `Error: no API key configured for ${config.provider}`;
+async function runOpenAICompatAgent(agentConfig, systemPrompt, question, cwd, tempDir) {
+  const apiKey = agentConfig.api_key || process.env[agentConfig.api_key_env || 'OPENAI_API_KEY'] || '';
+  if (!apiKey) return `Error: no API key configured for ${agentConfig.provider}`;
+  const model = agentConfig.model;
+  const baseUrl = agentConfig.base_url || 'https://api.openai.com';
+  const messages = [{ role: 'system', content: systemPrompt }, { role: 'user', content: question }];
+  const tools = JUNIOR_TOOLS.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } }));
 
-  const model = config.model;
-  const baseUrl = config.base_url || 'https://api.openai.com';
-  const maxTurns = 10;
-  const messages = [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: question },
-  ];
-
-  // Convert tool format for OpenAI
-  const tools = JUNIOR_TOOLS.map(t => ({
-    type: 'function',
-    function: { name: t.name, description: t.description, parameters: t.input_schema },
-  }));
-
-  for (let turn = 0; turn < maxTurns; turn++) {
-    const response = await fetchJSON(`${baseUrl}/v1/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({ model, messages, tools }),
-    });
-
-    if (response.error) return `API Error: ${JSON.stringify(response.error)}`;
-
-    const choice = response.choices?.[0];
-    if (!choice) return 'No response';
-
-    messages.push(choice.message);
-
-    if (choice.finish_reason !== 'tool_calls' || !choice.message.tool_calls) {
-      return choice.message.content || 'No response generated';
+  try {
+    for (let turn = 0; turn < 10; turn++) {
+      let response;
+      try {
+        response = await fetchJSON(`${baseUrl}/v1/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+          body: JSON.stringify({ model, messages, tools }),
+        });
+      } catch (fetchErr) {
+        return `API Network Error: ${fetchErr.message?.substring(0, 200)}`;
+      }
+      if (response.error) return `API Error: ${JSON.stringify(response.error)}`;
+      const choice = response.choices?.[0];
+      if (!choice) return 'No response';
+      messages.push(choice.message);
+      if (choice.finish_reason !== 'tool_calls' || !choice.message.tool_calls) return choice.message.content || 'No response generated';
+      for (const tc of choice.message.tool_calls) {
+        let args;
+        try {
+          args = JSON.parse(tc.function.arguments || '{}');
+        } catch (parseErr) {
+          if (parseErr instanceof SyntaxError) {
+            messages.push({ role: 'tool', tool_call_id: tc.id, content: `Error: malformed tool arguments: ${tc.function.arguments}` });
+            continue;
+          }
+          throw parseErr;
+        }
+        const result = await executeTool(tc.function.name, args, cwd, tempDir);
+        messages.push({ role: 'tool', tool_call_id: tc.id, content: result });
+      }
     }
-
-    for (const tc of choice.message.tool_calls) {
-      const args = JSON.parse(tc.function.arguments || '{}');
-      const result = executeTool(tc.function.name, args, cwd, tempDir);
-      messages.push({ role: 'tool', tool_call_id: tc.id, content: result });
-    }
+    return 'Max tool turns reached';
+  } catch (err) {
+    return `Agent Error: ${err.message?.substring(0, 500)}`;
   }
-
-  return 'Max tool turns reached';
 }
-
-// ── HTTP helper ────────────────────────────────────────────────────────────
 
 function fetchJSON(url, opts) {
   return new Promise((resolve, reject) => {
     const parsed = new URL(url);
     const client = parsed.protocol === 'https:' ? https : http;
     const req = client.request({
-      hostname: parsed.hostname,
-      port: parsed.port,
-      path: parsed.pathname + parsed.search,
-      method: opts.method || 'GET',
-      headers: opts.headers || {},
-      timeout: 120000,
+      hostname: parsed.hostname, port: parsed.port, path: parsed.pathname + parsed.search,
+      method: opts.method || 'GET', headers: opts.headers || {}, timeout: 120000,
     }, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
-        try { resolve(JSON.parse(data)); } catch { resolve({ error: data }); }
+        try { resolve(JSON.parse(data)); } catch (parseErr) {
+          if (parseErr instanceof SyntaxError) resolve({ error: `Invalid JSON response: ${data.substring(0, 200)}` });
+          else reject(parseErr);
+        }
       });
     });
     req.on('error', reject);
@@ -244,19 +179,6 @@ function fetchJSON(url, opts) {
     if (opts.body) req.write(opts.body);
     req.end();
   });
-}
-
-// ── Quorum orchestration ───────────────────────────────────────────────────
-
-function getQuorumSettings() {
-  let lead, fixedJunior, additionalJuniors;
-  try { lead = JSON.parse(db.getSetting('quorum_lead_model', '"opus"')); } catch { lead = 'opus'; }
-  try { fixedJunior = JSON.parse(db.getSetting('quorum_fixed_junior', '"sonnet"')); }
-  catch { fixedJunior = 'sonnet'; }
-  try { additionalJuniors = JSON.parse(db.getSetting('quorum_additional_juniors', '[]')); }
-  catch { additionalJuniors = []; }
-
-  return { lead, fixedJunior, additionalJuniors };
 }
 
 const leadSessionCache = new Map();
@@ -268,77 +190,56 @@ async function askQuorum(question, project, callingSessionId, mode) {
 
   const roundId = randomUUID().substring(0, 8);
   const roundDir = join(QUORUM_DIR, roundId);
-  mkdirSync(roundDir, { recursive: true });
+  await mkdir(roundDir, { recursive: true });
 
   const allJuniors = [settings.fixedJunior, ...settings.additionalJuniors];
-  console.log(`[quorum] Round ${roundId} — lead: ${settings.lead}, ${allJuniors.length} juniors, mode: ${mode}`);
+  logger.info('Quorum round starting', { module: 'quorum', roundId, lead: settings.lead, juniorCount: allJuniors.length, mode });
 
-  // Step 1: Run all junior agents
   const juniorFiles = [];
   for (let i = 0; i < allJuniors.length; i++) {
-    const config = allJuniors[i];
-    const label = typeof config === 'string' ? config : (config.label || config.model || `junior_${i + 1}`);
-    const provider = typeof config === 'string' ? 'cli' : (config.provider || 'anthropic');
-    console.log(`[quorum] Running junior ${i + 1}: ${label} (${provider})...`);
-
-    const response = await runJuniorAgent(config, question, cwd, roundDir);
+    const juniorConfig = allJuniors[i];
+    const label = typeof juniorConfig === 'string' ? juniorConfig : (juniorConfig.label || juniorConfig.model || `junior_${i + 1}`);
+    logger.info('Running junior agent', { module: 'quorum', junior: i + 1, label });
+    const response = await runJuniorAgent(juniorConfig, question, cwd, roundDir);
     const filename = `junior_${i + 1}_${label.replace(/[^a-zA-Z0-9]/g, '_')}.md`;
     const filepath = join(roundDir, filename);
-    writeFileSync(filepath, `# Response from ${label}\n\n${response}\n`);
+    await writeFile(filepath, `# Response from ${label}\n\n${response}\n`);
     juniorFiles.push(filepath);
-    console.log(`[quorum] Junior ${i + 1} complete — ${response.length} chars`);
   }
 
-  // Step 2: Lead synthesis via Claude CLI
-  const juniorContents = juniorFiles.map((f, i) => {
-    const content = readFileSync(f, 'utf-8');
-    return `## Junior ${i + 1} Response\n\n${content}`;
-  }).join('\n\n---\n\n');
+  const juniorContents = [];
+  for (let i = 0; i < juniorFiles.length; i++) {
+    const content = await readFile(juniorFiles[i], 'utf-8');
+    juniorContents.push(`## Junior ${i + 1} Response\n\n${content}`);
+  }
+  const juniorText = juniorContents.join('\n\n---\n\n');
 
-  const leadPrompt = `You are the lead on a quorum review. You have a question and ${allJuniors.length} independent responses from different models.
-
-## Question
-${question}
-
-## Independent Responses
-${juniorContents}
-
-## Your Task
-Synthesize a response that is holistically superior to any individual response. Select the best insights, identify agreements (high confidence) and disagreements (needs investigation), resolve conflicts, and produce a comprehensive answer.`;
+  const leadPrompt = `You are the lead on a quorum review.\n\n## Question\n${question}\n\n## Independent Responses\n${juniorText}\n\n## Your Task\nSynthesize a holistic response.`;
 
   let leadSessionId = null;
   if (mode === 'resume' && callingSessionId && leadSessionCache.has(callingSessionId)) {
     leadSessionId = leadSessionCache.get(callingSessionId);
   }
 
-  console.log(`[quorum] Running lead synthesis (${settings.lead})...`);
+  const claudeTimeout = config.get('claude.defaultTimeoutMs', 120000);
   const leadArgs = ['--print', '--dangerously-skip-permissions', '--model', settings.lead];
-  if (leadSessionId) {
-    leadArgs.push('--resume', leadSessionId);
-  } else {
-    leadArgs.push('--no-session-persistence');
-  }
+  if (leadSessionId) leadArgs.push('--resume', leadSessionId);
+  else leadArgs.push('--no-session-persistence');
 
   let leadResponse;
   try {
     leadArgs.push(leadPrompt);
-    leadResponse = (await safe.claudeExecAsync(leadArgs, { cwd, timeout: 120000 })).trim();
+    leadResponse = (await safe.claudeExecAsync(leadArgs, { cwd, timeout: claudeTimeout })).trim();
   } catch (err) {
     leadResponse = `Lead synthesis failed: ${err.message?.substring(0, 200)}`;
   }
 
   const leadFile = join(roundDir, 'lead_synthesis.md');
-  writeFileSync(leadFile, `# Lead Synthesis\n\n${leadResponse}\n`);
+  await writeFile(leadFile, `# Lead Synthesis\n\n${leadResponse}\n`);
 
   const allFiles = [...juniorFiles, leadFile];
-  console.log(`[quorum] Round ${roundId} complete — ${allFiles.length} files`);
-
-  return {
-    round_id: roundId,
-    files: allFiles,
-    lead_synthesis: leadFile,
-    junior_count: juniorFiles.length,
-  };
+  logger.info('Quorum round complete', { module: 'quorum', roundId, fileCount: allFiles.length });
+  return { round_id: roundId, files: allFiles, lead_synthesis: leadFile, junior_count: juniorFiles.length };
 }
 
 function registerQuorumRoutes(app) {
@@ -350,7 +251,10 @@ function registerQuorumRoutes(app) {
       const result = await askQuorum(question, project, session_id, mode || 'new');
       res.json(result);
     } catch (err) {
-      console.error('[quorum] Error:', err);
+      if (err.code === 'ENOENT') {
+        return res.status(404).json({ error: `Resource not found: ${err.message}` });
+      }
+      logger.error('Quorum error', { module: 'quorum', err: err.message });
       res.status(500).json({ error: err.message });
     }
   });

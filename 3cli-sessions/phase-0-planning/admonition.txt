@@ -1,0 +1,1 @@
+Do NOT create, modify, or delete any files except when explicitly asked to write output to a specific path. Do NOT run any commands that modify the filesystem, restart containers, or change configuration.

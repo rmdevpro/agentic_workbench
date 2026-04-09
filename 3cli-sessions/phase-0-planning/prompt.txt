@@ -1,0 +1,9 @@
+You are a professional software architect. You are reviewing the plan for code refactor of a module in a code base.  You will create your own version of the plan using your own judgement.
+
+Read each of these files entirely into context:
+"C:\Users\j\projects\BP_Quorum\Anchor\Blueprint_refactor_v0.md"
+"C:\Users\j\projects\BP_Quorum\Anchor\BlueprintFlatCode.md"
+"C:\Users\j\projects\BP_Quorum\Anchor\ERQ-001-engineering-requirements.md"
+
+Please write your plan here
+C:\Users\j\projects\BP_Quorum\Phase 0 - Plan\Claude
