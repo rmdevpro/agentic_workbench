@@ -515,8 +515,8 @@ module.exports = function createCompaction({ db, safe, config, sessionUtils, tmu
   async function orchestrateCompaction(sessionId, project) {
     const dbProj = db.getProject(project);
     const projectPath = dbProj ? dbProj.path : safe.resolveProjectPath(project);
-    if (!/^[a-zA-Z0-9_-]{8,64}$/.test(sessionId)) throw new Error('Invalid session ID format');
     if (sessionId.startsWith('new_')) return { compacted: false, reason: 'temp session not yet resolved' };
+    if (!/^[a-zA-Z0-9_-]{8,64}$/.test(sessionId)) throw new Error('Invalid session ID format');
 
     const tmuxSession = tmuxName(sessionId);
     if (!(await tmuxExists(tmuxSession))) return { compacted: false, reason: 'session not running' };

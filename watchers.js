@@ -1,7 +1,7 @@
 'use strict';
 
-const { readdir, readFile, writeFile, stat, mkdir } = require('fs/promises');
-const { watchFile, unwatchFile } = require('fs');
+const fsp = require('fs/promises');
+const fs = require('fs');
 const { join, basename } = require('path');
 
 module.exports = function createWatchers({ db, safe, config, sessionUtils, sessionWsClients, checkCompactionNeeds, tmuxName, tmuxExists, CLAUDE_HOME, logger }) {
@@ -22,7 +22,7 @@ module.exports = function createWatchers({ db, safe, config, sessionUtils, sessi
     const jsonlPath = join(safe.findSessionsDir(project.path), `${session.id}.jsonl`);
     jsonlWatchPaths.set(tmuxSession, { jsonlPath, sessionId: session.id, projectPath: project.path, projectName: project.name });
 
-    watchFile(jsonlPath, { persistent: false, interval: 2000 }, () => {
+    fs.watchFile(jsonlPath, { persistent: false, interval: 2000 }, () => {
       const entry = jsonlWatchPaths.get(tmuxSession);
       if (!entry) return;
 
@@ -50,7 +50,7 @@ module.exports = function createWatchers({ db, safe, config, sessionUtils, sessi
   function stopJsonlWatcher(tmuxSession) {
     const entry = jsonlWatchPaths.get(tmuxSession);
     if (entry) {
-      unwatchFile(entry.jsonlPath);
+      fs.unwatchFile(entry.jsonlPath);
       jsonlWatchPaths.delete(tmuxSession);
     }
     if (jsonlDebounceTimers.has(tmuxSession)) {
@@ -63,9 +63,9 @@ module.exports = function createWatchers({ db, safe, config, sessionUtils, sessi
   function startSettingsWatcher() {
     if (settingsWatcherActive) return;
     const settingsPath = join(CLAUDE_HOME, 'settings.json');
-    watchFile(settingsPath, { persistent: false, interval: 5000 }, async () => {
+    fs.watchFile(settingsPath, { persistent: false, interval: 5000 }, async () => {
       try {
-        const data = JSON.parse(await readFile(settingsPath, 'utf-8'));
+        const data = JSON.parse(await fsp.readFile(settingsPath, 'utf-8'));
         const update = JSON.stringify({ type: 'settings_update', model: data.model || null, effortLevel: data.effortLevel || null });
         for (const ws of sessionWsClients.values()) {
           if (ws.readyState === 1) ws.send(update);
@@ -91,7 +91,7 @@ module.exports = function createWatchers({ db, safe, config, sessionUtils, sessi
         for (const dbProj of db.getProjects()) {
           const sessionsDir = safe.findSessionsDir(dbProj.path);
           try {
-            const files = await readdir(sessionsDir);
+            const files = await fsp.readdir(sessionsDir);
             for (const file of files) {
               if (!file.endsWith('.jsonl')) continue;
               const sessionId = basename(file, '.jsonl');
@@ -117,7 +117,7 @@ module.exports = function createWatchers({ db, safe, config, sessionUtils, sessi
     const settingsFile = join(CLAUDE_HOME, 'settings.json');
     let cfg = {};
     try {
-      cfg = JSON.parse(await readFile(settingsFile, 'utf-8'));
+      cfg = JSON.parse(await fsp.readFile(settingsFile, 'utf-8'));
     } catch (err) {
       if (err.code === 'ENOENT') {
         /* expected: settings file not yet created — will be initialized */
@@ -136,7 +136,7 @@ module.exports = function createWatchers({ db, safe, config, sessionUtils, sessi
     if (!existing || !existing.command || (existing.args && existing.args[0] !== expectedArgs[0])) {
       cfg.mcpServers.blueprint = { command: 'node', args: expectedArgs, env: { BLUEPRINT_PORT: String(PORT) } };
       try {
-        await writeFile(settingsFile, JSON.stringify(cfg, null, 2));
+        await fsp.writeFile(settingsFile, JSON.stringify(cfg, null, 2));
         logger.info('Registered Blueprint MCP server', { module: 'watchers' });
       } catch (err) {
         logger.error('Could not write MCP configuration', { module: 'watchers', op: 'registerMcpServer', err: err.message });
@@ -148,7 +148,7 @@ module.exports = function createWatchers({ db, safe, config, sessionUtils, sessi
     const configFile = join(CLAUDE_HOME, '.claude.json');
     let cfg = {};
     try {
-      cfg = JSON.parse(await readFile(configFile, 'utf-8'));
+      cfg = JSON.parse(await fsp.readFile(configFile, 'utf-8'));
     } catch (err) {
       if (err.code === 'ENOENT') {
         /* expected: first run — config file does not exist yet, will be created */
@@ -174,7 +174,7 @@ module.exports = function createWatchers({ db, safe, config, sessionUtils, sessi
     }
     if (changed) {
       try {
-        await writeFile(configFile, JSON.stringify(cfg, null, 2));
+        await fsp.writeFile(configFile, JSON.stringify(cfg, null, 2));
         logger.info('Trusted project directories', { module: 'watchers' });
       } catch (err) {
         logger.error('Failed to update trust projects', { module: 'watchers', op: 'trustProjectDirs', err: err.message });
@@ -185,12 +185,12 @@ module.exports = function createWatchers({ db, safe, config, sessionUtils, sessi
   async function ensureSettings() {
     const settingsFile = join(CLAUDE_HOME, 'settings.json');
     try {
-      await stat(settingsFile);
+      await fsp.stat(settingsFile);
     } catch (err) {
       if (err.code === 'ENOENT') {
         try {
-          await mkdir(CLAUDE_HOME, { recursive: true });
-          await writeFile(settingsFile, JSON.stringify({ skipDangerousModePermissionPrompt: true }, null, 2));
+          await fsp.mkdir(CLAUDE_HOME, { recursive: true });
+          await fsp.writeFile(settingsFile, JSON.stringify({ skipDangerousModePermissionPrompt: true }, null, 2));
         } catch (innerErr) {
           logger.error('Could not ensure base settings file', { module: 'watchers', op: 'ensureSettings', err: innerErr.message });
         }

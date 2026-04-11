@@ -1,6 +1,6 @@
 'use strict';
 
-const { readdir } = require('fs/promises');
+const fsp = require('fs/promises');
 const { basename } = require('path');
 
 module.exports = function createSessionResolver({ db, safe, tmuxName, tmuxExists, sleep, logger, config }) {
@@ -16,7 +16,7 @@ module.exports = function createSessionResolver({ db, safe, tmuxName, tmuxExists
       for (let i = 0; i < maxAttempts; i++) {
         await sleep(sleepMs);
         try {
-          const currentFiles = await readdir(sessionsDir);
+          const currentFiles = await fsp.readdir(sessionsDir);
           const newFiles = currentFiles.filter(f => f.endsWith('.jsonl') && !existingFiles.has(f));
           if (newFiles.length >= 1) {
             const realId = basename(newFiles[0], '.jsonl');
@@ -75,7 +75,7 @@ module.exports = function createSessionResolver({ db, safe, tmuxName, tmuxExists
       const sessionsDir = safe.findSessionsDir(dbProj.path);
       let files;
       try {
-        files = await readdir(sessionsDir);
+        files = await fsp.readdir(sessionsDir);
       } catch (err) {
         if (err.code === 'ENOENT') {
           /* expected: project has no sessions dir yet — clean up all stale entries */

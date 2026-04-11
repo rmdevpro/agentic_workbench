@@ -1,13 +1,20 @@
 'use strict';
 
-const { execFileSync, execFile } = require('child_process');
+const childProcess = require('child_process');
+const { execFileSync } = childProcess;
 const { writeFile: writeFileAsync, unlink: unlinkAsync } = require('fs/promises');
 const { resolve, join, sep } = require('path');
-const { promisify } = require('util');
 const os = require('os');
 const logger = require('./logger');
 
-const execFileAsync = promisify(execFile);
+function execFileAsync(cmd, args, options) {
+  return new Promise((resolvePromise, rejectPromise) => {
+    childProcess.execFile(cmd, args, options, (err, stdout, stderr) => {
+      if (err) rejectPromise(err);
+      else resolvePromise({ stdout, stderr });
+    });
+  });
+}
 
 const WORKSPACE = process.env.WORKSPACE || '/workspace';
 const CLAUDE_HOME = process.env.CLAUDE_HOME || '/home/hopper/.claude';
@@ -54,7 +61,7 @@ async function tmuxExecAsync(args, options = {}) {
 
 function claudeExecAsync(args, options = {}) {
   return new Promise((resolve, reject) => {
-    execFile('claude', [...args], {
+    childProcess.execFile('claude', [...args], {
       encoding: 'utf-8',
       timeout: options.timeout || 120000,
       cwd: options.cwd || WORKSPACE,
@@ -159,7 +166,7 @@ function grepSearchAsync(pattern, cwd, glob) {
     const args = ['-rn'];
     if (glob) args.push('--include=' + glob);
     args.push('--', pattern, '.');
-    execFile('grep', args, {
+    childProcess.execFile('grep', args, {
       cwd,
       encoding: 'utf-8',
       timeout: 10000,
@@ -173,7 +180,7 @@ function grepSearchAsync(pattern, cwd, glob) {
 
 function curlFetchAsync(url) {
   return new Promise((resolve) => {
-    execFile('curl', ['-sL', '--max-time', '10', url], {
+    childProcess.execFile('curl', ['-sL', '--max-time', '10', url], {
       encoding: 'utf-8',
       timeout: 15000,
       maxBuffer: 1024 * 1024,
