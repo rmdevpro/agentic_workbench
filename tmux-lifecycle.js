@@ -56,7 +56,7 @@ module.exports = function createTmuxLifecycle({ safe, MAX_TMUX_SESSIONS, TMUX_CL
         logger.info('Killed oldest tmux session (limit enforcement)', { module: 'tmux-lifecycle', tmuxSession: oldest.name });
       }
     } catch (err) {
-      if (err.message && err.message.includes('no server running')) {
+      if (err.message && (err.message.includes('no server running') || err.message.includes('error connecting to'))) {
         /* expected: no tmux server running means zero sessions — nothing to enforce */
         logger.debug('enforceTmuxLimit: tmux server not running', { module: 'tmux-lifecycle' });
       } else {
@@ -78,7 +78,7 @@ module.exports = function createTmuxLifecycle({ safe, MAX_TMUX_SESSIONS, TMUX_CL
       }
       if (cleaned > 0) logger.info('Cleaned up orphaned tmux sessions on startup', { module: 'tmux-lifecycle', count: cleaned });
     } catch (err) {
-      if (err.message && err.message.includes('no server running')) {
+      if (err.message && (err.message.includes('no server running') || err.message.includes('error connecting to'))) {
         /* expected: no tmux server means no orphans */
       } else {
         logger.warn('cleanOrphanedTmuxSessions error', { module: 'tmux-lifecycle', err: err.message });

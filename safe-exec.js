@@ -112,7 +112,7 @@ async function tmuxKill(sessionName) {
   try {
     await tmuxExecAsync(['kill-session', '-t', safeName]);
   } catch (err) {
-    if (err.message && (err.message.includes('session not found') || err.message.includes('no server running'))) {
+    if (err.message && (err.message.includes('session not found') || err.message.includes('no server running') || err.message.includes('error connecting to'))) {
       /* expected: session already gone or tmux server not running */
     } else {
       logger.debug('tmuxKill unexpected error', { module: 'safe-exec', tmuxSession: safeName, err: err.message });

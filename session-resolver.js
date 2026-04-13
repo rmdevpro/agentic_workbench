@@ -33,7 +33,7 @@ module.exports = function createSessionResolver({ db, safe, tmuxName, tmuxExists
             try {
               await safe.tmuxExecAsync(['rename-session', '-t', tmux, tmuxName(realId)]);
             } catch (renameErr) {
-              if (renameErr.message && renameErr.message.includes('no server running')) {
+              if (renameErr.message && (renameErr.message.includes('no server running') || renameErr.message.includes('error connecting to'))) {
                 /* expected: tmux server may have stopped */
               } else {
                 logger.debug('tmux rename skipped (session may be dead)', { module: 'session-resolver', err: renameErr.message });

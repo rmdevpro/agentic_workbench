@@ -124,7 +124,7 @@ function registerCoreRoutes(app, {
           const oldTmux = tmuxName(tmp.id);
           const newTmux = tmuxName(realId);
           try { await safe.tmuxExecAsync(['rename-session', '-t', oldTmux, newTmux]); } catch (renameErr) {
-            if (renameErr.message && renameErr.message.includes('no server running')) {
+            if (renameErr.message && (renameErr.message.includes('no server running') || renameErr.message.includes('error connecting to'))) {
               /* expected: tmux server not running */
             } else {
               logger.debug('tmux rename skipped during reconcile', { module: 'routes', err: renameErr.message });
