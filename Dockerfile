@@ -15,8 +15,8 @@ COPY . .
 
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
-  && mkdir -p /workspace /storage /home/hopper/.claude \
-  && chown -R hopper:hopper /app /workspace /storage /home/hopper
+  && mkdir -p /workspace /storage /data /home/hopper/.claude \
+  && chown -R hopper:hopper /app /workspace /storage /data /home/hopper
 
 USER hopper
 
