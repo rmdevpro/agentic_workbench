@@ -1,6 +1,6 @@
 'use strict';
 
-const { describe, it, before, after, beforeEach } = require('node:test');
+const { describe, it, before, after, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 let chromium;
 try {
@@ -10,6 +10,7 @@ try {
 }
 
 const { resetBaseline } = require('../helpers/reset-state');
+const { startCoverage, stopCoverage, writeCoverageReport } = require('../helpers/browser-coverage');
 const SS = require('path').join(__dirname, 'screenshots');
 
 describe('status bar (browser)', () => {
@@ -21,6 +22,7 @@ describe('status bar (browser)', () => {
     browser = await chromium.launch({ headless: true });
   });
   after(async () => {
+    await writeCoverageReport('status-bar');
     if (browser) await browser.close();
   });
   beforeEach(async () => {
@@ -31,29 +33,28 @@ describe('status bar (browser)', () => {
       if (m.type() === 'error') errors.push(m.text());
     });
     page.on('pageerror', (e) => errors.push(e.message));
+    await startCoverage(page);
     await resetBaseline(page);
   });
+  afterEach(async () => {
+    await stopCoverage(page);
+  });
 
-  it('BRW-19: status bar displays meaningful content after data load', async () => {
+  it('BRW-19: status bar exists and has correct structural elements', async () => {
     assert.ok((await page.locator('#status-bar').count()) > 0, 'Status bar element must exist');
-    // Behavioral: the status bar (#status-bar.status-bar) is only shown (.active class)
-    // and populated when a session tab is open. On initial page load with no open session
-    // it is intentionally hidden. Verify the element exists and its structure is correct —
-    // content will be present once a session is selected.
-    await page.waitForTimeout(1500); // Allow initial state load
-    const statusBarExists = (await page.locator('#status-bar').count()) > 0;
-    assert.ok(statusBarExists, 'Status bar element must exist in the DOM after page load');
-    // If a session happens to be open (e.g. from prior state), also verify it has content
-    const isActive = await page
-      .locator('#status-bar')
-      .evaluate((el) => el.classList.contains('active'));
-    if (isActive) {
-      const statusBarText = await page.locator('#status-bar').textContent();
-      assert.ok(
-        statusBarText.trim().length > 0,
-        'Active status bar must contain text content (model, token usage, or status indicator)',
-      );
-    }
+    await page.waitForTimeout(1500);
+    // Hard assertion: the status bar DOM must contain the expected child elements
+    // regardless of whether a session is active. The structural elements must always exist.
+    const hasModelSpan =
+      (await page.locator('#status-bar .status-model, #status-model').count()) > 0;
+    const hasModeSpan = (await page.locator('#status-bar .status-mode, #status-mode').count()) > 0;
+    const hasContextBar =
+      (await page.locator('#status-bar .context-bar, #context-bar, .status-context').count()) > 0;
+    // At least one structural element should exist (model, mode, or context indicator)
+    assert.ok(
+      hasModelSpan || hasModeSpan || hasContextBar,
+      'Status bar must contain structural child elements (model, mode, or context bar)',
+    );
     await page.screenshot({ path: `${SS}/status-bar--structure.png` });
     assert.equal(errors.length, 0, errors.join(', '));
   });
@@ -85,7 +86,7 @@ describe('status bar (browser)', () => {
     assert.equal(errors.length, 0, errors.join(', '));
   });
 
-  it('UI-53: checkAuth function exists and is callable', async () => {
+  it('UI-53: checkAuth calls the auth API endpoint', async () => {
     const exists = await page.evaluate(() => typeof checkAuth === 'function');
     assert.ok(exists, 'checkAuth must be defined as a function');
     // Behavioral: verify checkAuth actually calls the auth API

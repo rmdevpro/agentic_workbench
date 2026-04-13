@@ -3,66 +3,191 @@
 /**
  * AUTH-ANSI: Auth URL extraction verification.
  *
- * The auth URL extraction logic lives in a <script> block in public/index.html
- * (checkForAuthIssue). It cannot be imported as a Node module.
+ * This file verifies that the checkForAuthIssue function in public/index.html
+ * works correctly by extracting the REAL function source and executing it via
+ * the vm module — not reimplementing the algorithm or string-matching.
  *
- * Per WPR-105 "Imports real code" criterion: we MUST NOT reimplement the algorithm
- * locally in tests. The previous version of this file copied the regex, indexOf,
- * and cleanup logic into a local extractAuthUrlFromBuffer() — that function would
- * pass even if the real application code were deleted or broken.
- *
- * The ONLY valid mock-layer tests for this code are:
- *   1. Verify the application source contains the expected constants and patterns
- *      (a guard that detects if the real code is removed or restructured).
- *   2. Verify the HTML file is parseable and contains the checkForAuthIssue function.
- *
- * Behavioral verification of the actual extraction algorithm is done exclusively
- * in the browser layer (BRW-28 in auth-modal.spec.js), which executes the real
- * checkForAuthIssue() function in its native browser context.
+ * The browser-layer test (BRW-28 in auth-modal.spec.js) exercises the function
+ * in its native browser context. This mock-layer test verifies the algorithm
+ * itself is correct with controlled inputs in isolation.
  */
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 
 const indexHtmlPath = path.join(__dirname, '../../public/index.html');
 const indexHtml = fs.readFileSync(indexHtmlPath, 'utf-8');
 
-test('AUTH-ANSI: application defines checkForAuthIssue function', () => {
+/**
+ * Extract checkForAuthIssue and its dependencies from index.html,
+ * then create an isolated executable sandbox.
+ */
+function buildSandbox() {
+  // Extract the OAUTH_URL_START constant
+  const oauthConstMatch = indexHtml.match(/const\s+OAUTH_URL_START\s*=\s*(['"])([^'"]+)\1/);
+  assert.ok(oauthConstMatch, 'index.html must define OAUTH_URL_START constant');
+  const oauthUrlStart = oauthConstMatch[2];
+
+  // Extract the full checkForAuthIssue function body from the source.
+  // The function starts at 'function checkForAuthIssue' and ends at the next
+  // function definition at the same indentation level (4 spaces).
+  const funcStartIdx = indexHtml.indexOf('function checkForAuthIssue');
+  assert.ok(funcStartIdx !== -1, 'index.html must contain checkForAuthIssue function');
+
+  // Find the function end — look for the closing brace at the original indentation
+  let braceDepth = 0;
+  let funcEndIdx = -1;
+  let inFunc = false;
+  for (let i = funcStartIdx; i < indexHtml.length; i++) {
+    if (indexHtml[i] === '{') {
+      braceDepth++;
+      inFunc = true;
+    } else if (indexHtml[i] === '}') {
+      braceDepth--;
+      if (inFunc && braceDepth === 0) {
+        funcEndIdx = i + 1;
+        break;
+      }
+    }
+  }
+  assert.ok(funcEndIdx > funcStartIdx, 'Must find closing brace of checkForAuthIssue');
+  const funcSource = indexHtml.substring(funcStartIdx, funcEndIdx);
+
+  // Build a minimal sandbox with the exact dependencies the function uses.
+  // Use 'var' so declarations become properties on the sandbox object,
+  // accessible from the host. 'const'/'let' are block-scoped in vm contexts.
+  const capturedModals = [];
+  const code = `
+    var OAUTH_URL_START = '${oauthUrlStart}';
+    var authModalVisible = false;
+    var ptyOutputBuffer = new Map();
+    function showAuthModal(url, tabId) {
+      authModalVisible = true;
+      _capturedModals.push(url);
+    }
+    function _resetAuthState() {
+      authModalVisible = false;
+      ptyOutputBuffer.clear();
+    }
+    ${funcSource}
+  `;
+
+  const sandbox = {
+    Map: global.Map,
+    _capturedModals: capturedModals,
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(code, sandbox, { timeout: 5000 });
+
+  return sandbox;
+}
+
+let sandbox;
+
+test('AUTH-ANSI: extract and compile checkForAuthIssue from index.html', () => {
+  sandbox = buildSandbox();
   assert.ok(
-    indexHtml.includes('function checkForAuthIssue'),
-    'public/index.html must define checkForAuthIssue function',
+    typeof sandbox.checkForAuthIssue === 'function',
+    'checkForAuthIssue must be defined as a function in the sandbox',
+  );
+  assert.ok(sandbox.ptyOutputBuffer instanceof Map, 'ptyOutputBuffer must be a Map');
+});
+
+test('AUTH-ANSI: checkForAuthIssue detects OAuth URL in clean input', () => {
+  assert.ok(sandbox, 'Sandbox must be initialized');
+  sandbox._capturedModals.length = 0;
+  sandbox._resetAuthState();
+
+  // The function takes (tabId, data) — it appends data to the buffer then scans
+  sandbox.checkForAuthIssue(
+    'test_clean',
+    'Some output https://claude.com/cai/oauth/authorize?code=abc123 Paste code here',
+  );
+
+  assert.ok(
+    sandbox._capturedModals.length > 0,
+    'checkForAuthIssue must call showAuthModal when OAuth URL is present',
+  );
+  assert.ok(
+    sandbox._capturedModals[0].startsWith('https://claude.com/cai/oauth/authorize?'),
+    `Extracted URL must start with OAuth prefix, got: ${sandbox._capturedModals[0]}`,
+  );
+  assert.ok(
+    sandbox._capturedModals[0].includes('code=abc123'),
+    `URL must preserve query parameters, got: ${sandbox._capturedModals[0]}`,
   );
 });
 
-test('AUTH-ANSI: application uses OAUTH_URL_START constant for auth detection', () => {
+test('AUTH-ANSI: checkForAuthIssue strips ANSI codes before URL extraction', () => {
+  assert.ok(sandbox, 'Sandbox must be initialized');
+  sandbox._capturedModals.length = 0;
+  sandbox._resetAuthState();
+
+  sandbox.checkForAuthIssue(
+    'test_ansi',
+    '\x1b[31mhttps://claude.com/cai/oauth/authorize?code=xyz789\x1b[0m more text Paste code here',
+  );
+
   assert.ok(
-    indexHtml.includes("const OAUTH_URL_START = 'https://claude.com/cai/oauth/authorize?'"),
-    'Application must define OAUTH_URL_START constant',
+    sandbox._capturedModals.length > 0,
+    'checkForAuthIssue must detect URL even when wrapped in ANSI codes',
   );
   assert.ok(
-    indexHtml.includes('.indexOf(OAUTH_URL_START)'),
-    'Application must use OAUTH_URL_START in its auth detection logic',
+    sandbox._capturedModals[0].includes('code=xyz789'),
+    `Extracted URL must preserve query params after ANSI stripping, got: ${sandbox._capturedModals[0]}`,
+  );
+  assert.ok(
+    !sandbox._capturedModals[0].includes('\x1b'),
+    'Extracted URL must not contain ANSI escape codes',
   );
 });
 
-test('AUTH-ANSI: application includes ANSI stripping regex', () => {
-  assert.ok(
-    indexHtml.includes(String.raw`/\x1b\[[0-9;]*[a-zA-Z]/g`),
-    'Application must use ANSI stripping regex for terminal output cleaning',
+test('AUTH-ANSI: checkForAuthIssue does not trigger on non-OAuth URLs', () => {
+  assert.ok(sandbox, 'Sandbox must be initialized');
+  sandbox._capturedModals.length = 0;
+  sandbox._resetAuthState();
+
+  sandbox.checkForAuthIssue('test_no_oauth', 'Visit https://example.com for more info');
+
+  assert.equal(
+    sandbox._capturedModals.length,
+    0,
+    'checkForAuthIssue must NOT trigger showAuthModal for non-OAuth URLs',
   );
 });
 
-test('AUTH-ANSI: application searches for Paste marker after URL', () => {
-  assert.ok(
-    indexHtml.includes(".indexOf('Paste'"),
-    'Application must look for Paste marker to delimit the auth URL',
+test('AUTH-ANSI: checkForAuthIssue handles empty data gracefully', () => {
+  assert.ok(sandbox, 'Sandbox must be initialized');
+  sandbox._capturedModals.length = 0;
+  sandbox._resetAuthState();
+
+  // Call with empty data — should not throw
+  assert.doesNotThrow(
+    () => sandbox.checkForAuthIssue('test_empty', ''),
+    'checkForAuthIssue must not throw for empty data',
   );
+  assert.equal(sandbox._capturedModals.length, 0, 'Must not trigger showAuthModal for empty data');
 });
 
-test('AUTH-ANSI: checkForAuthIssue calls showAuthModal on detection', () => {
-  assert.ok(
-    indexHtml.includes('showAuthModal'),
-    'checkForAuthIssue must trigger showAuthModal when auth URL is detected',
+test('AUTH-ANSI: authModalVisible flag prevents duplicate modal triggers', () => {
+  assert.ok(sandbox, 'Sandbox must be initialized');
+  sandbox._capturedModals.length = 0;
+  sandbox._resetAuthState();
+
+  const testData = 'https://claude.com/cai/oauth/authorize?code=first Paste code here';
+
+  // First call should trigger
+  sandbox.checkForAuthIssue('test_dedup', testData);
+  assert.equal(sandbox._capturedModals.length, 1, 'First call must trigger showAuthModal');
+
+  // Second call should be suppressed by authModalVisible flag
+  sandbox.ptyOutputBuffer.clear();
+  sandbox.checkForAuthIssue('test_dedup2', testData);
+  assert.equal(
+    sandbox._capturedModals.length,
+    1,
+    'Second call must be suppressed by authModalVisible flag — no duplicate modals',
   );
 });

@@ -1,6 +1,6 @@
 'use strict';
 
-const { describe, it, before, after, beforeEach } = require('node:test');
+const { describe, it, before, after, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 let chromium;
 try {
@@ -10,6 +10,7 @@ try {
 }
 
 const { resetBaseline } = require('../helpers/reset-state');
+const { startCoverage, stopCoverage, writeCoverageReport } = require('../helpers/browser-coverage');
 const SS = require('path').join(__dirname, 'screenshots');
 
 describe('file browser (browser)', () => {
@@ -21,6 +22,7 @@ describe('file browser (browser)', () => {
     browser = await chromium.launch({ headless: true });
   });
   after(async () => {
+    await writeCoverageReport('file-browser');
     if (browser) await browser.close();
   });
   beforeEach(async () => {
@@ -31,7 +33,11 @@ describe('file browser (browser)', () => {
       if (m.type() === 'error') errors.push(m.text());
     });
     page.on('pageerror', (e) => errors.push(e.message));
+    await startCoverage(page);
     await resetBaseline(page);
+  });
+  afterEach(async () => {
+    await stopCoverage(page);
   });
 
   it('BRW-09: file browser panel loads and displays file tree entries', async () => {
@@ -47,9 +53,7 @@ describe('file browser (browser)', () => {
       await page.locator('#file-browser-tree').isVisible(),
       'File tree container must be visible',
     );
-    // Gray-box: verify the file tree API is responsive before checking DOM population.
-    // The jqueryFileTree plugin populates the container via /api/jqueryfiletree,
-    // but only fires when a session with a workspace is active. Verify the API works.
+    // Gray-box: verify the file tree API is responsive and returns content.
     const apiResponse = await page.evaluate(async () => {
       try {
         const r = await fetch('/api/jqueryfiletree', {
@@ -58,15 +62,27 @@ describe('file browser (browser)', () => {
           body: 'dir=/',
         });
         const text = await r.text();
-        return { ok: r.ok, status: r.status, hasContent: text.length > 0 };
+        return {
+          ok: r.ok,
+          status: r.status,
+          hasContent: text.length > 0,
+          contentLength: text.length,
+        };
       } catch (e) {
         return { ok: false, error: e.message };
       }
     });
     assert.ok(apiResponse.ok, 'File tree API /api/jqueryfiletree must respond successfully');
-    // Behavioral: the file tree container exists and the API works.
-    // DOM population requires an active session with a workspace — skip DOM count assertion
-    // when no session is open, as the tree only loads when a project is selected.
+    // Hard assertion: the API must return actual file listing content, not an empty response.
+    // Previously this test skipped DOM population assertion entirely.
+    assert.ok(
+      apiResponse.hasContent,
+      'File tree API must return non-empty directory listing content',
+    );
+    assert.ok(
+      apiResponse.contentLength > 10,
+      `File tree API response must contain meaningful HTML listing (got ${apiResponse.contentLength} bytes)`,
+    );
     await page.screenshot({ path: `${SS}/files--panel.png` });
     assert.equal(errors.length, 0, errors.join(', '));
   });

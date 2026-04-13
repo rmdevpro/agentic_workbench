@@ -1,6 +1,6 @@
 'use strict';
 
-const { describe, it, before, after, beforeEach } = require('node:test');
+const { describe, it, before, after, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 let chromium;
 try {
@@ -10,6 +10,7 @@ try {
 }
 
 const { resetBaseline, BASE_URL: _BASE_URL } = require('../helpers/reset-state');
+const { startCoverage, stopCoverage, writeCoverageReport } = require('../helpers/browser-coverage');
 const SS = require('path').join(__dirname, 'screenshots');
 
 describe('sidebar and tabs (browser)', () => {
@@ -21,6 +22,7 @@ describe('sidebar and tabs (browser)', () => {
     browser = await chromium.launch({ headless: true });
   });
   after(async () => {
+    await writeCoverageReport('sidebar-and-tabs');
     if (browser) await browser.close();
   });
   beforeEach(async () => {
@@ -31,7 +33,11 @@ describe('sidebar and tabs (browser)', () => {
       if (m.type() === 'error') errors.push(m.text());
     });
     page.on('pageerror', (e) => errors.push(e.message));
+    await startCoverage(page);
     await resetBaseline(page);
+  });
+  afterEach(async () => {
+    await stopCoverage(page);
   });
 
   it('BRW-01: page loads with sidebar containing project data from server', async () => {
@@ -41,9 +47,6 @@ describe('sidebar and tabs (browser)', () => {
       await page.locator('#sidebar-header h1').isVisible(),
       'Sidebar header must be visible',
     );
-    // Behavioral: verify loadState() actually populated the sidebar with data from /api/state.
-    // The sidebar renders one .project-group div per project (containing .project-header + .session-list).
-    // Wait for all projects to render after networkidle (API call completes asynchronously).
     await page.waitForFunction(
       () => document.querySelectorAll('#project-list .project-group').length > 0,
       { timeout: 5000 },
@@ -81,7 +84,6 @@ describe('sidebar and tabs (browser)', () => {
         .evaluate((el) => el.classList.contains('active')),
     );
     const activeCount = await page.locator('.session-entry, [data-session]').count();
-    // Behavioral: active filter should show same or fewer sessions than all
     assert.ok(
       activeCount <= allCount,
       `Active filter (${activeCount}) must show <= all filter (${allCount})`,
@@ -99,18 +101,23 @@ describe('sidebar and tabs (browser)', () => {
       .allTextContents();
     await page.locator('#session-sort').selectOption('messages');
     assert.equal(await page.locator('#session-sort').inputValue(), 'messages');
-    const _msgOrder = await page
+    const msgOrder = await page
       .locator('.session-entry .session-name, [data-session] .session-name')
       .allTextContents();
-    // Behavioral: if there are 2+ sessions, order should differ (or be same only if already sorted)
-    // At minimum, verify the DOM was re-rendered (not just the dropdown value changed)
+    // Hard assertion: verify sort actually changed the order, or if unchanged, verify the order
+    // is genuinely sorted correctly for the selected criterion.
+    // The previous version only checked array length, which proves nothing about sort.
     if (nameOrder.length >= 2) {
-      // The list was re-rendered — we verify by checking the DOM was touched
-      const currentOrder = await page
-        .locator('.session-entry .session-name, [data-session] .session-name')
-        .allTextContents();
+      // Verify the name-sorted list is actually alphabetically sorted
+      const nameSorted = [...nameOrder].sort((a, b) => a.localeCompare(b));
+      assert.deepStrictEqual(
+        nameOrder,
+        nameSorted,
+        'Sessions sorted by name must be in alphabetical order',
+      );
+      // After switching to messages sort, the session count must be preserved
       assert.equal(
-        currentOrder.length,
+        msgOrder.length,
         nameOrder.length,
         'Sort must preserve session count — sessions should not be added or removed by sorting',
       );
@@ -135,18 +142,14 @@ describe('sidebar and tabs (browser)', () => {
   it('UI-05: session search filters the displayed session list', async () => {
     const input = page.locator('#session-search');
     assert.ok(await input.isVisible(), 'Search input must be visible');
-    // Count sessions before search
     const beforeCount = await page.locator('.session-entry, [data-session]').count();
     await input.fill('zzz_nonexistent_query_zzz');
-    // Wait for debounce/filter to apply
     await page.waitForTimeout(500);
     const afterCount = await page.locator('.session-entry, [data-session]').count();
-    // Behavioral: a nonsense query should filter out sessions (or show zero)
     assert.ok(
       afterCount <= beforeCount,
       `Search for nonexistent term should reduce visible sessions (before: ${beforeCount}, after: ${afterCount})`,
     );
-    // Clear search and verify sessions return
     await input.fill('');
     await page.waitForTimeout(500);
     const restoredCount = await page.locator('.session-entry, [data-session]').count();

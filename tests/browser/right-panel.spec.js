@@ -1,6 +1,6 @@
 'use strict';
 
-const { describe, it, before, after, beforeEach } = require('node:test');
+const { describe, it, before, after, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 let chromium;
 try {
@@ -10,6 +10,7 @@ try {
 }
 
 const { resetBaseline } = require('../helpers/reset-state');
+const { startCoverage, stopCoverage, writeCoverageReport } = require('../helpers/browser-coverage');
 const SS = require('path').join(__dirname, 'screenshots');
 
 describe('right panel (browser)', () => {
@@ -21,6 +22,7 @@ describe('right panel (browser)', () => {
     browser = await chromium.launch({ headless: true });
   });
   after(async () => {
+    await writeCoverageReport('right-panel');
     if (browser) await browser.close();
   });
   beforeEach(async () => {
@@ -31,7 +33,11 @@ describe('right panel (browser)', () => {
       if (m.type() === 'error') errors.push(m.text());
     });
     page.on('pageerror', (e) => errors.push(e.message));
+    await startCoverage(page);
     await resetBaseline(page);
+  });
+  afterEach(async () => {
+    await stopCoverage(page);
   });
 
   it('UI-21: panel toggle show/hide adjusts layout', async () => {
@@ -40,20 +46,17 @@ describe('right panel (browser)', () => {
       !(await panel.evaluate((el) => el.classList.contains('open'))),
       'Panel should be closed initially',
     );
-    // Record main area width before panel opens
     const mainWidthBefore = await page.locator('#main').evaluate((el) => el.offsetWidth);
     await page.click('#panel-toggle');
     assert.ok(
       await panel.evaluate((el) => el.classList.contains('open')),
       'Panel must open on toggle click',
     );
-    // Behavioral: opening the panel should reduce main area width (layout adjusts)
     const mainWidthAfter = await page.locator('#main').evaluate((el) => el.offsetWidth);
     assert.ok(
       mainWidthAfter <= mainWidthBefore,
       `Main area width should decrease when panel opens (before: ${mainWidthBefore}, after: ${mainWidthAfter})`,
     );
-    // Verify panel has non-zero dimensions
     const panelWidth = await panel.evaluate((el) => el.offsetWidth);
     assert.ok(panelWidth > 0, 'Open panel must have visible width');
     await page.click('#panel-toggle');
@@ -77,7 +80,6 @@ describe('right panel (browser)', () => {
       !(await page.locator('#panel-tasks').isVisible()),
       'Tasks panel must be hidden when notes is active',
     );
-    // Behavioral: notes section should contain a textarea or editable area
     const notesHasInput = await page
       .locator('#panel-notes textarea, #panel-notes [contenteditable]')
       .count();
@@ -96,7 +98,6 @@ describe('right panel (browser)', () => {
       !(await page.locator('#panel-notes').isVisible()),
       'Notes panel must be hidden when tasks is active',
     );
-    // Behavioral: tasks section should contain task list or add-task UI
     const tasksHasUI = await page
       .locator(
         '#panel-tasks .task-item, #panel-tasks input, #panel-tasks button, #panel-tasks .task-list',
@@ -113,13 +114,16 @@ describe('right panel (browser)', () => {
       await page.locator('#panel-messages').isVisible(),
       'Messages panel must be visible after tab click',
     );
-    // Behavioral: messages section should contain message list or compose area
+    // Hard assertion: messages panel must have UI elements (not >= 0 which always passes)
     const msgsHasUI = await page
       .locator(
-        '#panel-messages .message-item, #panel-messages input, #panel-messages textarea, #panel-messages .message-list',
+        '#panel-messages .message-item, #panel-messages input, #panel-messages textarea, #panel-messages .message-list, #panel-messages button',
       )
       .count();
-    assert.ok(msgsHasUI >= 0, 'Messages panel should contain messaging UI elements');
+    assert.ok(
+      msgsHasUI > 0,
+      'Messages panel must contain messaging UI elements (input, list, or button)',
+    );
 
     await page.screenshot({ path: `${SS}/panel--tabs.png` });
     assert.equal(errors.length, 0, errors.join(', '));

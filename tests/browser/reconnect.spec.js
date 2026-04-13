@@ -1,6 +1,6 @@
 'use strict';
 
-const { describe, it, before, after, beforeEach } = require('node:test');
+const { describe, it, before, after, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 let chromium;
 try {
@@ -10,6 +10,7 @@ try {
 }
 
 const { resetBaseline } = require('../helpers/reset-state');
+const { startCoverage, stopCoverage, writeCoverageReport } = require('../helpers/browser-coverage');
 const SS = require('path').join(__dirname, 'screenshots');
 
 describe('reconnect (browser)', () => {
@@ -21,6 +22,7 @@ describe('reconnect (browser)', () => {
     browser = await chromium.launch({ headless: true });
   });
   after(async () => {
+    await writeCoverageReport('reconnect');
     if (browser) await browser.close();
   });
   beforeEach(async () => {
@@ -31,37 +33,36 @@ describe('reconnect (browser)', () => {
       if (m.type() === 'error') errors.push(m.text());
     });
     page.on('pageerror', (e) => errors.push(e.message));
+    await startCoverage(page);
     await resetBaseline(page);
   });
+  afterEach(async () => {
+    await stopCoverage(page);
+  });
 
-  it('UI-55: reconnect logic is wired up with correct constants and handler', async () => {
+  it('UI-55: reconnect logic has correct constants and connectTab function', async () => {
     assert.equal(await page.evaluate(() => MAX_RECONNECT_DELAY), 30000);
     assert.equal(await page.evaluate(() => HEARTBEAT_MS), 30000);
-    // Behavioral: verify the reconnect/connect function exists and is callable.
-    // The actual function in public/index.html is connectTab (opens a tab's WS connection
-    // and schedules exponential-backoff reconnect on close).
-    const hasReconnect = await page.evaluate(
-      () =>
-        typeof connectTab === 'function' ||
-        typeof connectWebSocket === 'function' ||
-        typeof setupWebSocket === 'function' ||
-        typeof reconnect === 'function',
-    );
+    // Hard assertion: connectTab must specifically exist — it is the real reconnect function.
+    // The previous version used a disjunction of 4 function names which was too permissive.
+    const hasConnectTab = await page.evaluate(() => typeof connectTab === 'function');
     assert.ok(
-      hasReconnect,
-      'A WebSocket connection/reconnect function must be defined (connectTab, connectWebSocket, setupWebSocket, or reconnect)',
+      hasConnectTab,
+      'connectTab function must be defined — this is the WebSocket connection/reconnect handler',
+    );
+    // Verify connectTab has reconnect logic by checking it references the backoff constants
+    const fnSource = await page.evaluate(() => connectTab.toString());
+    assert.ok(
+      fnSource.includes('MAX_RECONNECT_DELAY') ||
+        fnSource.includes('reconnect') ||
+        fnSource.includes('onclose'),
+      'connectTab must contain reconnect/backoff logic (references MAX_RECONNECT_DELAY, reconnect, or onclose)',
     );
     await page.screenshot({ path: `${SS}/reconnect--constants.png` });
     assert.equal(errors.length, 0, errors.join(', '));
   });
 
   it('BRW-24: resize triggers terminal fit without crash or layout break', async () => {
-    // Get initial terminal dimensions
-    const _initialState = await page.evaluate(() => ({
-      width: window.innerWidth,
-      height: window.innerHeight,
-      terminalExists: !!document.querySelector('.xterm, #terminal-container, .terminal-wrapper'),
-    }));
     await page.setViewportSize({ width: 800, height: 600 });
     await page.waitForTimeout(300);
     await page.setViewportSize({ width: 1200, height: 800 });
@@ -70,7 +71,6 @@ describe('reconnect (browser)', () => {
     const afterState = await page.evaluate(() => ({
       width: window.innerWidth,
       height: window.innerHeight,
-      // Check no overlapping or broken layout indicators
       sidebarVisible: document.getElementById('sidebar')?.offsetWidth > 0,
       mainVisible: document.getElementById('main')?.offsetWidth > 0,
     }));

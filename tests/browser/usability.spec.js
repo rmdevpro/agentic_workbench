@@ -1,6 +1,6 @@
 'use strict';
 
-const { describe, it, before, after, beforeEach } = require('node:test');
+const { describe, it, before, after, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 let chromium;
 try {
@@ -10,6 +10,7 @@ try {
 }
 
 const { resetBaseline } = require('../helpers/reset-state');
+const { startCoverage, stopCoverage, writeCoverageReport } = require('../helpers/browser-coverage');
 const SS = require('path').join(__dirname, 'screenshots');
 
 describe('usability (browser)', () => {
@@ -21,6 +22,7 @@ describe('usability (browser)', () => {
     browser = await chromium.launch({ headless: true });
   });
   after(async () => {
+    await writeCoverageReport('usability');
     if (browser) await browser.close();
   });
   beforeEach(async () => {
@@ -31,20 +33,22 @@ describe('usability (browser)', () => {
       if (m.type() === 'error') errors.push(m.text());
     });
     page.on('pageerror', (e) => errors.push(e.message));
+    await startCoverage(page);
     await resetBaseline(page);
+  });
+  afterEach(async () => {
+    await stopCoverage(page);
   });
 
   it('USR-01: full page renders with functional layout and loaded data', async () => {
     assert.ok(await page.locator('#sidebar').isVisible(), 'Sidebar must be visible');
     assert.ok(await page.locator('#main').isVisible(), 'Main content area must be visible');
     assert.ok(await page.locator('#tab-bar').isVisible(), 'Tab bar must be visible');
-    // Behavioral: verify the page loaded real data from the server, not just empty containers
     const projectListContent = await page.locator('#project-list').innerHTML();
     assert.ok(
       projectListContent.length > 0,
       'Project list must contain rendered content (not just an empty container)',
     );
-    // Verify sidebar and main have non-zero layout dimensions (no collapsed layout)
     const sidebarWidth = await page.locator('#sidebar').evaluate((el) => el.offsetWidth);
     const mainWidth = await page.locator('#main').evaluate((el) => el.offsetWidth);
     assert.ok(sidebarWidth > 50, `Sidebar must have reasonable width, got: ${sidebarWidth}`);

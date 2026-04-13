@@ -83,6 +83,7 @@ module.exports = [
         connectWebSocket: 'readonly',
         setupWebSocket: 'readonly',
         reconnect: 'readonly',
+        connectTab: 'readonly',
       },
     },
   },

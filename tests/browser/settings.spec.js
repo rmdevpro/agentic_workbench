@@ -1,6 +1,6 @@
 'use strict';
 
-const { describe, it, before, after, beforeEach } = require('node:test');
+const { describe, it, before, after, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 let chromium;
 try {
@@ -10,6 +10,7 @@ try {
 }
 
 const { resetBaseline } = require('../helpers/reset-state');
+const { startCoverage, stopCoverage, writeCoverageReport } = require('../helpers/browser-coverage');
 const SS = require('path').join(__dirname, 'screenshots');
 
 describe('settings (browser)', () => {
@@ -21,6 +22,7 @@ describe('settings (browser)', () => {
     browser = await chromium.launch({ headless: true });
   });
   after(async () => {
+    await writeCoverageReport('settings');
     if (browser) await browser.close();
   });
   beforeEach(async () => {
@@ -31,25 +33,25 @@ describe('settings (browser)', () => {
       if (m.type() === 'error') errors.push(m.text());
     });
     page.on('pageerror', (e) => errors.push(e.message));
+    await startCoverage(page);
     await resetBaseline(page);
+  });
+  afterEach(async () => {
+    await stopCoverage(page);
   });
 
   it('BRW-13: theme change applies CSS variables and persists to server', async () => {
     await page.click('#sidebar-footer button');
     await page.locator('#setting-theme').selectOption('light');
-    // Wait for saveSetting to complete its async /api/settings POST
     await page.waitForTimeout(500);
     const bg = await page.evaluate(() =>
       getComputedStyle(document.documentElement).getPropertyValue('--bg-primary').trim(),
     );
     assert.ok(bg.includes('#f5f5f5') || bg.includes('245'), `Expected light bg, got: ${bg}`);
-    // Gray-box: verify the setting was persisted to the server via API.
-    // The server stores values as JSON-encoded strings (e.g. '"light"') or bare strings.
     const serverSettings = await page.evaluate(async () => {
       const r = await fetch('/api/settings');
       return r.json();
     });
-    // Accept both JSON-encoded and bare string storage formats
     const rawTheme = serverSettings.theme || '';
     let storedTheme;
     try {
@@ -61,7 +63,6 @@ describe('settings (browser)', () => {
       storedTheme === 'light',
       `Theme setting must be persisted to server as 'light', got: ${serverSettings.theme}`,
     );
-    // Switch back to dark
     await page.locator('#setting-theme').selectOption('dark');
     await page.screenshot({ path: `${SS}/settings--theme.png` });
     assert.equal(errors.length, 0, errors.join(', '));
@@ -85,7 +86,6 @@ describe('settings (browser)', () => {
     await page.locator('#setting-theme').selectOption('blueprint-dark');
     await page.waitForTimeout(600);
     await page.click('.settings-close');
-    // Gray-box: verify server received the setting BEFORE reload
     const preReloadSettings = await page.evaluate(async () => {
       const r = await fetch('/api/settings');
       return r.json();
