@@ -19,7 +19,7 @@ function dockerExec(cmd) {
 async function resetBaseline(page = null) {
   try {
     execSync(
-      `docker exec ${CONTAINER} sqlite3 /storage/blueprint.db "DELETE FROM sessions WHERE id LIKE 'test_%' OR id LIKE 'new_%'; DELETE FROM projects WHERE name LIKE '%_proj' OR name LIKE 'test_%'; DELETE FROM tasks; DELETE FROM messages;"`,
+      `docker exec ${CONTAINER} sqlite3 /storage/blueprint.db "DELETE FROM sessions WHERE id LIKE 'test_%' OR id LIKE 'new_%' OR project_id IN (SELECT id FROM projects WHERE name LIKE '%_proj' OR name LIKE 'test_%'); DELETE FROM projects WHERE name LIKE '%_proj' OR name LIKE 'test_%'; DELETE FROM tasks; DELETE FROM messages;"`,
       { stdio: 'ignore', timeout: 10000 },
     );
     execSync(
