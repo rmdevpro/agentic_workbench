@@ -37,14 +37,20 @@ describe('reconnect (browser)', () => {
   it('UI-55: reconnect logic is wired up with correct constants and handler', async () => {
     assert.equal(await page.evaluate(() => MAX_RECONNECT_DELAY), 30000);
     assert.equal(await page.evaluate(() => HEARTBEAT_MS), 30000);
-    // Behavioral: verify the reconnect function exists and is callable
+    // Behavioral: verify the reconnect/connect function exists and is callable.
+    // The actual function in public/index.html is connectTab (opens a tab's WS connection
+    // and schedules exponential-backoff reconnect on close).
     const hasReconnect = await page.evaluate(
       () =>
+        typeof connectTab === 'function' ||
         typeof connectWebSocket === 'function' ||
         typeof setupWebSocket === 'function' ||
         typeof reconnect === 'function',
     );
-    assert.ok(hasReconnect, 'A WebSocket connection/reconnect function must be defined');
+    assert.ok(
+      hasReconnect,
+      'A WebSocket connection/reconnect function must be defined (connectTab, connectWebSocket, setupWebSocket, or reconnect)',
+    );
     await page.screenshot({ path: `${SS}/reconnect--constants.png` });
     assert.equal(errors.length, 0, errors.join(', '));
   });

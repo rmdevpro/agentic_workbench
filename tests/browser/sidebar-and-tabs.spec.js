@@ -41,10 +41,14 @@ describe('sidebar and tabs (browser)', () => {
       await page.locator('#sidebar-header h1').isVisible(),
       'Sidebar header must be visible',
     );
-    // Behavioral: verify loadState() actually populated the sidebar with data from /api/state
-    const projectCount = await page
-      .locator('#project-list .project-entry, #project-list [data-project]')
-      .count();
+    // Behavioral: verify loadState() actually populated the sidebar with data from /api/state.
+    // The sidebar renders one .project-group div per project (containing .project-header + .session-list).
+    // Wait for all projects to render after networkidle (API call completes asynchronously).
+    await page.waitForFunction(
+      () => document.querySelectorAll('#project-list .project-group').length > 0,
+      { timeout: 5000 },
+    );
+    const projectCount = await page.locator('#project-list .project-group').count();
     // Gray-box: fetch /api/state directly and compare
     const apiState = await page.evaluate(async () => {
       const r = await fetch('/api/state');

@@ -37,19 +37,28 @@ describe('settings (browser)', () => {
   it('BRW-13: theme change applies CSS variables and persists to server', async () => {
     await page.click('#sidebar-footer button');
     await page.locator('#setting-theme').selectOption('light');
+    // Wait for saveSetting to complete its async /api/settings POST
+    await page.waitForTimeout(500);
     const bg = await page.evaluate(() =>
       getComputedStyle(document.documentElement).getPropertyValue('--bg-primary').trim(),
     );
     assert.ok(bg.includes('#f5f5f5') || bg.includes('245'), `Expected light bg, got: ${bg}`);
-    // Gray-box: verify the setting was persisted to the server via API
+    // Gray-box: verify the setting was persisted to the server via API.
+    // The server stores values as JSON-encoded strings (e.g. '"light"') or bare strings.
     const serverSettings = await page.evaluate(async () => {
       const r = await fetch('/api/settings');
       return r.json();
     });
-    // The theme setting should be stored on the server
-    const storedTheme = serverSettings.theme ? JSON.parse(serverSettings.theme) : null;
+    // Accept both JSON-encoded and bare string storage formats
+    const rawTheme = serverSettings.theme || '';
+    let storedTheme;
+    try {
+      storedTheme = JSON.parse(rawTheme);
+    } catch {
+      storedTheme = rawTheme;
+    }
     assert.ok(
-      storedTheme === 'light' || serverSettings.theme === '"light"',
+      storedTheme === 'light',
       `Theme setting must be persisted to server as 'light', got: ${serverSettings.theme}`,
     );
     // Switch back to dark
