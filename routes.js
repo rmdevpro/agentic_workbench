@@ -75,22 +75,31 @@ function registerCoreRoutes(app, {
     }
   }
 
+  let _trustDirLock = Promise.resolve();
   async function trustDir(dirPath) {
-    const configFile = join(CLAUDE_HOME, '.claude.json');
-    let cfg = {};
+    const prev = _trustDirLock;
+    let unlock;
+    _trustDirLock = new Promise(r => { unlock = r; });
+    await prev;
     try {
-      cfg = JSON.parse(await readFile(configFile, 'utf-8'));
-    } catch (err) {
-      if (err.code === 'ENOENT') { /* first run */ }
-      else if (err instanceof SyntaxError) { logger.error('.claude.json is corrupt — skipping trustDir', { module: 'routes' }); return; }
-      else { logger.warn('Failed to parse .claude.json', { module: 'routes', op: 'trustDir', err: err.message }); }
+      const configFile = join(CLAUDE_HOME, '.claude.json');
+      let cfg = {};
+      try {
+        cfg = JSON.parse(await readFile(configFile, 'utf-8'));
+      } catch (err) {
+        if (err.code === 'ENOENT') { /* first run */ }
+        else if (err instanceof SyntaxError) { logger.error('.claude.json is corrupt — skipping trustDir', { module: 'routes' }); return; }
+        else { logger.warn('Failed to parse .claude.json', { module: 'routes', op: 'trustDir', err: err.message }); }
+      }
+      if (!cfg.projects) cfg.projects = {};
+      if (cfg.projects[dirPath] && cfg.projects[dirPath].hasTrustDialogAccepted) {
+        return;
+      }
+      cfg.projects[dirPath] = { hasTrustDialogAccepted: true, enabledMcpjsonServers: [], disabledMcpjsonServers: [] };
+      await writeFile(configFile, JSON.stringify(cfg, null, 2));
+    } finally {
+      unlock();
     }
-    if (!cfg.projects) cfg.projects = {};
-    if (cfg.projects[dirPath] && cfg.projects[dirPath].hasTrustDialogAccepted) {
-      return;
-    }
-    cfg.projects[dirPath] = { hasTrustDialogAccepted: true, enabledMcpjsonServers: [], disabledMcpjsonServers: [] };
-    await writeFile(configFile, JSON.stringify(cfg, null, 2));
   }
 
   // ── Helper: reconcile stale sessions for a project ─────────────────────────

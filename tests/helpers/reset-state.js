@@ -17,7 +17,7 @@ function dockerExec(cmd) {
 async function resetBaseline(page = null) {
   try {
     execSync(`docker exec ${CONTAINER} sqlite3 /storage/blueprint.db "DELETE FROM sessions WHERE id LIKE 'test_%'; DELETE FROM tasks; DELETE FROM messages;"`, { stdio: 'ignore', timeout: 10000 });
-    execSync(`docker exec ${CONTAINER} sh -c "rm -f /storage/bridges/* && tmux ls -F '#{session_name}' 2>/dev/null | grep '^bp_test_' | xargs -I {} tmux kill-session -t {} 2>/dev/null || true"`, { stdio: 'ignore', timeout: 10000 });
+    execSync(`docker exec ${CONTAINER} sh -c "rm -f /storage/bridges/* && tmux ls -F '#{session_name}' 2>/dev/null | grep '^bp_' | xargs -I {} tmux kill-session -t {} 2>/dev/null || true"`, { stdio: 'ignore', timeout: 10000 });
   } catch { /* best effort */ }
 
   if (page) {
