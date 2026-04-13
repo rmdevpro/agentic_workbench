@@ -13,12 +13,14 @@ RUN npm ci --omit=dev
 
 COPY . .
 
-RUN mkdir -p /workspace /storage /home/hopper/.claude \
-  && echo '{"hasCompletedOnboarding":true}' > /home/hopper/.claude/.claude.json \
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
+  && mkdir -p /workspace /storage /home/hopper/.claude \
   && chown -R hopper:hopper /app /workspace /storage /home/hopper
 
 USER hopper
 
 EXPOSE 3000
 
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "server.js"]

@@ -8,7 +8,7 @@ const DB_PATH = '/storage/blueprint.db';
 function query(sql) {
   try {
     return execSync(
-      `docker exec ${CONTAINER} sqlite3 ${DB_PATH} "${sql.replace(/"/g, '\\"')}"`,
+      `docker exec ${CONTAINER} sqlite3 ${DB_PATH} "PRAGMA wal_checkpoint(PASSIVE); ${sql.replace(/"/g, '\\"')}"`,
       { encoding: 'utf-8', timeout: 10000 }
     ).trim();
   } catch (err) {
@@ -19,7 +19,7 @@ function query(sql) {
 function queryJson(sql) {
   try {
     const out = execSync(
-      `docker exec ${CONTAINER} sqlite3 -json ${DB_PATH} "${sql.replace(/"/g, '\\"')}"`,
+      `docker exec ${CONTAINER} sqlite3 -json ${DB_PATH} "PRAGMA wal_checkpoint(PASSIVE); ${sql.replace(/"/g, '\\"')}"`,
       { encoding: 'utf-8', timeout: 10000 }
     ).trim();
     return out ? JSON.parse(out) : [];

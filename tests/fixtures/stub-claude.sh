@@ -63,4 +63,9 @@ if [ "$PRINT_MODE" = "true" ]; then
   fi
 fi
 
+# In non-print mode, keep alive to simulate interactive Claude session
+if [ "$PRINT_MODE" = "false" ]; then
+  exec sleep infinity
+fi
+
 exit "$EXIT_CODE"

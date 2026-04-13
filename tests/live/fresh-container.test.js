@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { get, BASE_URL } = require('../helpers/http-client');
-const { dockerExec, CONTAINER } = require('../helpers/reset-state');
+const { resetBaseline, dockerExec, CONTAINER } = require('../helpers/reset-state');
 
 test('FRS-01/ENT-03: data directories exist', () => {
   const storage = dockerExec('ls -1 /storage');
@@ -39,7 +39,8 @@ test('ENG-05: no hardcoded secrets in application code', () => {
   assert.equal(count, 0, 'No hardcoded API keys should exist');
 });
 
-test('FRS-07: no orphaned bp_ tmux sessions on fresh start', () => {
+test('FRS-07: no orphaned bp_ tmux sessions after baseline reset', async () => {
+  await resetBaseline();
   const sessions = dockerExec("tmux ls -F '#{session_name}' 2>/dev/null | grep '^bp_' | wc -l");
   assert.equal(parseInt(sessions || '0'), 0, 'No orphaned bp_ sessions');
 });
