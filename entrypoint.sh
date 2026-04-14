@@ -100,7 +100,8 @@ run_as_hopper() {
 }
 
 # Fix ownership of workspace for hopper user
-chown -R hopper:hopper /workspace 2>/dev/null || true
+chown -R hopper:hopper /mnt/workspace 2>/dev/null || true
+chown -R hopper:hopper /mnt/storage 2>/dev/null || true
 
 # Run setup as hopper, then exec the main command as hopper
 export -f run_as_hopper
