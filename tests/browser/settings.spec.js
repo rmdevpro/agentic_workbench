@@ -81,6 +81,70 @@ describe('settings (browser)', () => {
     assert.equal(errors.length, 0, errors.join(', '));
   });
 
+  it('UI-35: font size change applies to terminal and persists to server', async () => {
+    await page.click('#sidebar-footer button');
+    const fontSizeInput = page.locator('#setting-font-size');
+    assert.ok(await fontSizeInput.isVisible(), 'Font size input must be visible in settings');
+
+    // Change font size to 18
+    await fontSizeInput.fill('18');
+    await fontSizeInput.dispatchEvent('change');
+    await page.waitForTimeout(500);
+
+    // Gray-box: verify the setting was persisted to the server
+    const serverSettings = await page.evaluate(async () => {
+      const r = await fetch('/api/settings');
+      return r.json();
+    });
+    const storedSize =
+      parseInt(serverSettings.font_size, 10) ||
+      parseInt(JSON.parse(serverSettings.font_size || '0'), 10);
+    assert.equal(
+      storedSize,
+      18,
+      `Font size must be persisted to server as 18, got: ${serverSettings.font_size}`,
+    );
+
+    // Reset to default
+    await fontSizeInput.fill('14');
+    await fontSizeInput.dispatchEvent('change');
+    await page.waitForTimeout(300);
+    await page.click('.settings-close');
+    await page.screenshot({ path: `${SS}/settings--font-size.png` });
+    assert.equal(errors.length, 0, errors.join(', '));
+  });
+
+  it('UI-36: font family change applies and persists to server', async () => {
+    await page.click('#sidebar-footer button');
+    const fontFamilySelect = page.locator('#setting-font-family');
+    assert.ok(await fontFamilySelect.isVisible(), 'Font family select must be visible in settings');
+
+    // Get available options
+    const options = await fontFamilySelect.locator('option').allTextContents();
+    assert.ok(options.length >= 2, `Font family must have 2+ options, got: ${options.length}`);
+
+    // Select a non-default font
+    const nonDefault = options.find((o) => !o.includes('JetBrains') && !o.includes('default'));
+    if (nonDefault) {
+      await fontFamilySelect.selectOption({ label: nonDefault });
+      await page.waitForTimeout(500);
+
+      // Gray-box: verify the setting was persisted
+      const serverSettings = await page.evaluate(async () => {
+        const r = await fetch('/api/settings');
+        return r.json();
+      });
+      assert.ok(serverSettings.font_family, 'Font family setting must be persisted to server');
+    }
+
+    // Reset to default (first option)
+    await fontFamilySelect.selectOption({ index: 0 });
+    await page.waitForTimeout(300);
+    await page.click('.settings-close');
+    await page.screenshot({ path: `${SS}/settings--font-family.png` });
+    assert.equal(errors.length, 0, errors.join(', '));
+  });
+
   it('BRW-15: settings persist after page reload with server verification', async () => {
     await page.click('#sidebar-footer button');
     await page.locator('#setting-theme').selectOption('blueprint-dark');

@@ -12,6 +12,8 @@ const { withServer, req } = require('../helpers/with-server');
 function makeApp(overrides = {}) {
   const WORKSPACE =
     overrides.workspace || require('node:fs').mkdtempSync(path.join(os.tmpdir(), 'bp-routes-'));
+  const CLAUDE_HOME =
+    overrides.claudeHome || require('node:fs').mkdtempSync(path.join(os.tmpdir(), 'bp-claude-'));
   const testProjectPath = path.join(WORKSPACE, 'test-project');
   require('node:fs').mkdirSync(testProjectPath, { recursive: true });
   const app = express();
@@ -217,7 +219,7 @@ function makeApp(overrides = {}) {
     resolveSessionId: async () => {},
     runSmartCompaction: async (sid, _proj) => ({ compacted: true, session_id: sid }),
     getBrowserCount: () => 1,
-    CLAUDE_HOME: overrides.claudeHome ?? '/tmp/claude',
+    CLAUDE_HOME,
     WORKSPACE,
     ensureSettings: async () => {},
     sleep: async () => {},

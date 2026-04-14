@@ -114,15 +114,13 @@ describe('right panel (browser)', () => {
       await page.locator('#panel-messages').isVisible(),
       'Messages panel must be visible after tab click',
     );
-    // Hard assertion: messages panel must have UI elements (not >= 0 which always passes)
-    const msgsHasUI = await page
-      .locator(
-        '#panel-messages .message-item, #panel-messages input, #panel-messages textarea, #panel-messages .message-list, #panel-messages button',
-      )
-      .count();
+    // Messages panel contains a message list div — verify it exists and has content
+    const msgList = page.locator('#message-list');
+    assert.ok((await msgList.count()) > 0, 'Messages panel must contain a #message-list element');
+    const msgContent = await msgList.textContent();
     assert.ok(
-      msgsHasUI > 0,
-      'Messages panel must contain messaging UI elements (input, list, or button)',
+      msgContent.length > 0,
+      'Message list must contain text (at least a placeholder like "No messages yet")',
     );
 
     await page.screenshot({ path: `${SS}/panel--tabs.png` });

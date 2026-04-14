@@ -40,23 +40,51 @@ describe('reconnect (browser)', () => {
     await stopCoverage(page);
   });
 
-  it('UI-55: reconnect logic has correct constants and connectTab function', async () => {
+  it('UI-55: reconnect logic has correct constants and connectTab creates WebSocket', async () => {
     assert.equal(await page.evaluate(() => MAX_RECONNECT_DELAY), 30000);
     assert.equal(await page.evaluate(() => HEARTBEAT_MS), 30000);
-    // Hard assertion: connectTab must specifically exist — it is the real reconnect function.
-    // The previous version used a disjunction of 4 function names which was too permissive.
     const hasConnectTab = await page.evaluate(() => typeof connectTab === 'function');
     assert.ok(
       hasConnectTab,
       'connectTab function must be defined — this is the WebSocket connection/reconnect handler',
     );
-    // Verify connectTab has reconnect logic by checking it references the backoff constants
-    const fnSource = await page.evaluate(() => connectTab.toString());
+
+    // Behavioral: create a tab entry first, then call connectTab to verify WebSocket creation.
+    const result = await page.evaluate(() => {
+      let wsUrl = null;
+      let wsCreated = false;
+      const OrigWS = window.WebSocket;
+      window.WebSocket = function (url, ...args) {
+        wsUrl = url;
+        wsCreated = true;
+        const ws = new OrigWS(url, ...args);
+        setTimeout(() => {
+          try {
+            ws.close();
+          } catch {}
+        }, 100);
+        return ws;
+      };
+      window.WebSocket.prototype = OrigWS.prototype;
+      try {
+        // Create a fake tab entry so connectTab has something to work with
+        if (typeof createTab === 'function') {
+          createTab('ui55_test_tab', 'ui55_tmux', 'UI55 Test', 'test_project');
+        }
+        connectTab('ui55_test_tab');
+      } catch {
+        /* may throw on missing terminal — that's OK */
+      }
+      window.WebSocket = OrigWS;
+      return { wsUrl, wsCreated };
+    });
     assert.ok(
-      fnSource.includes('MAX_RECONNECT_DELAY') ||
-        fnSource.includes('reconnect') ||
-        fnSource.includes('onclose'),
-      'connectTab must contain reconnect/backoff logic (references MAX_RECONNECT_DELAY, reconnect, or onclose)',
+      result.wsCreated,
+      'connectTab must attempt to create a WebSocket connection when tab exists',
+    );
+    assert.ok(
+      result.wsUrl && result.wsUrl.includes('ws'),
+      `connectTab must connect to a WebSocket URL, got: ${result.wsUrl}`,
     );
     await page.screenshot({ path: `${SS}/reconnect--constants.png` });
     assert.equal(errors.length, 0, errors.join(', '));

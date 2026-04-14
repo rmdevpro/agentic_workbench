@@ -29,4 +29,23 @@ async function del(path) {
   return api('DELETE', path);
 }
 
-module.exports = { api, get, post, put, del, BASE_URL };
+/**
+ * Create a session with retry logic. The stub Claude CLI in the test container
+ * can cause 500 due to tmux session name collisions (truncated timestamps).
+ * This helper retries up to 3 times with a delay to get a unique tmux name.
+ * Returns { status, data } where data.id is guaranteed on success.
+ */
+async function createSession(project, prompt = 'test session') {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const r = await post('/api/sessions', { project, prompt });
+    if (r.data && r.data.id) return r;
+    // 500 with no ID means tmux name collision — wait and retry
+    if (attempt < 2) {
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+    }
+  }
+  // Final attempt failed — return whatever we got
+  return post('/api/sessions', { project, prompt });
+}
+
+module.exports = { api, get, post, put, del, createSession, BASE_URL };

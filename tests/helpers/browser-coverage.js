@@ -23,7 +23,10 @@ const allEntries = [];
 
 async function startCoverage(page) {
   try {
-    await page.coverage.startJSCoverage({ resetOnNavigation: false });
+    await page.coverage.startJSCoverage({
+      resetOnNavigation: false,
+      reportAnonymousScripts: true,
+    });
   } catch {
     /* coverage API may not be available in all contexts */
   }
@@ -45,10 +48,21 @@ async function stopCoverage(page) {
 async function writeCoverageReport(suiteName = 'browser') {
   fs.mkdirSync(COVERAGE_DIR, { recursive: true });
 
-  // Filter to application JS (inline scripts from index.html)
-  const appEntries = allEntries.filter(
-    (e) => e.url && (e.url.includes('/') || e.url.includes('index.html')),
-  );
+  // Filter to application JS — include inline scripts (page URL or anonymous)
+  // and exclude external libraries (xterm, jquery, etc.)
+  const appEntries = allEntries.filter((e) => {
+    if (!e.url) return false;
+    // Exclude known library scripts
+    if (e.url.includes('xterm') || e.url.includes('jquery') || e.url.includes('addon'))
+      return false;
+    // Include page URL (inline scripts), anonymous scripts, and index.html
+    return (
+      e.url.includes('localhost') ||
+      e.url.includes('index.html') ||
+      e.url.startsWith('debugger://') ||
+      e.url === ''
+    );
+  });
 
   // Calculate coverage stats
   let totalBytes = 0;
@@ -57,12 +71,16 @@ async function writeCoverageReport(suiteName = 'browser') {
   const functionsTotal = new Set();
 
   for (const entry of appEntries) {
-    if (!entry.ranges || !entry.text) continue;
-    totalBytes += entry.text.length;
+    if (!entry.ranges) continue;
+    // Use source text if available; for entries without text, use range extents
+    const sourceLength = entry.text ? entry.text.length : 0;
+    if (sourceLength === 0 && entry.ranges.length === 0) continue;
+    totalBytes += sourceLength || entry.ranges.reduce((max, r) => Math.max(max, r.end), 0);
     for (const range of entry.ranges) {
       usedBytes += range.end - range.start;
     }
 
+    if (!entry.text) continue;
     // Extract function names from the source to identify covered functions
     const funcRegex = /function\s+(\w+)\s*\(/g;
     let match;

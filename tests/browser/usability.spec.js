@@ -44,6 +44,11 @@ describe('usability (browser)', () => {
     assert.ok(await page.locator('#sidebar').isVisible(), 'Sidebar must be visible');
     assert.ok(await page.locator('#main').isVisible(), 'Main content area must be visible');
     assert.ok(await page.locator('#tab-bar').isVisible(), 'Tab bar must be visible');
+    // Wait for loadState to populate project list from seed data
+    await page.waitForFunction(
+      () => document.getElementById('project-list')?.innerHTML?.length > 0,
+      { timeout: 10000 },
+    );
     const projectListContent = await page.locator('#project-list').innerHTML();
     assert.ok(
       projectListContent.length > 0,

@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { get, post } = require('../helpers/http-client');
+const { get, post, createSession } = require('../helpers/http-client');
 const { resetBaseline, dockerExec } = require('../helpers/reset-state');
 const { queryCount } = require('../helpers/db-query');
 
@@ -50,8 +50,8 @@ test('SES-03a: session creation produces DB row and tmux session', async () => {
   await post('/api/projects', { path: '/workspace/ses_create_proj', name: 'ses_create_proj' });
   // Count sessions before
   const countBefore = queryCount('sessions', "id LIKE 'new_%'");
-  const r = await post('/api/sessions', { project: 'ses_create_proj', prompt: 'Test prompt' });
-  assert.equal(r.status, 200);
+  const r = await createSession('ses_create_proj', 'Test prompt');
+  assert.equal(r.status, 200, `Session creation must return 200, got ${r.status}: ${JSON.stringify(r.data)}`);
   assert.ok(r.data.id, 'Response must include session ID');
   // Gray-box: verify DB row was created
   const countAfter = queryCount('sessions', "id LIKE 'new_%'");

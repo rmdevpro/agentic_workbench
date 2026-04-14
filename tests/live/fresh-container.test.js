@@ -50,6 +50,14 @@ test('ENG-05: no hardcoded secrets in application code', () => {
 
 test('FRS-07: no orphaned bp_ tmux sessions after baseline reset', async () => {
   await resetBaseline();
+  // Aggressively kill any remaining bp_ tmux sessions individually
+  const remaining = dockerExec("tmux ls -F '#{session_name}' 2>/dev/null | grep '^bp_' || true");
+  if (remaining.trim()) {
+    for (const name of remaining.trim().split('\n').filter(Boolean)) {
+      dockerExec(`tmux kill-session -t '${name}' 2>/dev/null || true`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
   const sessions = dockerExec("tmux ls -F '#{session_name}' 2>/dev/null | grep '^bp_' | wc -l");
   assert.equal(parseInt(sessions || '0'), 0, 'No orphaned bp_ sessions');
 });

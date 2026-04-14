@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { get, post } = require('../helpers/http-client');
 const { resetBaseline, dockerExec } = require('../helpers/reset-state');
+const { queryCount } = require('../helpers/db-query');
 
 test('MCP-01: GET /api/mcp/tools lists at least 14 tools', async () => {
   const r = await get('/api/mcp/tools');
@@ -11,15 +12,34 @@ test('MCP-01: GET /api/mcp/tools lists at least 14 tools', async () => {
   assert.ok(r.data.tools.length >= 14);
 });
 
-test('MCP-06g/06f: add task and get tasks via MCP', async () => {
+test('MCP-06g/06f: add task and get tasks via MCP with DB count verification', async () => {
   await resetBaseline();
   dockerExec('mkdir -p /workspace/mcp_proj');
   await post('/api/projects', { path: '/workspace/mcp_proj', name: 'mcp_proj' });
+
+  // Gray-box: count tasks before MCP add
+  const countBefore = queryCount(
+    'tasks',
+    "project_id IN (SELECT id FROM projects WHERE name = 'mcp_proj')",
+  );
+
   const addResult = await post('/api/mcp/call', {
     tool: 'blueprint_add_task',
     args: { project: 'mcp_proj', text: 'mcp-task-test' },
   });
   assert.ok(addResult.data.result);
+
+  // Gray-box: DB count must increment by 1 (MCP-06g requirement)
+  const countAfter = queryCount(
+    'tasks',
+    "project_id IN (SELECT id FROM projects WHERE name = 'mcp_proj')",
+  );
+  assert.equal(
+    countAfter,
+    countBefore + 1,
+    `DB task count must increment by 1 after blueprint_add_task (before: ${countBefore}, after: ${countAfter})`,
+  );
+
   const r = await post('/api/mcp/call', {
     tool: 'blueprint_get_tasks',
     args: { project: 'mcp_proj' },
