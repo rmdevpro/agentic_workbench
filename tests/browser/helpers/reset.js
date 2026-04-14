@@ -13,8 +13,9 @@
 const { mkdirSync } = require('fs');
 const { join } = require('path');
 
-// Test results: /storage/test-results/{app}/{run}/screenshots/
-const STORAGE_BASE = process.platform === 'win32' ? 'Z:' : '/storage';
+// Test results default to workspace; configurable via defaults.json testResultsDir
+const config = (() => { try { return JSON.parse(require('fs').readFileSync(join(__dirname, '..', '..', '..', 'config', 'defaults.json'), 'utf-8')); } catch { return {}; } })();
+const STORAGE_BASE = config.testResultsDir || (process.platform === 'win32' ? 'Z:\\test-results' : '/mnt/workspace/.test-results');
 const RUN_TIMESTAMP = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
 const RESULTS_DIR = join(STORAGE_BASE, 'test-results', 'blueprint', RUN_TIMESTAMP, 'screenshots');
 mkdirSync(RESULTS_DIR, { recursive: true });

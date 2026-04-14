@@ -17,7 +17,8 @@ const { readdirSync, readFileSync } = require('fs');
 const { join, basename } = require('path');
 
 // Pass a specific run dir, or find the latest run
-const STORAGE_BASE = process.platform === 'win32' ? 'Z:' : '/storage';
+const config = (() => { try { return JSON.parse(require('fs').readFileSync(join(__dirname, '..', '..', '..', 'config', 'defaults.json'), 'utf-8')); } catch { return {}; } })();
+const STORAGE_BASE = config.testResultsDir || (process.platform === 'win32' ? 'Z:\\test-results' : '/mnt/workspace/.test-results');
 const RUNS_DIR = join(STORAGE_BASE, 'test-results', 'blueprint');
 function latestRun() {
   try {

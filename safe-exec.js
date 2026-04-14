@@ -8,7 +8,7 @@
 const { execFileSync } = require('child_process');
 const { resolve, join, sep } = require('path');
 
-const WORKSPACE = process.env.WORKSPACE || '/workspace';
+const WORKSPACE = '/mnt/workspace';
 const CLAUDE_HOME = process.env.CLAUDE_HOME || '/home/hopper/.claude';
 const HOME = process.env.HOME || '/home/hopper';
 
