@@ -14,6 +14,7 @@ const { registerOpenAIRoutes } = require('./openai-compat');
 const { fireEvent, registerWebhookRoutes } = require('./webhooks');
 const { registerExternalMcpRoutes } = require('./mcp-external');
 const { registerQuorumRoutes } = require('./quorum');
+const { handleVoiceConnection } = require('./voice');
 const config = require('./config');
 const sessionUtils = require('./session-utils');
 
@@ -1015,10 +1016,19 @@ registerQuorumRoutes(app);
 
 // ── WebSocket: Terminal PTY bridge ─────────────────────────────────────────
 
+const voiceWss = new WebSocketServer({ noServer: true });
+
 server.on('upgrade', (req, socket, head) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
-  const match = url.pathname.match(/^\/ws\/(.+)$/);
 
+  if (url.pathname === '/ws/voice') {
+    voiceWss.handleUpgrade(req, socket, head, (ws) => {
+      handleVoiceConnection(ws);
+    });
+    return;
+  }
+
+  const match = url.pathname.match(/^\/ws\/(.+)$/);
   if (!match) {
     socket.destroy();
     return;
