@@ -635,7 +635,7 @@ app.post('/api/sessions/:sessionId/restart', async (req, res) => {
     const dbProj = db.getProject(session.project_name);
     const cwd = dbProj ? dbProj.path : WORKSPACE;
     // Create a new tmux session
-    safe.tmuxCreate(tmux, cwd);
+    safe.tmuxCreateClaude(tmux, cwd);
     res.json({ ok: true, sessionId, tmux });
   } catch (err) {
     console.error('Error restarting session:', err);
