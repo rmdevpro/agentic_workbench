@@ -753,6 +753,13 @@
       container.innerHTML = '';
 
       for (const project of projectState) {
+        // Filter projects by state
+        const projState = project.state || 'active';
+        if (sessionFilter === 'active' && projState !== 'active') continue;
+        if (sessionFilter === 'archived' && projState !== 'archived') continue;
+        if (sessionFilter === 'all' && projState === 'hidden') continue;
+        if (sessionFilter === 'hidden' && projState !== 'hidden') continue;
+
         const group = document.createElement('div');
         group.className = 'project-group';
 
@@ -771,14 +778,19 @@
           <span class="arrow">&#9660;</span>
           <span>${escHtml(project.name)}</span>
           <span class="count">${filteredCount}</span>
+          <button class="term-btn proj-config-btn" title="Project config" style="font-size:12px">&#9998;</button>
           <button class="term-btn new-btn" title="New session">+</button>
           <button class="term-btn" title="Open terminal">&gt;_</button>
         `;
+        header.querySelector('.proj-config-btn').addEventListener('click', (e) => {
+          e.stopPropagation();
+          openProjectConfig(project.name);
+        });
         header.querySelector('.new-btn').addEventListener('click', (e) => {
           e.stopPropagation();
           createSession(project.name);
         });
-        header.querySelector('.term-btn:not(.new-btn)').addEventListener('click', (e) => {
+        header.querySelector('.term-btn:not(.new-btn):not(.proj-config-btn)').addEventListener('click', (e) => {
           e.stopPropagation();
           openTerminal(project.name);
         });
@@ -831,6 +843,7 @@
               <span class="session-name">${escHtml(session.name)}</span>
               <span class="session-actions">
                 ${summaryBtn}
+                <button class="session-action-btn restart" title="Restart tmux" data-id="${escHtml(session.id)}">&#8635;</button>
                 <button class="session-action-btn rename" title="Config" data-id="${escHtml(session.id)}">&#9998;</button>
                 ${archiveBtn}
               </span>
@@ -852,6 +865,14 @@
           item.querySelector('.rename').addEventListener('click', (e) => {
             e.stopPropagation();
             renameSession(session.id, session.name);
+          });
+          item.querySelector('.restart').addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (!confirm('Restart the tmux session? The Claude session will be preserved.')) return;
+            try {
+              await fetch(`/api/sessions/${session.id}/restart`, { method: 'POST' });
+              loadState();
+            } catch (err) { alert('Restart failed: ' + err.message); }
           });
           const archEl = item.querySelector('.archive, .unarchive');
           if (archEl) {
@@ -1305,6 +1326,62 @@
       document.getElementById(overlayId).remove();
       loadState();
       renderTabs();
+    }
+
+    async function openProjectConfig(projectName) {
+      const overlayId = 'proj-config-' + Date.now();
+      const overlay = document.createElement('div');
+      overlay.id = overlayId;
+      overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center';
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+      let config = { name: projectName, state: 'active', notes: '' };
+      try {
+        const res = await fetch(`/api/projects/${encodeURIComponent(projectName)}/config`);
+        config = await res.json();
+      } catch {}
+
+      overlay.innerHTML = `
+        <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:24px;width:400px" onclick="event.stopPropagation()">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <h3 style="font-size:14px;margin:0">Project Config</h3>
+            <button style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px" title="Close" onclick="document.getElementById('${overlayId}').remove()">&#10005;</button>
+          </div>
+          <div style="margin-bottom:12px">
+            <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Name</label>
+            <input id="proj-cfg-name" type="text" value="${escHtml(config.name || '')}" style="width:100%;padding:6px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box">
+          </div>
+          <div style="margin-bottom:12px">
+            <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">State</label>
+            <select id="proj-cfg-state" style="width:100%;padding:6px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:13px">
+              <option value="active" ${config.state === 'active' ? 'selected' : ''}>Active</option>
+              <option value="archived" ${config.state === 'archived' ? 'selected' : ''}>Archived</option>
+              <option value="hidden" ${config.state === 'hidden' ? 'selected' : ''}>Hidden</option>
+            </select>
+          </div>
+          <div style="margin-bottom:16px">
+            <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Project Notes</label>
+            <textarea id="proj-cfg-notes" style="width:100%;min-height:80px;padding:6px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;font-family:inherit;resize:vertical;outline:none;box-sizing:border-box" placeholder="Notes about this project...">${escHtml(config.notes || '')}</textarea>
+          </div>
+          <button onclick="saveProjectConfig('${escHtml(projectName)}', '${overlayId}')" style="padding:6px 16px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:13px">Save</button>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+    }
+
+    async function saveProjectConfig(projectName, overlayId) {
+      const config = {
+        name: document.getElementById('proj-cfg-name').value.trim(),
+        state: document.getElementById('proj-cfg-state').value,
+        notes: document.getElementById('proj-cfg-notes').value,
+      };
+      await fetch(`/api/projects/${encodeURIComponent(projectName)}/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      });
+      document.getElementById(overlayId).remove();
+      loadState();
     }
 
     async function archiveSession(sessionId, archived) {

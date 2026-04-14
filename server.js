@@ -366,7 +366,7 @@ app.get('/api/state', async (req, res) => {
 
       sessions.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-      projects.push({ name: projectName, path: projectPath, sessions, missing: dirMissing });
+      projects.push({ name: projectName, path: projectPath, sessions, missing: dirMissing, state: project.state || 'active' });
     }
 
     projects.sort((a, b) => {
@@ -627,7 +627,45 @@ app.put('/api/sessions/:sessionId/archive', async (req, res) => {
   }
 });
 
-// ── API: Project notes ─────────────────────────────────────────────────────
+app.post('/api/sessions/:sessionId/restart', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const tmux = tmuxName(sessionId);
+    // Kill existing tmux session if it exists
+    if (tmuxExists(tmux)) {
+      safe.tmuxKill(tmux);
+    }
+    // Get the session's project to determine CWD
+    const session = db.getSession(sessionId);
+    if (!session) return res.status(404).json({ error: 'session not found' });
+    const dbProj = db.getProject(session.project_name);
+    const cwd = dbProj ? dbProj.path : WORKSPACE;
+    // Create a new tmux session
+    safe.tmuxCreate(tmux, cwd);
+    res.json({ ok: true, sessionId, tmux });
+  } catch (err) {
+    console.error('Error restarting session:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── API: Project config ───────────────────────────────────────────────────
+
+app.get('/api/projects/:name/config', (req, res) => {
+  const project = db.getProject(req.params.name);
+  if (!project) return res.status(404).json({ error: 'project not found' });
+  res.json({ name: project.name, state: project.state || 'active', notes: project.notes || '', path: project.path });
+});
+
+app.put('/api/projects/:name/config', (req, res) => {
+  const project = db.getProject(req.params.name);
+  if (!project) return res.status(404).json({ error: 'project not found' });
+  const { name, state, notes } = req.body;
+  if (name && name !== project.name) db.renameProject(project.id, name);
+  if (state) db.setProjectState(project.id, state);
+  if (notes !== undefined) db.setProjectNotes(project.id, notes);
+  res.json({ ok: true });
+});
 
 app.get('/api/projects/:name/notes', (req, res) => {
   const project = db.getProject(req.params.name);

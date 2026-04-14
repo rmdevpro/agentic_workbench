@@ -13,6 +13,7 @@ db.pragma('foreign_keys = ON');
 
 // Migrations for existing databases — these fail silently if column already exists (idempotent)
 try { db.exec("ALTER TABLE projects ADD COLUMN notes TEXT DEFAULT ''"); } catch { /* column exists */ }
+try { db.exec("ALTER TABLE projects ADD COLUMN state TEXT DEFAULT 'active'"); } catch { /* column exists */ }
 try { db.exec("ALTER TABLE sessions ADD COLUMN notes TEXT DEFAULT ''"); } catch { /* column exists */ }
 try { db.exec("ALTER TABLE sessions ADD COLUMN state TEXT DEFAULT 'active'"); } catch { /* column exists */ }
 try { db.exec("ALTER TABLE sessions ADD COLUMN model_override TEXT"); } catch { /* column exists */ }
@@ -103,9 +104,11 @@ const stmts = {
   getSessionNotes: db.prepare('SELECT notes FROM sessions WHERE id = ?'),
   setSessionNotes: db.prepare('UPDATE sessions SET notes = ? WHERE id = ?'),
 
-  // Project notes
+  // Project config
   getProjectNotes: db.prepare('SELECT notes FROM projects WHERE id = ?'),
   setProjectNotes: db.prepare('UPDATE projects SET notes = ? WHERE id = ?'),
+  setProjectState: db.prepare('UPDATE projects SET state = ? WHERE id = ?'),
+  renameProject: db.prepare('UPDATE projects SET name = ? WHERE id = ?'),
 
   // Tasks
   getTasks: db.prepare('SELECT * FROM tasks WHERE project_id = ? ORDER BY created_at ASC'),
@@ -196,6 +199,14 @@ module.exports = {
 
   setProjectNotes(projectId, notes) {
     stmts.setProjectNotes.run(notes, projectId);
+  },
+
+  setProjectState(projectId, state) {
+    stmts.setProjectState.run(state, projectId);
+  },
+
+  renameProject(projectId, name) {
+    stmts.renameProject.run(name, projectId);
   },
 
   getSessionNotes(sessionId) {
