@@ -27,6 +27,7 @@ db.exec(`
     name TEXT NOT NULL UNIQUE,
     path TEXT NOT NULL UNIQUE,
     notes TEXT DEFAULT '',
+    state TEXT DEFAULT 'active',
     created_at TEXT DEFAULT (datetime('now'))
   );
 
