@@ -2177,7 +2177,7 @@
 
       // Initialize jQuery File Tree
       $('#jqft-tree').fileTree({
-        root: (window._workspace || '/workspace/projects').replace(/\/?$/, '/'),
+        root: (window._workspace || '/mnt/workspace').replace(/\/?$/, '/'),
         script: '/api/jqueryfiletree',
         folderEvent: 'click',
         expandSpeed: 200,
@@ -2217,7 +2217,7 @@
     }
 
     async function pickerNewFolder() {
-      const parentPath = document.getElementById('picker-path').value.trim() || (window._workspace || '/workspace');
+      const parentPath = document.getElementById('picker-path').value.trim() || (window._workspace || '/mnt/workspace');
       const name = prompt('New folder name:');
       if (!name) return;
       const newPath = parentPath.replace(/\/$/, '') + '/' + name;
@@ -2232,7 +2232,7 @@
         // Refresh the tree and select the new folder
         $('#jqft-tree').html('');
         $('#jqft-tree').fileTree({
-          root: (window._workspace || '/workspace/projects').replace(/\/?$/, '/'),
+          root: (window._workspace || '/mnt/workspace').replace(/\/?$/, '/'),
           script: '/api/jqueryfiletree',
           folderEvent: 'click',
           expandSpeed: 200,
