@@ -17,6 +17,8 @@ Every test MUST involve actual browser interaction via Playwright:
 
 Checking `!!document.querySelector('.button')` is NOT a test. Clicking the button, verifying the modal opens, filling the form, clicking save, and verifying the data persisted — THAT is a test.
 
+**Every test MUST take a screenshot** at the end as proof of the final state. Screenshots are saved to `/storage/blueprint-merged-tests/` with the test ID as filename (e.g., `SMOKE-01.png`, `NF-04.png`). On failure, take the screenshot immediately when the failure is observed.
+
 ---
 
 ## Deployment Prerequisite: OAuth Authentication (Hymie)
