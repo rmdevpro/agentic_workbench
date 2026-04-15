@@ -10,7 +10,6 @@ module.exports = function createWatchers({
   config,
   sessionUtils,
   sessionWsClients,
-  checkCompactionNeeds,
   tmuxName,
   tmuxExists,
   CLAUDE_HOME,
@@ -53,7 +52,9 @@ module.exports = function createWatchers({
             if (ws && ws.readyState === 1 /* WebSocket.OPEN */) {
               ws.send(JSON.stringify({ type: 'token_update', data: usage }));
             }
-            await checkCompactionNeeds(entry.sessionId, entry.projectName);
+            // Simple 75% nudge — replaces smart compaction
+            const pct = usage.max_tokens > 0 ? (usage.input_tokens / usage.max_tokens) * 100 : 0;
+            checkContextUsage(entry.sessionId, pct);
           } catch (err) {
             if (err.code === 'ENOENT') {
               logger.debug('JSONL file removed during watcher callback', {
@@ -120,45 +121,20 @@ module.exports = function createWatchers({
     settingsWatcherActive = true;
   }
 
-  let compactionMonitorInterval = null;
-  function startCompactionMonitor() {
-    if (compactionMonitorInterval) return;
-    compactionMonitorInterval = setInterval(
-      async () => {
-        try {
-          for (const dbProj of db.getProjects()) {
-            const sessionsDir = safe.findSessionsDir(dbProj.path);
-            try {
-              const files = await fsp.readdir(sessionsDir);
-              for (const file of files) {
-                if (!file.endsWith('.jsonl')) continue;
-                const sessionId = basename(file, '.jsonl');
-                const tmux = tmuxName(sessionId);
-                if ((await tmuxExists(tmux)) && !jsonlWatchPaths.has(tmux)) {
-                  await checkCompactionNeeds(sessionId, dbProj.name);
-                }
-              }
-            } catch (err) {
-              if (err.code !== 'ENOENT') {
-                logger.error('Compaction monitor error scanning sessions', {
-                  module: 'watchers',
-                  op: 'startCompactionMonitor',
-                  err: err.message,
-                });
-              }
-              /* expected for ENOENT: sessions dir does not exist for this project */
-            }
-          }
-        } catch (err) {
-          logger.error('Compaction monitor fatal error', {
-            module: 'watchers',
-            op: 'startCompactionMonitor',
-            err: err.message,
-          });
+  // Simple context usage nudge — fires once per session at 75%
+  const nudgeSent = new Set();
+  function checkContextUsage(sessionId, pct) {
+    if (nudgeSent.has(sessionId)) return;
+    const threshold = config.get('session.nudgeThresholdPercent', 75);
+    if (pct >= threshold) {
+      nudgeSent.add(sessionId);
+      const tmux = tmuxName(sessionId);
+      tmuxExists(tmux).then(exists => {
+        if (exists) {
+          safe.tmuxSendKeysAsync(tmux, config.getPrompt('session-nudge', { PERCENT: pct.toFixed(0) }));
         }
-      },
-      config.get('polling.compactionMonitorIntervalMs', 300000),
-    );
+      });
+    }
   }
 
   async function registerMcpServer() {
@@ -289,7 +265,6 @@ module.exports = function createWatchers({
     startJsonlWatcher,
     stopJsonlWatcher,
     startSettingsWatcher,
-    startCompactionMonitor,
     registerMcpServer,
     trustProjectDirs,
     ensureSettings,

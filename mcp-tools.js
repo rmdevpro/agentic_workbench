@@ -54,7 +54,8 @@ function registerMcpRoutes(app) {
         },
         { name: 'blueprint_read_plan', description: "Read a session's plan file." },
         { name: 'blueprint_update_plan', description: "Write or update a session's plan file." },
-        { name: 'blueprint_smart_compaction', description: 'Run smart compaction on a session.' },
+        { name: 'blueprint_session', description: 'Session management — info, transition, or resume.' },
+        { name: 'blueprint_ask_cli', description: 'Ask any installed CLI (claude, gemini, codex) a question.' },
         { name: 'blueprint_ask_quorum', description: 'Ask a question to a multi-model quorum.' },
         { name: 'blueprint_send_message', description: 'Send a message to another session.' },
         { name: 'blueprint_set_session_config', description: 'Set session configuration.' },
@@ -223,17 +224,34 @@ function registerMcpRoutes(app) {
           result = { saved: true };
           break;
         }
-        case 'blueprint_smart_compaction': {
+        case 'blueprint_session': {
           const r = await fetch(
-            `http://localhost:${process.env.BLUEPRINT_PORT || 3000}/api/sessions/${args.session_id || 'current'}/smart-compact`,
+            `http://localhost:${process.env.BLUEPRINT_PORT || 3000}/api/sessions/${args.session_id}/session`,
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ project: args.project }),
+              body: JSON.stringify({ mode: args.mode, tailLines: args.tail_lines }),
             },
           );
-          if (!r.ok) throw new Error(`Smart compaction internal call failed: ${r.status}`);
-          result = await r.json();
+          const data = await r.json();
+          if (args.mode === 'info') {
+            result = `Session ID: ${data.sessionId}\nSession file: ${data.sessionFile}\nExists: ${data.exists}`;
+          } else {
+            result = data.prompt || data.error || 'No response';
+          }
+          break;
+        }
+        case 'blueprint_ask_cli': {
+          const r = await fetch(
+            `http://localhost:${process.env.BLUEPRINT_PORT || 3000}/api/cli/ask`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ cli: args.cli, prompt: args.prompt, model: args.model, cwd: args.cwd }),
+            },
+          );
+          const cliData = await r.json();
+          result = cliData.result || cliData.error || 'No response';
           break;
         }
         case 'blueprint_ask_quorum': {
@@ -245,7 +263,6 @@ function registerMcpRoutes(app) {
               body: JSON.stringify({
                 question: args.question,
                 project: args.project,
-                mode: args.mode || 'new',
               }),
             },
           );

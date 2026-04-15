@@ -16,6 +16,7 @@ const { promisify } = require('util');
 const execFileAsync = promisify(execFile);
 const crypto = require('crypto');
 
+const express = require('express');
 const { registerMcpRoutes } = require('./mcp-tools');
 const { registerOpenAIRoutes } = require('./openai-compat');
 const { registerWebhookRoutes } = require('./webhooks');
@@ -53,7 +54,6 @@ function registerCoreRoutes(
     tmuxExists: _tmuxExists,
     enforceTmuxLimit,
     resolveSessionId,
-    runSmartCompaction,
     getBrowserCount,
     CLAUDE_HOME,
     WORKSPACE,
@@ -230,19 +230,10 @@ function registerCoreRoutes(
 
   app.get('/api/mounts', async (req, res) => {
     try {
-      const { stdout } = await execFileAsync('mount');
-      const mounts = stdout
-        .trim()
-        .split('\n')
-        .map((line) => {
-          if (/proc|sys|dev|tmpfs|cgroup|mqueue|overlay/.test(line)) return null;
-          const match = line.match(/on\s+(\S+)\s+type\s+(\S+)/);
-          return match ? { path: match[1], type: match[2] } : null;
-        })
-        .filter(Boolean);
+      const entries = await readdir('/mnt', { withFileTypes: true });
+      const mounts = entries.filter(e => e.isDirectory()).map(e => ({ path: '/mnt/' + e.name }));
       res.json(mounts);
     } catch (err) {
-      logger.warn('GET /api/mounts failed', { module: 'routes', err: err.message });
       res.json([]);
     }
   });
@@ -465,7 +456,7 @@ function registerCoreRoutes(
           s.project_missing = dirMissing;
         }
 
-        projects.push({ name: projectName, path: projectPath, sessions, missing: dirMissing });
+        projects.push({ name: projectName, path: projectPath, sessions, missing: dirMissing, state: project.state || 'active' });
       }
 
       projects.sort((a, b) => {
@@ -1100,21 +1091,101 @@ function registerCoreRoutes(
     }
   });
 
-  // ── Smart compaction ──────────────────────────────────────────────────────
+  // ── Session management ───────────────────────────────────────────────────
 
-  app.post('/api/sessions/:sessionId/smart-compact', async (req, res) => {
+  app.post('/api/sessions/:sessionId/session', async (req, res) => {
     try {
       const { sessionId } = req.params;
-      if (!validateSessionId(sessionId))
-        return res.status(400).json({ error: 'invalid session ID format' });
-      const { project } = req.body;
-      if (!project) return res.status(400).json({ error: 'project required' });
-      const result = await runSmartCompaction(sessionId, project);
-      res.json(result);
+      const { mode = 'info', tailLines = 60 } = req.body;
+      const entry = db.getSession(sessionId);
+      const project = entry ? entry.project_name : (req.body.project || '');
+      const projectHash = (project ? safe.resolveProjectPath(project) : '').replace(/[^a-zA-Z0-9]/g, '-');
+      const sessionFile = join(CLAUDE_HOME, 'projects', projectHash, `${sessionId}.jsonl`);
+
+      if (mode === 'info') {
+        const { existsSync } = require('fs');
+        return res.json({ sessionId, sessionFile, exists: existsSync(sessionFile) });
+      }
+      if (mode === 'resume') {
+        let tail = '';
+        try {
+          const { readFileSync } = require('fs');
+          const lines = readFileSync(sessionFile, 'utf-8').trim().split('\n').filter(Boolean);
+          tail = formatSessionTail(lines.slice(-tailLines));
+        } catch (err) {
+          tail = '(could not read session file: ' + err.message + ')';
+        }
+        return res.json({ prompt: config.getPrompt('session-resume', { SESSION_TAIL: tail }) });
+      }
+      if (mode === 'transition') {
+        return res.json({ prompt: config.getPrompt('session-transition', {}) });
+      }
+      return res.status(400).json({ error: 'Unknown mode. Use info, transition, or resume.' });
     } catch (err) {
-      logger.error('Smart compaction error', { module: 'routes', err: err.message });
       res.status(500).json({ error: err.message });
     }
+  });
+
+  app.post('/api/sessions/:sessionId/restart', async (req, res) => {
+    try {
+      const { sessionId } = req.params;
+      const tmux = tmuxName(sessionId);
+      if (await tmuxExists(tmux)) {
+        await safe.tmuxKill(tmux);
+      }
+      const session = db.getSession(sessionId);
+      if (!session) return res.status(404).json({ error: 'session not found' });
+      const dbProj = db.getProject(session.project_name);
+      const cwd = dbProj ? dbProj.path : WORKSPACE;
+      safe.tmuxCreateClaude(tmux, cwd);
+      res.json({ ok: true, sessionId, tmux });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── File operations ─────────────────────────────────────────────────────
+
+  app.post('/api/mkdir', async (req, res) => {
+    try {
+      const dirPath = req.body.path;
+      if (!dirPath || dirPath === '/') return res.status(400).json({ error: 'path required' });
+      await mkdir(dirPath, { recursive: true });
+      res.json({ ok: true, path: dirPath });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/upload', express.raw({ type: 'application/octet-stream', limit: '50mb' }), async (req, res) => {
+    try {
+      const targetDir = req.headers['x-upload-dir'];
+      const fileName = req.headers['x-upload-filename'];
+      if (!targetDir || !fileName) return res.status(400).json({ error: 'x-upload-dir and x-upload-filename headers required' });
+      const filePath = join(targetDir, basename(fileName));
+      await writeFile(filePath, req.body);
+      res.json({ ok: true, path: filePath });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // ── Project config ──────────────────────────────────────────────────────
+
+  app.get('/api/projects/:name/config', (req, res) => {
+    const project = db.getProject(req.params.name);
+    if (!project) return res.status(404).json({ error: 'project not found' });
+    res.json({ name: project.name, state: project.state || 'active', notes: project.notes || '', path: project.path });
+  });
+
+  app.put('/api/projects/:name/config', (req, res) => {
+    const project = db.getProject(req.params.name);
+    if (!project) return res.status(404).json({ error: 'project not found' });
+    const { name, state, notes } = req.body;
+    if (name && name !== project.name) db.renameProject(project.id, name);
+    if (state) db.setProjectState(project.id, state);
+    if (notes !== undefined) db.setProjectNotes(project.id, notes);
+    res.json({ ok: true });
   });
 
   // ── Health endpoint ───────────────────────────────────────────────────────
@@ -1159,6 +1230,27 @@ function registerCoreRoutes(
   registerQuorumRoutes(app);
 
   return { checkAuthStatus, trustDir };
+}
+
+function formatSessionTail(lines) {
+  const turns = [];
+  for (const line of lines) {
+    try {
+      const entry = JSON.parse(line);
+      if (entry.type === 'user' && entry.message?.content) {
+        const text = Array.isArray(entry.message.content)
+          ? entry.message.content.filter(b => b.type === 'text').map(b => b.text).join('\n')
+          : String(entry.message.content);
+        if (text.trim()) turns.push(`**User:** ${text.trim()}`);
+      } else if (entry.type === 'assistant' && entry.message?.content) {
+        const text = Array.isArray(entry.message.content)
+          ? entry.message.content.filter(b => b.type === 'text').map(b => b.text).join('\n')
+          : String(entry.message.content);
+        if (text.trim()) turns.push(`**Assistant:** ${text.trim()}`);
+      }
+    } catch { /* skip malformed lines */ }
+  }
+  return turns.join('\n\n');
 }
 
 module.exports = registerCoreRoutes;

@@ -19,6 +19,11 @@ try {
   /* column exists */
 }
 try {
+  db.exec("ALTER TABLE projects ADD COLUMN state TEXT DEFAULT 'active'");
+} catch (_e) {
+  /* column exists */
+}
+try {
   db.exec("ALTER TABLE sessions ADD COLUMN notes TEXT DEFAULT ''");
 } catch (_e) {
   /* column exists */
@@ -52,6 +57,7 @@ db.exec(`
     name TEXT NOT NULL UNIQUE,
     path TEXT NOT NULL UNIQUE,
     notes TEXT DEFAULT '',
+    state TEXT DEFAULT 'active',
     created_at TEXT DEFAULT (datetime('now'))
   );
 
@@ -141,6 +147,8 @@ const stmts = {
 
   getProjectNotes: db.prepare('SELECT notes FROM projects WHERE id = ?'),
   setProjectNotes: db.prepare('UPDATE projects SET notes = ? WHERE id = ?'),
+  setProjectState: db.prepare('UPDATE projects SET state = ? WHERE id = ?'),
+  renameProject: db.prepare('UPDATE projects SET name = ? WHERE id = ?'),
 
   getTasks: db.prepare('SELECT * FROM tasks WHERE project_id = ? ORDER BY created_at ASC'),
   addTask: db.prepare('INSERT INTO tasks (project_id, text, created_by) VALUES (?, ?, ?)'),
@@ -227,6 +235,12 @@ module.exports = {
   },
   setProjectNotes(projectId, notes) {
     stmts.setProjectNotes.run(notes, projectId);
+  },
+  setProjectState(projectId, state) {
+    stmts.setProjectState.run(state, projectId);
+  },
+  renameProject(projectId, name) {
+    stmts.renameProject.run(name, projectId);
   },
   getSessionNotes(sessionId) {
     const row = stmts.getSessionNotes.get(sessionId);

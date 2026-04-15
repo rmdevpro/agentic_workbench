@@ -483,6 +483,11 @@
         <div id="message-list" style="font-size:12px;color:var(--text-secondary)">No messages yet</div>
       </div>
       <div id="panel-files" class="panel-section">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:4px;gap:4px">
+          <button onclick="fileBrowserNewFolder()" style="background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);cursor:pointer;font-size:11px;padding:2px 8px" title="New folder">+ Folder</button>
+          <button onclick="document.getElementById('file-upload-input').click()" style="background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);cursor:pointer;font-size:11px;padding:2px 8px" title="Upload file">Upload</button>
+          <input id="file-upload-input" type="file" multiple style="display:none" onchange="fileBrowserUpload(this.files)">
+        </div>
         <div id="file-browser-tree" style="overflow-y:auto;background:var(--bg-primary);border:1px solid var(--border);border-radius:6px;padding:4px;flex:1;min-height:0"></div>
         <div id="file-viewer" style="display:none;margin-top:8px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
@@ -573,28 +578,22 @@
       </div>
 
       <div class="settings-group">
-        <h3>Quorum</h3>
+        <h3>API Keys</h3>
+        <p style="font-size:11px;color:var(--text-muted);margin:0 0 8px">Keys for external services. CLI keys enable quorum participation. Deepgram enables voice input.</p>
         <div class="setting-row">
-          <label>Lead Model (CLI)</label>
-          <select id="setting-quorum-lead" onchange="saveSetting('quorum_lead_model', this.value)">
-            <option value="opus">Opus</option>
-            <option value="sonnet">Sonnet</option>
-            <option value="haiku">Haiku</option>
-          </select>
+          <label>Gemini API Key</label>
+          <input id="setting-gemini-key" type="password" placeholder="Enter key..." style="flex:1;padding:4px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;font-family:monospace"
+            onchange="saveSetting('gemini_api_key', this.value)">
         </div>
         <div class="setting-row">
-          <label>Fixed Junior</label>
-          <select id="setting-quorum-fixed" onchange="saveSetting('quorum_fixed_junior', this.value)">
-            <option value="sonnet">Sonnet</option>
-            <option value="opus">Opus</option>
-            <option value="haiku">Haiku</option>
-          </select>
+          <label>OpenAI / Codex API Key</label>
+          <input id="setting-codex-key" type="password" placeholder="Enter key..." style="flex:1;padding:4px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;font-family:monospace"
+            onchange="saveSetting('codex_api_key', this.value)">
         </div>
-        <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:4px">
-          <label>Additional Juniors <span style="font-size:10px;color:var(--text-muted)">(JSON array)</span></label>
-          <textarea id="setting-quorum-additional" style="width:100%;min-height:60px;padding:6px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:11px;font-family:monospace;outline:none"
-            onchange="saveSetting('quorum_additional_juniors', JSON.parse(this.value))"
-            placeholder='[{"model":"gpt-5","provider":"openai","base_url":"https://api.openai.com","api_key":"sk-..."}]'></textarea>
+        <div class="setting-row">
+          <label>Deepgram API Key</label>
+          <input id="setting-deepgram-key" type="password" placeholder="Enter key..." style="flex:1;padding:4px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;font-family:monospace"
+            onchange="saveSetting('deepgram_api_key', this.value)">
         </div>
       </div>
 
@@ -664,7 +663,7 @@
     let projectState = [];
     let sessionFilter = 'active';
     let sessionSortBy = 'date';
-    const expandedProjects = new Set(); // Track which projects are expanded (default: all collapsed)
+    const expandedProjects = new Set(JSON.parse(localStorage.getItem('expandedProjects') || '[]'));
     const HEARTBEAT_MS = 30000;
     const REFRESH_MS = 30000;
     const MAX_RECONNECT_DELAY = 30000;
@@ -734,9 +733,10 @@
           }
         }
 
-        // Auto-expand all projects on first load
+        // Auto-expand all projects on first load (only if nothing persisted)
         if (expandedProjects.size === 0 && projectState.length > 0) {
           for (const p of projectState) expandedProjects.add(p.name);
+          localStorage.setItem('expandedProjects', JSON.stringify([...expandedProjects]));
         }
 
         renderSidebar();
@@ -748,7 +748,7 @@
     function renderSidebar() {
       // Skip re-render if state hasn't changed (prevents DOM detach during clicks)
       const stateHash = JSON.stringify(projectState.map(p => ({
-        n: p.name, m: p.missing,
+        n: p.name, m: p.missing, st: p.state,
         s: p.sessions.map(s => ({ id: s.id, name: s.name, active: s.active, state: s.state, mc: s.messageCount, ts: s.timestamp }))
       }))) + sessionFilter + sessionSortBy + activeTabId + [...tabs.keys()].join(',');
       if (stateHash === renderSidebar._lastHash) return;
@@ -758,6 +758,13 @@
       container.innerHTML = '';
 
       for (const project of projectState) {
+        // Filter projects by state
+        const projState = project.state || 'active';
+        if (sessionFilter === 'active' && projState !== 'active') continue;
+        if (sessionFilter === 'archived' && projState !== 'archived') continue;
+        if (sessionFilter === 'all' && projState === 'hidden') continue;
+        if (sessionFilter === 'hidden' && projState !== 'hidden') continue;
+
         const group = document.createElement('div');
         group.className = 'project-group';
 
@@ -776,14 +783,19 @@
           <span class="arrow">&#9660;</span>
           <span>${escHtml(project.name)}</span>
           <span class="count">${filteredCount}</span>
+          <button class="term-btn proj-config-btn" title="Project config" style="font-size:12px">&#9998;</button>
           <button class="term-btn new-btn" title="New session">+</button>
           <button class="term-btn" title="Open terminal">&gt;_</button>
         `;
+        header.querySelector('.proj-config-btn').addEventListener('click', (e) => {
+          e.stopPropagation();
+          openProjectConfig(project.name);
+        });
         header.querySelector('.new-btn').addEventListener('click', (e) => {
           e.stopPropagation();
           createSession(project.name);
         });
-        header.querySelector('.term-btn:not(.new-btn)').addEventListener('click', (e) => {
+        header.querySelector('.term-btn:not(.new-btn):not(.proj-config-btn)').addEventListener('click', (e) => {
           e.stopPropagation();
           openTerminal(project.name);
         });
@@ -793,6 +805,7 @@
           } else {
             expandedProjects.add(project.name);
           }
+          localStorage.setItem('expandedProjects', JSON.stringify([...expandedProjects]));
           header.classList.toggle('collapsed');
           sessionList.classList.toggle('collapsed');
         });
@@ -835,6 +848,7 @@
               <span class="session-name">${escHtml(session.name)}</span>
               <span class="session-actions">
                 ${summaryBtn}
+                <button class="session-action-btn restart" title="Restart tmux" data-id="${escHtml(session.id)}">&#8635;</button>
                 <button class="session-action-btn rename" title="Config" data-id="${escHtml(session.id)}">&#9998;</button>
                 ${archiveBtn}
               </span>
@@ -856,6 +870,14 @@
           item.querySelector('.rename').addEventListener('click', (e) => {
             e.stopPropagation();
             renameSession(session.id, session.name);
+          });
+          item.querySelector('.restart').addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (!confirm('Restart the tmux session? The Claude session will be preserved.')) return;
+            try {
+              await fetch(`/api/sessions/${session.id}/restart`, { method: 'POST' });
+              loadState();
+            } catch (err) { alert('Restart failed: ' + err.message); }
           });
           const archEl = item.querySelector('.archive, .unarchive');
           if (archEl) {
@@ -1311,6 +1333,62 @@
       renderTabs();
     }
 
+    async function openProjectConfig(projectName) {
+      const overlayId = 'proj-config-' + Date.now();
+      const overlay = document.createElement('div');
+      overlay.id = overlayId;
+      overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center';
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+      let config = { name: projectName, state: 'active', notes: '' };
+      try {
+        const res = await fetch(`/api/projects/${encodeURIComponent(projectName)}/config`);
+        config = await res.json();
+      } catch {}
+
+      overlay.innerHTML = `
+        <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:24px;width:400px" onclick="event.stopPropagation()">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <h3 style="font-size:14px;margin:0">Project Config</h3>
+            <button style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px" title="Close" onclick="document.getElementById('${overlayId}').remove()">&#10005;</button>
+          </div>
+          <div style="margin-bottom:12px">
+            <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Name</label>
+            <input id="proj-cfg-name" type="text" value="${escHtml(config.name || '')}" style="width:100%;padding:6px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box">
+          </div>
+          <div style="margin-bottom:12px">
+            <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">State</label>
+            <select id="proj-cfg-state" style="width:100%;padding:6px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:13px">
+              <option value="active" ${config.state === 'active' ? 'selected' : ''}>Active</option>
+              <option value="archived" ${config.state === 'archived' ? 'selected' : ''}>Archived</option>
+              <option value="hidden" ${config.state === 'hidden' ? 'selected' : ''}>Hidden</option>
+            </select>
+          </div>
+          <div style="margin-bottom:16px">
+            <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Project Notes</label>
+            <textarea id="proj-cfg-notes" style="width:100%;min-height:80px;padding:6px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;font-family:inherit;resize:vertical;outline:none;box-sizing:border-box" placeholder="Notes about this project...">${escHtml(config.notes || '')}</textarea>
+          </div>
+          <button onclick="saveProjectConfig('${escHtml(projectName)}', '${overlayId}')" style="padding:6px 16px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:13px">Save</button>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+    }
+
+    async function saveProjectConfig(projectName, overlayId) {
+      const config = {
+        name: document.getElementById('proj-cfg-name').value.trim(),
+        state: document.getElementById('proj-cfg-state').value,
+        notes: document.getElementById('proj-cfg-notes').value,
+      };
+      await fetch(`/api/projects/${encodeURIComponent(projectName)}/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      });
+      document.getElementById(overlayId).remove();
+      loadState();
+    }
+
     async function archiveSession(sessionId, archived) {
       try {
         await fetch(`/api/sessions/${sessionId}/archive`, {
@@ -1570,6 +1648,58 @@
       document.getElementById('file-viewer-content').value = '';
     }
 
+    function getSelectedFileBrowserDir() {
+      // Find the last clicked/expanded directory in the file browser tree
+      const treeEl = document.getElementById('file-browser-tree');
+      const expanded = treeEl.querySelectorAll('li.directory.expanded > a');
+      if (expanded.length > 0) return expanded[expanded.length - 1].getAttribute('rel');
+      // Fallback to first mount root
+      const firstMount = treeEl.querySelector('[data-initialized] li.directory > a');
+      if (firstMount) return firstMount.getAttribute('rel');
+      return null;
+    }
+
+    async function fileBrowserNewFolder() {
+      const targetDir = getSelectedFileBrowserDir();
+      if (!targetDir) return alert('Expand a directory in the file browser first');
+      const name = prompt('Folder name:');
+      if (!name) return;
+      try {
+        const res = await fetch('/api/mkdir', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: targetDir.replace(/\/$/, '') + '/' + name }),
+        });
+        const data = await res.json();
+        if (data.error) return alert('Error: ' + data.error);
+        // Refresh by reinitializing the file browser
+        fileBrowserInitialized = false;
+        loadFiles();
+      } catch (err) { alert('Error: ' + err.message); }
+    }
+
+    async function fileBrowserUpload(files) {
+      const targetDir = getSelectedFileBrowserDir();
+      if (!targetDir) return alert('Expand a directory in the file browser first');
+      for (const file of files) {
+        try {
+          const buf = await file.arrayBuffer();
+          await fetch('/api/upload', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/octet-stream',
+              'X-Upload-Dir': targetDir,
+              'X-Upload-Filename': file.name,
+            },
+            body: buf,
+          });
+        } catch (err) { alert('Upload failed: ' + err.message); }
+      }
+      document.getElementById('file-upload-input').value = '';
+      fileBrowserInitialized = false;
+      loadFiles();
+    }
+
     // Reload panel when switching tabs
     const origSwitchTab = switchTab;
     switchTab = function(tabId) {
@@ -1770,7 +1900,10 @@
           <span class="context-bar"><span class="fill ${fillClass}" style="width:${pct}%"></span></span>
           <span class="value">${pct.toFixed(0)}%</span>
         </span>
-        <span class="status-item" style="margin-left:auto"><span class="value">${tab.status}</span></span>
+        <span class="status-item" style="margin-left:auto">
+          <button id="mic-btn" onclick="toggleVoice()" style="background:none;border:1px solid var(--border);border-radius:4px;color:var(--text-muted);cursor:pointer;font-size:14px;padding:2px 6px;margin-right:8px" title="Voice input (Deepgram)">&#127908;</button>
+          <span class="value">${tab.status}</span>
+        </span>
       `;
     }
 
@@ -1800,6 +1933,97 @@
       pollTokenUsage();
     };
 
+
+    // ── Voice Input ──────────────────────────────────────────────────────────
+
+    let voiceWs = null;
+    let voiceStream = null;
+    let voiceRecorder = null;
+    let voiceActive = false;
+
+    async function toggleVoice() {
+      if (voiceActive) {
+        stopVoice();
+      } else {
+        await startVoice();
+      }
+    }
+
+    async function startVoice() {
+      if (!activeTabId || !tabs.has(activeTabId)) return;
+      try {
+        voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (err) {
+        alert('Microphone access denied: ' + err.message);
+        return;
+      }
+
+      const wsUrl = `ws://${window.location.host}/ws/voice`;
+      voiceWs = new WebSocket(wsUrl);
+
+      voiceWs.onopen = () => {
+        voiceActive = true;
+        updateMicButton();
+        // Start recording and streaming audio
+        voiceRecorder = new MediaRecorder(voiceStream, { mimeType: 'audio/webm;codecs=opus' });
+        voiceRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0 && voiceWs.readyState === WebSocket.OPEN) {
+            voiceWs.send(e.data);
+          }
+        };
+        voiceRecorder.start(250); // send chunks every 250ms
+      };
+
+      voiceWs.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'transcript' && msg.speech_final && msg.text) {
+            // Send transcribed text to the active terminal
+            const tab = tabs.get(activeTabId);
+            if (tab && tab.ws && tab.ws.readyState === WebSocket.OPEN) {
+              tab.ws.send(msg.text);
+            }
+          }
+          if (msg.type === 'error') {
+            alert('Voice: ' + msg.message);
+            stopVoice();
+          }
+        } catch {}
+      };
+
+      voiceWs.onclose = () => {
+        stopVoice();
+      };
+
+      voiceWs.onerror = () => {
+        stopVoice();
+      };
+    }
+
+    function stopVoice() {
+      voiceActive = false;
+      if (voiceRecorder && voiceRecorder.state !== 'inactive') voiceRecorder.stop();
+      if (voiceStream) voiceStream.getTracks().forEach(t => t.stop());
+      if (voiceWs && voiceWs.readyState === WebSocket.OPEN) voiceWs.close();
+      voiceRecorder = null;
+      voiceStream = null;
+      voiceWs = null;
+      updateMicButton();
+    }
+
+    function updateMicButton() {
+      const btn = document.getElementById('mic-btn');
+      if (!btn) return;
+      if (voiceActive) {
+        btn.style.color = '#ff4444';
+        btn.style.borderColor = '#ff4444';
+        btn.title = 'Stop voice input';
+      } else {
+        btn.style.color = 'var(--text-muted)';
+        btn.style.borderColor = 'var(--border)';
+        btn.title = 'Voice input (Deepgram)';
+      }
+    }
 
     async function saveGlobalClaudeMd() {
       await fetch('/api/claude-md/global', {
@@ -2043,6 +2267,7 @@
           <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
             <input id="picker-path" type="text" readonly placeholder="Click a folder above" style="flex:1;padding:6px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;font-family:monospace">
             <input id="picker-name" type="text" placeholder="Name" style="width:120px;padding:6px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px">
+            <button style="padding:6px 12px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);cursor:pointer;font-size:12px" onclick="pickerNewFolder()">+ Folder</button>
             <button style="padding:6px 16px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:13px" onclick="pickerSelect('${overlayId}')">Add</button>
           </div>
         </div>
@@ -2051,7 +2276,7 @@
 
       // Initialize jQuery File Tree
       $('#jqft-tree').fileTree({
-        root: (window._workspace || '/workspace/projects').replace(/\/?$/, '/'),
+        root: (window._workspace || '/mnt/workspace').replace(/\/?$/, '/'),
         script: '/api/jqueryfiletree',
         folderEvent: 'click',
         expandSpeed: 200,
@@ -2090,6 +2315,39 @@
       } catch (err) { alert('Error: ' + err.message); }
     }
 
+    async function pickerNewFolder() {
+      const parentPath = document.getElementById('picker-path').value.trim() || (window._workspace || '/mnt/workspace');
+      const name = prompt('New folder name:');
+      if (!name) return;
+      const newPath = parentPath.replace(/\/$/, '') + '/' + name;
+      try {
+        const res = await fetch('/api/mkdir', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: newPath }),
+        });
+        const data = await res.json();
+        if (data.error) return alert('Error: ' + data.error);
+        // Refresh the tree and select the new folder
+        $('#jqft-tree').html('');
+        $('#jqft-tree').fileTree({
+          root: (window._workspace || '/mnt/workspace').replace(/\/?$/, '/'),
+          script: '/api/jqueryfiletree',
+          folderEvent: 'click',
+          expandSpeed: 200,
+          collapseSpeed: 200,
+          multiFolder: false,
+          onlyFolders: true,
+        }, function(path) {
+          document.getElementById('picker-path').value = path;
+          document.getElementById('picker-name').value = path.replace(/\/$/, '').split('/').filter(Boolean).pop();
+        });
+        // Set the new folder as selected
+        document.getElementById('picker-path').value = newPath + '/';
+        document.getElementById('picker-name').value = name;
+      } catch (err) { alert('Error: ' + err.message); }
+    }
+
     function switchSettingsTab(tab) {
       document.querySelectorAll('[data-settings-tab]').forEach(b => b.classList.toggle('active', b.dataset.settingsTab === tab));
       document.getElementById('settings-general').style.display = tab === 'general' ? '' : 'none';
@@ -2111,9 +2369,9 @@
         if (s.theme) document.getElementById('setting-theme').value = s.theme;
         if (s.font_size) document.getElementById('setting-font-size').value = s.font_size;
         if (s.font_family) document.getElementById('setting-font-family').value = s.font_family;
-        if (s.quorum_lead_model) document.getElementById('setting-quorum-lead').value = s.quorum_lead_model;
-        if (s.quorum_fixed_junior) document.getElementById('setting-quorum-fixed').value = s.quorum_fixed_junior;
-        if (s.quorum_additional_juniors) document.getElementById('setting-quorum-additional').value = JSON.stringify(s.quorum_additional_juniors, null, 2);
+        if (s.gemini_api_key) document.getElementById('setting-gemini-key').value = s.gemini_api_key;
+        if (s.codex_api_key) document.getElementById('setting-codex-key').value = s.codex_api_key;
+        if (s.deepgram_api_key) document.getElementById('setting-deepgram-key').value = s.deepgram_api_key;
       } catch {}
       // Load global CLAUDE.md
       try {

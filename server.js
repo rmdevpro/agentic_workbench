@@ -16,10 +16,10 @@ const { fireEvent } = require('./webhooks');
 const createKeepalive = require('./keepalive');
 const createTmuxLifecycle = require('./tmux-lifecycle');
 const createSessionResolver = require('./session-resolver');
-const createCompaction = require('./compaction');
 const createWatchers = require('./watchers');
 const createWsTerminal = require('./ws-terminal');
 const registerCoreRoutes = require('./routes');
+const { handleVoiceConnection } = require('./voice');
 
 // ── Configuration ───────────────────────────────────────────────────────────
 
@@ -52,17 +52,6 @@ const keepalive = createKeepalive({ safe, config, logger });
 
 const tmux = createTmuxLifecycle({ safe, MAX_TMUX_SESSIONS, TMUX_CLEANUP_DELAY, logger });
 
-const compaction = createCompaction({
-  db,
-  safe,
-  config,
-  sessionUtils,
-  tmuxName: tmux.tmuxName,
-  tmuxExists: tmux.tmuxExists,
-  sleep: tmux.sleep,
-  logger,
-});
-
 const resolver = createSessionResolver({
   db,
   safe,
@@ -79,7 +68,6 @@ const watchers = createWatchers({
   config,
   sessionUtils,
   sessionWsClients: sharedState.sessionWsClients,
-  checkCompactionNeeds: compaction.checkCompactionNeeds,
   tmuxName: tmux.tmuxName,
   tmuxExists: tmux.tmuxExists,
   CLAUDE_HOME,
@@ -102,13 +90,14 @@ const terminal = createWsTerminal({
   stopJsonlWatcher: watchers.stopJsonlWatcher,
 });
 
-tmux.setOnSessionKilled((tmuxSession) => compaction.deleteCompactionState(tmuxSession));
+// Smart compaction removed — no kill callback needed
 
 // ── Express setup ───────────────────────────────────────────────────────────
 
 const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ noServer: true });
+const voiceWss = new WebSocketServer({ noServer: true });
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -137,7 +126,6 @@ const { checkAuthStatus } = registerCoreRoutes(app, {
   tmuxExists: tmux.tmuxExists,
   enforceTmuxLimit: tmux.enforceTmuxLimit,
   resolveSessionId: resolver.resolveSessionId,
-  runSmartCompaction: compaction.runSmartCompaction,
   getBrowserCount: sharedState.getBrowserCount,
   CLAUDE_HOME,
   WORKSPACE,
@@ -149,6 +137,14 @@ const { checkAuthStatus } = registerCoreRoutes(app, {
 
 server.on('upgrade', (req, socket, head) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
+
+  if (url.pathname === '/ws/voice') {
+    voiceWss.handleUpgrade(req, socket, head, (ws) => {
+      handleVoiceConnection(ws);
+    });
+    return;
+  }
+
   const match = url.pathname.match(/^\/ws\/(.+)$/);
   if (!match) {
     socket.destroy();
@@ -188,7 +184,6 @@ if (require.main === module) {
       server.listen(PORT, '0.0.0.0', () => {
         logger.info('Blueprint running', { module: 'server', port: PORT });
         keepalive.start();
-        watchers.startCompactionMonitor();
         watchers.startSettingsWatcher();
 
         watchers.registerMcpServer().catch((err) =>
