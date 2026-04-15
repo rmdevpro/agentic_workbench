@@ -30,9 +30,10 @@ function freshSafe(env = {}) {
 }
 
 test('SAF-01: resolveProjectPath joins WORKSPACE correctly', () => {
-  const { safe, restore } = freshSafe({ WORKSPACE: '/tmp/ws' });
+  const { safe, restore } = freshSafe();
   try {
-    assert.equal(safe.resolveProjectPath('proj'), path.resolve('/tmp/ws', 'proj'));
+    // WORKSPACE is hardcoded to /mnt/workspace
+    assert.equal(safe.resolveProjectPath('proj'), path.resolve('/mnt/workspace', 'proj'));
   } finally {
     restore();
   }

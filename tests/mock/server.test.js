@@ -22,7 +22,7 @@ test('ENG-20: all application modules importable', () => {
     'watchers',
     'ws-terminal',
     'keepalive',
-    'compaction',
+    'voice',
     'quorum',
     'webhooks',
     'shared-state',
@@ -47,7 +47,7 @@ test('ENG-09: no bare catch {} blocks in application code', () => {
   const files = [
     'server.js',
     'routes.js',
-    'compaction.js',
+    'voice.js',
     'watchers.js',
     'tmux-lifecycle.js',
     'ws-terminal.js',
@@ -77,7 +77,7 @@ test('ENG-09: no bare catch {} blocks in application code', () => {
 
 test('ENG-12: no blocking I/O in async functions', () => {
   const asyncFiles = [
-    'compaction.js',
+    'voice.js',
     'watchers.js',
     'session-resolver.js',
     'keepalive.js',

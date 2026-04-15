@@ -644,16 +644,7 @@ test('token usage success path', async () => {
   });
 });
 
-test('smart compaction success path', async () => {
-  await withFullServer(async ({ port, db }) => {
-    const p = db.ensureProject('cmp', '/workspace/cmp');
-    db.upsertSession('cmp1', p.id, 'Cmp');
-    const r = await req(port, 'POST', '/api/sessions/cmp1/smart-compact', { project: 'cmp' });
-    assert.equal(r.status, 200);
-    const body = await r.json();
-    assert.equal(body.compacted, true);
-  });
-});
+// smart compaction test removed — feature stripped (#32)
 
 test('keepalive status success', async () => {
   await withFullServer(async ({ port }) => {
@@ -795,23 +786,7 @@ test('tokens invalid session ID returns 400', async () => {
   });
 });
 
-test('smart-compact missing project returns 400', async () => {
-  await withFullServer(async ({ port, db }) => {
-    const p = db.ensureProject('cmp2', '/workspace/cmp2');
-    db.upsertSession('cmp2', p.id, 'Cmp');
-    const r = await req(port, 'POST', '/api/sessions/cmp2/smart-compact', {});
-    assert.equal(r.status, 400);
-    const body = await r.json();
-    assert.ok(body.error.includes('project'));
-  });
-});
-
-test('smart-compact invalid session ID returns 400', async () => {
-  await withFullServer(async ({ port }) => {
-    const r = await req(port, 'POST', '/api/sessions/bad!id/smart-compact', { project: 'p' });
-    assert.equal(r.status, 400);
-  });
-});
+// smart-compact tests removed — feature stripped (#32)
 
 // -- Webhook route tests via routes.js registration --
 
@@ -1451,9 +1426,6 @@ test('SRCH-02: GET /api/search returns 500 when searchSessions throws', async ()
     tmuxExists: async () => false,
     enforceTmuxLimit: async () => {},
     resolveSessionId: async () => {},
-    runSmartCompaction: async () => {
-      throw new Error('compact exploded');
-    },
     getBrowserCount: () => 0,
     CLAUDE_HOME: path.join(os.tmpdir(), 'no-creds-' + Date.now()),
     WORKSPACE: WORKSPACE2,
@@ -1479,11 +1451,7 @@ test('SRCH-02: GET /api/search returns 500 when searchSessions throws', async ()
     assert.equal(r3.input_tokens, 0);
     assert.equal(r3.model, null);
 
-    // smart-compact 500
-    const r4 = await req(port, 'POST', '/api/sessions/err1/smart-compact', {
-      project: 'test-project',
-    });
-    assert.equal(r4.status, 500);
+    // smart-compact removed — feature stripped (#32)
   });
 });
 

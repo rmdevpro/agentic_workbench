@@ -47,7 +47,7 @@ function makeEnv(overrides = {}) {
       }),
     },
     sessionWsClients: swc,
-    checkCompactionNeeds: async (...a) => {
+    _checkCompactionNeeds_removed: async (...a) => {
       ccCalls.push(a);
     },
     tmuxName: (id) => `bp_${id}`,
@@ -91,7 +91,6 @@ test('WAT-03: debounces rapid changes into one callback', async () => {
     await active[0].fn();
     assert.equal(wsMessages.length, 1);
     assert.equal(wsMessages[0].type, 'token_update');
-    assert.equal(env.ccCalls.length, 1);
   } finally {
     env.cleanup();
   }
@@ -184,7 +183,6 @@ test('WAT: JSONL watcher callback handles ENOENT gracefully', async () => {
       },
     },
     sessionWsClients: new Map([['bp_err1', ws]]),
-    checkCompactionNeeds: async () => {},
     tmuxName: (id) => `bp_${id}`,
     tmuxExists: async () => false,
     CLAUDE_HOME: '/tmp/claude',
@@ -242,7 +240,6 @@ test('WAT-SW-02: settings watcher sends update to connected websockets', async (
     config: { get: (k, fb) => fb },
     sessionUtils: { getTokenUsage: async () => ({}) },
     sessionWsClients: swc,
-    checkCompactionNeeds: async () => {},
     tmuxName: (id) => `bp_${id}`,
     tmuxExists: async () => false,
     CLAUDE_HOME: tmpClaudeHome,
@@ -278,7 +275,6 @@ test('WAT-SW-03: settings watcher handles invalid JSON gracefully', async () => 
     config: { get: (k, fb) => fb },
     sessionUtils: { getTokenUsage: async () => ({}) },
     sessionWsClients: swc,
-    checkCompactionNeeds: async () => {},
     tmuxName: (id) => `bp_${id}`,
     tmuxExists: async () => false,
     CLAUDE_HOME: tmpClaudeHome,
@@ -311,7 +307,6 @@ test('WAT-MCP-01: registerMcpServer creates settings.json when not present', asy
     config: { get: (k, fb) => fb },
     sessionUtils: { getTokenUsage: async () => ({}) },
     sessionWsClients: new Map(),
-    checkCompactionNeeds: async () => {},
     tmuxName: (id) => `bp_${id}`,
     tmuxExists: async () => false,
     CLAUDE_HOME: tmpClaudeHome,
@@ -348,7 +343,6 @@ test('WAT-MCP-02: registerMcpServer skips when already registered correctly', as
     config: { get: (k, fb) => fb },
     sessionUtils: { getTokenUsage: async () => ({}) },
     sessionWsClients: new Map(),
-    checkCompactionNeeds: async () => {},
     tmuxName: (id) => `bp_${id}`,
     tmuxExists: async () => false,
     CLAUDE_HOME: tmpClaudeHome,
@@ -380,7 +374,6 @@ test('WAT-MCP-03: registerMcpServer handles corrupt settings.json', async () => 
     config: { get: (k, fb) => fb },
     sessionUtils: { getTokenUsage: async () => ({}) },
     sessionWsClients: new Map(),
-    checkCompactionNeeds: async () => {},
     tmuxName: (id) => `bp_${id}`,
     tmuxExists: async () => false,
     CLAUDE_HOME: tmpClaudeHome,
@@ -416,7 +409,6 @@ test('WAT-TPD-01: trustProjectDirs creates .claude.json when not present', async
     config: { get: (k, fb) => fb },
     sessionUtils: { getTokenUsage: async () => ({}) },
     sessionWsClients: new Map(),
-    checkCompactionNeeds: async () => {},
     tmuxName: (id) => `bp_${id}`,
     tmuxExists: async () => false,
     CLAUDE_HOME: tmpClaudeHome,
@@ -456,7 +448,6 @@ test('WAT-TPD-02: trustProjectDirs skips already trusted projects', async () => 
     config: { get: (k, fb) => fb },
     sessionUtils: { getTokenUsage: async () => ({}) },
     sessionWsClients: new Map(),
-    checkCompactionNeeds: async () => {},
     tmuxName: (id) => `bp_${id}`,
     tmuxExists: async () => false,
     CLAUDE_HOME: tmpClaudeHome,
@@ -492,7 +483,6 @@ test('WAT-TPD-03: trustProjectDirs handles corrupt .claude.json', async () => {
     config: { get: (k, fb) => fb },
     sessionUtils: { getTokenUsage: async () => ({}) },
     sessionWsClients: new Map(),
-    checkCompactionNeeds: async () => {},
     tmuxName: (id) => `bp_${id}`,
     tmuxExists: async () => false,
     CLAUDE_HOME: tmpClaudeHome,
@@ -523,7 +513,6 @@ test('WAT-ES-01: ensureSettings creates settings.json when missing', async () =>
     config: { get: (k, fb) => fb },
     sessionUtils: { getTokenUsage: async () => ({}) },
     sessionWsClients: new Map(),
-    checkCompactionNeeds: async () => {},
     tmuxName: (id) => `bp_${id}`,
     tmuxExists: async () => false,
     CLAUDE_HOME: tmpClaudeHome,
@@ -556,7 +545,6 @@ test('WAT-ES-02: ensureSettings does nothing when settings.json already exists',
     config: { get: (k, fb) => fb },
     sessionUtils: { getTokenUsage: async () => ({}) },
     sessionWsClients: new Map(),
-    checkCompactionNeeds: async () => {},
     tmuxName: (id) => `bp_${id}`,
     tmuxExists: async () => false,
     CLAUDE_HOME: tmpClaudeHome,
@@ -595,7 +583,6 @@ test('WAT-TPD-04: trustProjectDirs warns on non-SyntaxError, non-ENOENT read fai
     config: { get: (k, fb) => fb },
     sessionUtils: { getTokenUsage: async () => ({}) },
     sessionWsClients: new Map(),
-    checkCompactionNeeds: async () => {},
     tmuxName: (id) => `bp_${id}`,
     tmuxExists: async () => false,
     CLAUDE_HOME: tmpClaudeHome,
@@ -643,7 +630,6 @@ test('WAT-TPD-05: trustProjectDirs logs error on write failure', async () => {
     config: { get: (k, fb) => fb },
     sessionUtils: { getTokenUsage: async () => ({}) },
     sessionWsClients: new Map(),
-    checkCompactionNeeds: async () => {},
     tmuxName: (id) => `bp_${id}`,
     tmuxExists: async () => false,
     CLAUDE_HOME: tmpClaudeHome,
@@ -686,7 +672,6 @@ test('WAT-ES-03: ensureSettings logs error on inner write failure (ENOENT path)'
     config: { get: (k, fb) => fb },
     sessionUtils: { getTokenUsage: async () => ({}) },
     sessionWsClients: new Map(),
-    checkCompactionNeeds: async () => {},
     tmuxName: (id) => `bp_${id}`,
     tmuxExists: async () => false,
     CLAUDE_HOME: tmpClaudeHome,
@@ -726,7 +711,6 @@ test('WAT-ES-04: ensureSettings logs error on non-ENOENT stat failure', async ()
     config: { get: (k, fb) => fb },
     sessionUtils: { getTokenUsage: async () => ({}) },
     sessionWsClients: new Map(),
-    checkCompactionNeeds: async () => {},
     tmuxName: (id) => `bp_${id}`,
     tmuxExists: async () => false,
     CLAUDE_HOME: tmpClaudeHome,
@@ -755,29 +739,4 @@ test('WAT-ES-04: ensureSettings logs error on non-ENOENT stat failure', async ()
   }
 });
 
-// ── startCompactionMonitor tests ───────────────────────────────────────────
-
-test('WAT-CM-01: startCompactionMonitor registers interval and is idempotent', () => {
-  const origSI = global.setInterval,
-    origCI = global.clearInterval;
-  const intervals = [];
-  global.setInterval = (fn, ms) => {
-    const h = { fn, ms };
-    intervals.push(h);
-    return h;
-  };
-  global.clearInterval = () => {};
-
-  const env = makeEnv({});
-  try {
-    env.w.startCompactionMonitor();
-    assert.equal(intervals.length, 1, 'Should register one interval');
-    // Calling again should be idempotent
-    env.w.startCompactionMonitor();
-    assert.equal(intervals.length, 1, 'Second call should not register another interval');
-  } finally {
-    global.setInterval = origSI;
-    global.clearInterval = origCI;
-    env.cleanup();
-  }
-});
+// startCompactionMonitor removed — smart compaction stripped (#32)

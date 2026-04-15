@@ -56,7 +56,8 @@ test('MCP tool list returns expected tools', async () => {
     const r = await (await req(port, 'GET', '/api/mcp/tools')).json();
     assert.ok(r.tools.length >= 14);
     assert.ok(r.tools.some((t) => t.name === 'blueprint_search_sessions'));
-    assert.ok(r.tools.some((t) => t.name === 'blueprint_smart_compaction'));
+    assert.ok(r.tools.some((t) => t.name === 'blueprint_session'));
+    assert.ok(r.tools.some((t) => t.name === 'blueprint_ask_cli'));
     assert.ok(r.tools.some((t) => t.name === 'blueprint_get_token_usage'));
   });
 });

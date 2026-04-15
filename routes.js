@@ -1103,14 +1103,15 @@ function registerCoreRoutes(
       const sessionFile = join(CLAUDE_HOME, 'projects', projectHash, `${sessionId}.jsonl`);
 
       if (mode === 'info') {
-        const { existsSync } = require('fs');
-        return res.json({ sessionId, sessionFile, exists: existsSync(sessionFile) });
+        let exists = false;
+        try { await stat(sessionFile); exists = true; } catch {}
+        return res.json({ sessionId, sessionFile, exists });
       }
       if (mode === 'resume') {
         let tail = '';
         try {
-          const { readFileSync } = require('fs');
-          const lines = readFileSync(sessionFile, 'utf-8').trim().split('\n').filter(Boolean);
+          const content = await readFile(sessionFile, 'utf-8');
+          const lines = content.trim().split('\n').filter(Boolean);
           tail = formatSessionTail(lines.slice(-tailLines));
         } catch (err) {
           tail = '(could not read session file: ' + err.message + ')';
