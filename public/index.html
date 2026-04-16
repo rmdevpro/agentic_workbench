@@ -1962,12 +1962,14 @@
         return;
       }
 
-      const wsUrl = `ws://${window.location.host}/ws/voice`;
+      voiceActive = true;
+      updateMicButton();
+
+      const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProto}//${window.location.host}/ws/voice`;
       voiceWs = new WebSocket(wsUrl);
 
       voiceWs.onopen = () => {
-        voiceActive = true;
-        updateMicButton();
         // Start recording and streaming audio
         voiceRecorder = new MediaRecorder(voiceStream, { mimeType: 'audio/webm;codecs=opus' });
         voiceRecorder.ondataavailable = (e) => {
