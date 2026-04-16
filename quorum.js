@@ -64,8 +64,10 @@ function buildCliArgs(cli, prompt, model) {
 
 function getConfiguredCLIs() {
   const clis = ['claude']; // always included
-  const geminiKey = db.getSetting('gemini_api_key', '');
-  const codexKey = db.getSetting('codex_api_key', '');
+  let geminiKey = db.getSetting('gemini_api_key', '');
+  let codexKey = db.getSetting('codex_api_key', '');
+  try { geminiKey = JSON.parse(geminiKey); } catch {}
+  try { codexKey = JSON.parse(codexKey); } catch {}
   if (geminiKey) clis.push('gemini');
   if (codexKey) clis.push('codex');
   return clis;

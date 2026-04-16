@@ -17,7 +17,8 @@ const DEEPGRAM_WS_URL = 'wss://api.deepgram.com/v1/listen';
  * Bridges audio to Deepgram and returns transcripts.
  */
 function handleVoiceConnection(ws) {
-  const apiKey = db.getSetting('deepgram_api_key', '');
+  let apiKey = db.getSetting('deepgram_api_key', '');
+  try { apiKey = JSON.parse(apiKey); } catch {}  // stored JSON-stringified
   if (!apiKey) {
     ws.send(JSON.stringify({ type: 'error', message: 'Deepgram API key not configured. Add it in Settings > API Keys.' }));
     ws.close();
