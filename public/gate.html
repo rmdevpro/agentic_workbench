@@ -14,6 +14,7 @@
       --accent: #58a6ff;
       --accent-hover: #79c0ff;
       --border: #30363d;
+      --danger: #f85149;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -28,73 +29,42 @@
       justify-content: center;
     }
 
-    .gate-container {
-      max-width: 480px;
-      width: 90%;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 48px 40px;
-      text-align: center;
+    .bg {
+      position: fixed;
+      inset: 0;
+      background: url('/blueprint-preview.png') center/cover no-repeat;
+      filter: blur(4px) brightness(0.3);
+      z-index: 0;
     }
 
-    .logo {
-      font-size: 48px;
-      margin-bottom: 8px;
+    .card {
+      position: relative;
+      z-index: 1;
+      max-width: 460px;
+      width: 90%;
+      background: rgba(22, 27, 34, 0.95);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 44px 36px;
+      text-align: center;
+      backdrop-filter: blur(8px);
     }
 
     h1 {
       font-size: 28px;
       font-weight: 600;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
 
     .subtitle {
       color: var(--text-secondary);
-      font-size: 15px;
-      margin-bottom: 32px;
+      font-size: 14px;
+      margin-bottom: 28px;
       line-height: 1.5;
     }
 
-    .login-btn {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
-      width: 100%;
-      padding: 12px 24px;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text-secondary);
-      font-size: 15px;
-      cursor: not-allowed;
-      opacity: 0.5;
-      margin-bottom: 16px;
-    }
-
-    .login-btn svg {
-      width: 20px;
-      height: 20px;
-    }
-
-    .divider {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      margin: 24px 0;
-      color: var(--text-secondary);
-      font-size: 13px;
-    }
-
-    .divider::before, .divider::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: var(--border);
-    }
-
-    .info-box {
+    /* ── Template mode ── */
+    .steps {
       background: var(--bg-tertiary);
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -103,20 +73,20 @@
       margin-bottom: 24px;
     }
 
-    .info-box h3 {
+    .steps h3 {
       font-size: 14px;
       font-weight: 600;
       margin-bottom: 12px;
     }
 
-    .info-box ol {
+    .steps ol {
       padding-left: 20px;
       color: var(--text-secondary);
       font-size: 13px;
-      line-height: 1.8;
+      line-height: 2;
     }
 
-    .info-box code {
+    .steps code {
       background: var(--bg-primary);
       padding: 2px 6px;
       border-radius: 4px;
@@ -124,11 +94,11 @@
       color: var(--accent);
     }
 
-    .clone-btn {
+    .btn-primary {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      padding: 10px 24px;
+      padding: 11px 28px;
       background: var(--accent);
       color: #0d1117;
       border: none;
@@ -140,8 +110,43 @@
       transition: background 0.15s;
     }
 
-    .clone-btn:hover {
-      background: var(--accent-hover);
+    .btn-primary:hover { background: var(--accent-hover); }
+
+    /* ── Password mode ── */
+    .login-form { display: none; }
+
+    .form-group {
+      text-align: left;
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 10px 12px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-size: 14px;
+      outline: none;
+    }
+
+    .form-group input:focus {
+      border-color: var(--accent);
+    }
+
+    .login-error {
+      color: var(--danger);
+      font-size: 13px;
+      margin-bottom: 12px;
+      display: none;
     }
 
     .footer {
@@ -156,43 +161,95 @@
       text-decoration: none;
     }
 
-    .footer a:hover {
-      text-decoration: underline;
-    }
+    .footer a:hover { text-decoration: underline; }
+
+    .hidden { display: none !important; }
   </style>
 </head>
 <body>
-  <div class="gate-container">
-    <div class="logo">&#x1f3d7;&#xfe0f;</div>
+  <div class="bg"></div>
+  <div class="card">
     <h1>Blueprint</h1>
     <p class="subtitle">Web-based workbench for AI coding agents</p>
 
-    <button class="login-btn" disabled>
-      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-      Sign in with Google
-    </button>
+    <!-- Template mode content -->
+    <div id="template-content" class="hidden">
+      <div class="steps">
+        <h3>Get Started</h3>
+        <ol>
+          <li>Duplicate this Space to your account</li>
+          <li>Make your Space <strong>private</strong></li>
+          <li>Set <code>ANTHROPIC_API_KEY</code> as a Space Secret</li>
+          <li>Start coding</li>
+        </ol>
+      </div>
 
-    <div class="divider">Get your own instance</div>
+      <a class="btn-primary" href="https://huggingface.co/spaces/JmDrumsGarrison/blueprint?duplicate=true">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg>
+        Duplicate this Space
+      </a>
 
-    <div class="info-box">
-      <h3>Quick Start</h3>
-      <ol>
-        <li>Duplicate this Space to your account</li>
-        <li>Set <code>ANTHROPIC_API_KEY</code> as a Space Secret</li>
-        <li>Set <code>BYPASS_AUTH=true</code> as a Space Secret</li>
-        <li>Your instance is ready</li>
-      </ol>
+      <div class="footer">
+        Built by <a href="https://huggingface.co/JmDrumsGarrison">Joshua Morrissette</a>
+      </div>
     </div>
 
-    <a class="clone-btn" href="https://huggingface.co/spaces/JmDrumsGarrison/blueprint?duplicate=true">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg>
-      Duplicate this Space
-    </a>
-
-    <div class="footer">
-      Built by <a href="https://huggingface.co/JmDrumsGarrison">Joshua Morrissette</a><br>
-      <a href="https://github.com/JmDrumsGarrison/blueprint">View source on GitHub</a>
+    <!-- Password mode content -->
+    <div id="password-content" class="hidden">
+      <div class="login-form">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input type="text" id="username" autocomplete="username" autofocus>
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" autocomplete="current-password">
+        </div>
+        <div class="login-error" id="login-error">Invalid username or password</div>
+        <button class="btn-primary" style="width:100%;justify-content:center" onclick="doLogin()">Sign In</button>
+      </div>
     </div>
   </div>
+
+  <script>
+    // __GATE_MODE_INJECT__
+    const mode = typeof __GATE_MODE__ !== 'undefined' ? __GATE_MODE__ : 'template';
+
+    if (mode === 'template') {
+      document.getElementById('template-content').classList.remove('hidden');
+    } else if (mode === 'password') {
+      const pc = document.getElementById('password-content');
+      pc.classList.remove('hidden');
+      pc.querySelector('.login-form').style.display = 'block';
+    }
+
+    async function doLogin() {
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const errorEl = document.getElementById('login-error');
+      errorEl.style.display = 'none';
+
+      try {
+        const res = await fetch('/api/gate/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        });
+        if (res.ok) {
+          window.location.reload();
+        } else {
+          errorEl.style.display = 'block';
+        }
+      } catch {
+        errorEl.textContent = 'Connection error';
+        errorEl.style.display = 'block';
+      }
+    }
+
+    // Submit on Enter
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && mode === 'password') doLogin();
+    });
+  </script>
 </body>
 </html>

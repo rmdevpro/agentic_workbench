@@ -1,5 +1,7 @@
 'use strict';
 
+const crypto = require('crypto');
+const fs = require('fs');
 const express = require('express');
 const { createServer } = require('http');
 const { WebSocketServer } = require('ws');
@@ -102,15 +104,73 @@ const voiceWss = new WebSocketServer({ noServer: true });
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ── Auth gate — blocks all access unless BYPASS_AUTH is set ────────────────
-const BYPASS_AUTH = process.env.BYPASS_AUTH === 'true';
-if (!BYPASS_AUTH) {
-  app.use((req, res, next) => {
-    if (req.path === '/gate.html') return next();
-    if (req.path === '/api/health' || req.path === '/health') return next();
-    res.sendFile(join(__dirname, 'public', 'gate.html'));
-  });
+// ── Auth gate — auto-detects public HF Spaces + password mode ─────────────
+let authMode = 'open'; // 'template' | 'password' | 'open'
+const sessionTokens = new Set();
+
+async function detectAuthMode() {
+  const spaceId = process.env.SPACE_ID;
+  if (spaceId) {
+    try {
+      const res = await fetch(`https://huggingface.co/api/spaces/${spaceId}`);
+      const data = await res.json();
+      if (!data.private) { authMode = 'template'; return; }
+    } catch {
+      authMode = 'template'; return; // fail safe: assume public
+    }
+  }
+  if (process.env.BLUEPRINT_USER && process.env.BLUEPRINT_PASS) {
+    authMode = 'password';
+  } else {
+    authMode = 'open';
+  }
 }
+
+function parseCookie(req, name) {
+  const cookie = req.headers.cookie || '';
+  const match = cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
+  return match ? match[1] : null;
+}
+
+function serveGatePage(res) {
+  const html = fs.readFileSync(join(__dirname, 'public', 'gate.html'), 'utf-8');
+  res.type('html').send(html.replace(
+    '// __GATE_MODE_INJECT__',
+    `const __GATE_MODE__ = '${authMode}';`
+  ));
+}
+
+// Login endpoint for password mode
+app.post('/api/gate/login', (req, res) => {
+  if (authMode !== 'password') return res.status(404).json({ error: 'not found' });
+  const { username, password } = req.body;
+  if (username === process.env.BLUEPRINT_USER && password === process.env.BLUEPRINT_PASS) {
+    const token = crypto.randomBytes(32).toString('hex');
+    sessionTokens.add(token);
+    res.cookie('bp_session', token, { httpOnly: true, sameSite: 'lax' });
+    res.json({ success: true });
+  } else {
+    res.status(401).json({ error: 'Invalid credentials' });
+  }
+});
+
+app.use((req, res, next) => {
+  if (authMode === 'open') return next();
+
+  // Allow health checks
+  if (req.path === '/api/health' || req.path === '/health') return next();
+  // Allow gate assets
+  if (req.path === '/blueprint-preview.png') return next();
+
+  // Password mode: check session cookie
+  if (authMode === 'password') {
+    const token = parseCookie(req, 'bp_session');
+    if (token && sessionTokens.has(token)) return next();
+  }
+
+  // Serve gate page
+  serveGatePage(res);
+});
 
 app.use(express.static(join(__dirname, 'public')));
 app.use('/lib/xterm', express.static(join(__dirname, 'node_modules/@xterm/xterm')));
@@ -146,7 +206,12 @@ const { checkAuthStatus } = registerCoreRoutes(app, {
 // ── WebSocket upgrade handler ───────────────────────────────────────────────
 
 function handleUpgrade(req, socket, head) {
-  if (!BYPASS_AUTH) { socket.destroy(); return; }
+  if (authMode === 'template') { socket.destroy(); return; }
+  if (authMode === 'password') {
+    const cookie = req.headers.cookie || '';
+    const match = cookie.match(/bp_session=([a-f0-9]+)/);
+    if (!match || !sessionTokens.has(match[1])) { socket.destroy(); return; }
+  }
   const url = new URL(req.url, `http://${req.headers.host}`);
 
   if (url.pathname === '/ws/voice') {
@@ -182,6 +247,11 @@ if (require.main === module) {
   (async () => {
     try {
       await config.init();
+      await detectAuthMode();
+      logger.info('Auth mode detected', { module: 'server', authMode });
+      // Re-check auth mode every 5 minutes (handles Space visibility changes)
+      setInterval(detectAuthMode, 5 * 60 * 1000).unref();
+
       await watchers.ensureSettings();
 
       await tmux.cleanOrphanedTmuxSessions();

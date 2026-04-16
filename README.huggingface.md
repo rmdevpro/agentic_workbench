@@ -12,17 +12,22 @@ fullWidth: true
 
 Web-based CLI workbench for AI coding agents. Manage Claude Code sessions, projects, and tasks from your browser.
 
-## Setup
+## Quick Start
 
-1. Create a new HF Space with **Docker** SDK
-2. Copy this repo into the Space
-3. Rename `Dockerfile.huggingface` to `Dockerfile` and `README.huggingface.md` to `README.md`
-4. Add your `ANTHROPIC_API_KEY` as a Space secret
-5. Deploy
+1. Click **Duplicate this Space** to create your own copy
+2. Make your Space **private**
+3. Add your `ANTHROPIC_API_KEY` as a Space Secret
+4. Your instance is ready
+
+## Security
+
+Blueprint auto-detects whether it's running on a public or private HF Space:
+
+- **Public Space** — all access is blocked with a landing page. No credentials can be entered or stored.
+- **Private Space** — full access. Optionally set `BLUEPRINT_USER` and `BLUEPRINT_PASS` as Space Secrets to add password protection.
+- **Self-hosted** (docker-compose) — full access, no auth gate.
 
 ## Notes
 
-- Data persists in `/data` (available on paid Spaces with persistent storage)
 - Free Spaces sleep after ~15 min of inactivity — tmux sessions will be lost on wake
 - No Docker-in-Docker support (container build features are disabled)
-- Set `WORKSPACE=/data/workspace` in Space variables
