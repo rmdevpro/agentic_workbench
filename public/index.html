@@ -466,7 +466,6 @@
       <button class="panel-tab active" data-panel="files" onclick="switchPanel('files')">Files</button>
       <button class="panel-tab" data-panel="notes" onclick="switchPanel('notes')">Notes</button>
       <button class="panel-tab" data-panel="tasks" onclick="switchPanel('tasks')">Tasks</button>
-      <button class="panel-tab" data-panel="messages" onclick="switchPanel('messages')">Messages</button>
     </div>
     <div id="panel-content">
       <div id="panel-notes" class="panel-section" style="display:none">
@@ -478,10 +477,6 @@
         <div id="task-list"></div>
         <input id="add-task-input" type="text" placeholder="Add a task... (Enter to add)">
       </div>
-      <div id="panel-messages" class="panel-section" style="display:none">
-        <h3>Inter-Session Messages</h3>
-        <div id="message-list" style="font-size:12px;color:var(--text-secondary)">No messages yet</div>
-      </div>
       <div id="panel-files" class="panel-section">
         <div style="display:flex;justify-content:flex-end;margin-bottom:4px;gap:4px">
           <button onclick="fileBrowserNewFolder()" style="background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);cursor:pointer;font-size:11px;padding:2px 8px" title="New folder">+ Folder</button>
@@ -489,13 +484,6 @@
           <input id="file-upload-input" type="file" multiple style="display:none" onchange="fileBrowserUpload(this.files)">
         </div>
         <div id="file-browser-tree" style="overflow-y:auto;background:var(--bg-primary);border:1px solid var(--border);border-radius:6px;padding:4px;flex:1;min-height:0"></div>
-        <div id="file-viewer" style="display:none;margin-top:8px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-            <span id="file-viewer-name" style="font-size:11px;color:var(--text-muted);font-family:monospace;word-break:break-all;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
-            <button onclick="closeFileViewer()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:13px;padding:0 4px;flex-shrink:0" title="Close">&#10005;</button>
-          </div>
-          <textarea id="file-viewer-content" readonly style="width:100%;min-height:200px;background:var(--bg-primary);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:8px;font-size:11px;font-family:monospace;resize:vertical;outline:none;box-sizing:border-box"></textarea>
-        </div>
       </div>
     </div>
   </div>
@@ -1471,7 +1459,6 @@
       } else if (activePanel === 'tasks') {
         loadTasks(project);
       } else if (activePanel === 'messages') {
-        loadMessages(project);
       }
     }
 
@@ -1540,24 +1527,6 @@
     });
 
     // Messages
-    async function loadMessages(project) {
-      try {
-        const res = await fetch(`/api/projects/${project}/messages`);
-        const data = await res.json();
-        const container = document.getElementById('message-list');
-        if (!data.messages || data.messages.length === 0) {
-          container.innerHTML = '<div style="color:var(--text-muted)">No messages yet</div>';
-          return;
-        }
-        container.innerHTML = data.messages.map(m => `
-          <div style="padding:4px 0;border-bottom:1px solid var(--border)">
-            <div style="font-size:11px;color:var(--text-muted)">${m.from_session ? m.from_session.substring(0,8) : 'human'} → ${m.to_session ? m.to_session.substring(0,8) : 'all'} · ${timeAgo(m.created_at)}</div>
-            <div style="font-size:12px;color:var(--text-secondary)">${escHtml(m.content).substring(0, 200)}</div>
-          </div>
-        `).join('');
-      } catch {}
-    }
-
     // File Browser
     let fileBrowserInitialized = false;
 
@@ -1608,7 +1577,8 @@
                 multiFolder: true,
                 onlyFolders: false,
               }, function(filePath) {
-                openFileBrowserFile(filePath);
+                // Single click opens file in new tab
+                window.open('/api/file?path=' + encodeURIComponent(filePath.trim()), '_blank');
               });
             }
           } else {
@@ -1617,13 +1587,6 @@
           }
         });
       }
-
-      // Double-click file to open in new tab
-      $(treeEl).on('dblclick', 'li.file a', function(e) {
-        e.preventDefault();
-        const path = $(this).attr('rel') || '';
-        if (path) window.open('/api/file?path=' + encodeURIComponent(path.trim()), '_blank');
-      });
 
       // Make file and directory links draggable
       $(treeEl).on('dragstart', 'a', function(e) {
@@ -1636,24 +1599,6 @@
       });
     }
 
-    async function openFileBrowserFile(filePath) {
-      try {
-        const res = await fetch(`/api/file?path=${encodeURIComponent(filePath)}`);
-        if (!res.ok) { console.warn('Cannot read file:', filePath); return; }
-        const text = await res.text();
-        document.getElementById('file-viewer-name').textContent = filePath.split('/').filter(Boolean).pop();
-        document.getElementById('file-viewer-name').title = filePath;
-        document.getElementById('file-viewer-content').value = text;
-        document.getElementById('file-viewer').style.display = '';
-      } catch (err) {
-        console.warn('File read error:', err);
-      }
-    }
-
-    function closeFileViewer() {
-      document.getElementById('file-viewer').style.display = 'none';
-      document.getElementById('file-viewer-content').value = '';
-    }
 
     function getSelectedFileBrowserDir() {
       // Find the last clicked/expanded directory in the file browser tree
