@@ -106,34 +106,54 @@ function makeApp(overrides = {}) {
       const s = sessions.get(id);
       if (s) s.notes = n;
     },
-    getTasks: (pid) => [...tasks.values()].filter((t) => t.project_id === pid),
-    addTask: (pid, text, cb = 'human') => {
+    getAllTasks: (filter) => {
+      const all = [...tasks.values()];
+      if (!filter || filter === 'all') return all;
+      return all.filter((t) => t.status === filter);
+    },
+    getTasksByFolder: (fp) => [...tasks.values()].filter((t) => t.folder_path === fp),
+    getTask: (id) => tasks.get(Number(id)) || null,
+    addTask: (fp, title, desc = '', so, cb = 'human') => {
       const r = {
         id: tSeq++,
-        project_id: pid,
-        text,
+        folder_path: fp,
+        title,
+        description: desc,
         status: 'todo',
+        sort_order: so ?? tasks.size,
         created_by: cb,
         completed_at: null,
       };
       tasks.set(r.id, r);
       return r;
     },
-    completeTask: (id) => {
+    updateTaskTitle: (id, title) => {
+      const t = tasks.get(Number(id));
+      if (t) t.title = title;
+    },
+    updateTaskDescription: (id, desc) => {
+      const t = tasks.get(Number(id));
+      if (t) t.description = desc;
+    },
+    updateTaskStatus: (id, status) => {
       const t = tasks.get(Number(id));
       if (t) {
-        t.status = 'done';
-        t.completed_at = new Date().toISOString();
+        t.status = status;
+        t.completed_at = status === 'done' ? new Date().toISOString() : null;
       }
     },
-    reopenTask: (id) => {
+    moveTask: (id, fp, so) => {
       const t = tasks.get(Number(id));
-      if (t) {
-        t.status = 'todo';
-        t.completed_at = null;
+      if (t) { t.folder_path = fp; t.sort_order = so ?? 0; }
+    },
+    reorderTasks: (orders) => {
+      for (const { id, sort_order } of orders) {
+        const t = tasks.get(Number(id));
+        if (t) t.sort_order = sort_order;
       }
     },
     deleteTask: (id) => tasks.delete(Number(id)),
+    getTaskHistory: () => [],
     getUnreadMessages: () => [],
     getRecentMessages: () => [],
     sendMessage: () => ({ id: 1 }),
@@ -271,12 +291,13 @@ test('SES-12: invalid session IDs rejected', async () => {
   });
 });
 
-test('TSK-06: rejects overlong task text', async () => {
+test('TSK-06: rejects overlong task title', async () => {
   await withFullServer(async ({ port }) => {
     assert.equal(
       (
-        await req(port, 'POST', '/api/projects/test-project/tasks', {
-          text: fixtures.routes.overlongTaskText,
+        await req(port, 'POST', '/api/tasks', {
+          folder_path: '/',
+          title: 'x'.repeat(501),
         })
       ).status,
       400,
@@ -287,8 +308,9 @@ test('TSK-06: rejects overlong task text', async () => {
 test('TSK-07: created_by field persists', async () => {
   await withFullServer(async ({ port }) => {
     const r = await (
-      await req(port, 'POST', '/api/projects/test-project/tasks', {
-        text: 'task',
+      await req(port, 'POST', '/api/tasks', {
+        folder_path: '/',
+        title: 'task',
         created_by: 'agent',
       })
     ).json();

@@ -12,6 +12,12 @@ const db = new Database(join(DATA_DIR, 'blueprint.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
+// Drop legacy tasks table if it has old schema (project_id column)
+try {
+  db.prepare("SELECT project_id FROM tasks LIMIT 0").run();
+  db.exec('DROP TABLE IF EXISTS tasks');
+} catch (_e) { /* new schema or table doesn't exist — fine */ }
+
 // ── Schema Migrations (idempotent) ─────────────────────────────────────────
 try {
   db.exec("ALTER TABLE projects ADD COLUMN notes TEXT DEFAULT ''");

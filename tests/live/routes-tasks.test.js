@@ -3,59 +3,188 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { get, post, put, del } = require('../helpers/http-client');
-const { resetBaseline, dockerExec } = require('../helpers/reset-state');
+const { resetBaseline } = require('../helpers/reset-state');
 const { queryCount, queryJson } = require('../helpers/db-query');
 
-test('TSK-01..05: task CRUD lifecycle with DB verification', async () => {
+test('TSK-01: create task with folder_path and title', async () => {
   await resetBaseline();
-  dockerExec('mkdir -p /workspace/task_proj');
-  await post('/api/projects', { path: '/workspace/task_proj', name: 'task_proj' });
+  const r = await post('/api/tasks', { folder_path: '/src/auth', title: 'Fix login bug' });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.title, 'Fix login bug');
+  assert.equal(r.data.folder_path, '/src/auth');
+  assert.equal(r.data.status, 'todo');
+  assert.ok(r.data.id, 'must return task id');
+});
 
-  // Gray-box: count tasks before creation
-  const countBefore = queryCount(
-    'tasks',
-    "project_id IN (SELECT id FROM projects WHERE name = 'task_proj')",
-  );
+test('TSK-02: create task at root /', async () => {
+  const r = await post('/api/tasks', { title: 'Root task' });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.folder_path, '/');
+});
 
-  const t = await post('/api/projects/task_proj/tasks', { text: 'Task 1' });
-  assert.equal(t.status, 200);
-  assert.equal(t.data.status, 'todo');
-  const taskId = t.data.id;
+test('TSK-03: tree endpoint returns nested folder structure', async () => {
+  await resetBaseline();
+  await post('/api/tasks', { folder_path: '/src/auth', title: 'Task A' });
+  await post('/api/tasks', { folder_path: '/src/db', title: 'Task B' });
+  await post('/api/tasks', { folder_path: '/', title: 'Root task' });
 
-  // Gray-box: verify DB row was created
-  const countAfterCreate = queryCount(
-    'tasks',
-    "project_id IN (SELECT id FROM projects WHERE name = 'task_proj')",
-  );
-  assert.equal(
-    countAfterCreate,
-    countBefore + 1,
-    `DB task count must increment by 1 after creation (before: ${countBefore}, after: ${countAfterCreate})`,
-  );
+  const r = await get('/api/tasks/tree?filter=todo');
+  assert.equal(r.status, 200);
+  assert.ok(r.data.tree, 'response must contain tree');
+  assert.equal(r.data.tree.path, '/');
+  assert.equal(r.data.tree.tasks.length, 1, 'root should have 1 task');
+  assert.ok(r.data.tree.children.src, 'tree must have src folder');
+  assert.ok(r.data.tree.children.src.children.auth, 'tree must have src/auth folder');
+  assert.ok(r.data.tree.children.src.children.db, 'tree must have src/db folder');
+  assert.equal(r.data.tree.children.src.children.auth.tasks.length, 1);
+  assert.equal(r.data.tree.children.src.children.db.tasks.length, 1);
+});
 
-  // Gray-box: verify task status in DB after complete
-  await put(`/api/tasks/${taskId}/complete`);
-  const dbAfterComplete = queryJson(`SELECT status FROM tasks WHERE id = '${taskId}'`);
-  assert.ok(dbAfterComplete.length > 0, 'Task must exist in DB after complete');
-  assert.equal(dbAfterComplete[0].status, 'done', 'DB task status must be "done" after complete');
+test('TSK-04: tree with filter=all includes done and archived', async () => {
+  await resetBaseline();
+  const t1 = await post('/api/tasks', { folder_path: '/', title: 'Active' });
+  const t2 = await post('/api/tasks', { folder_path: '/', title: 'Done' });
+  const t3 = await post('/api/tasks', { folder_path: '/', title: 'Archived' });
+  await put(`/api/tasks/${t2.data.id}`, { status: 'done' });
+  await put(`/api/tasks/${t3.data.id}`, { status: 'archived' });
 
-  // API verification
-  const afterComplete = await get('/api/projects/task_proj/tasks');
-  assert.equal(afterComplete.data.tasks.find((x) => x.id === taskId).status, 'done');
+  const filtered = await get('/api/tasks/tree?filter=todo');
+  assert.equal(filtered.data.tree.tasks.length, 1, 'filter=todo should show only active');
 
-  // Gray-box: verify task status in DB after reopen
-  await put(`/api/tasks/${taskId}/reopen`);
-  const dbAfterReopen = queryJson(`SELECT status FROM tasks WHERE id = '${taskId}'`);
-  assert.equal(dbAfterReopen[0].status, 'todo', 'DB task status must be "todo" after reopen');
+  const all = await get('/api/tasks/tree?filter=all');
+  assert.equal(all.data.tree.tasks.length, 3, 'filter=all should show all 3');
+});
 
-  const afterReopen = await get('/api/projects/task_proj/tasks');
-  assert.equal(afterReopen.data.tasks.find((x) => x.id === taskId).status, 'todo');
+test('TSK-05: get task by ID returns task with history', async () => {
+  await resetBaseline();
+  const t = await post('/api/tasks', { folder_path: '/test', title: 'History test' });
+  const r = await get(`/api/tasks/${t.data.id}`);
+  assert.equal(r.status, 200);
+  assert.equal(r.data.title, 'History test');
+  assert.ok(Array.isArray(r.data.history), 'must include history array');
+  assert.ok(r.data.history.length >= 1, 'history must have at least created event');
+  assert.equal(r.data.history[0].event_type, 'created');
+});
 
-  // Gray-box: verify task is deleted from DB
-  await del(`/api/tasks/${taskId}`);
-  const countAfterDelete = queryCount('tasks', `id = '${taskId}'`);
-  assert.equal(countAfterDelete, 0, 'Task must be deleted from DB after DELETE');
+test('TSK-06: update title records rename history', async () => {
+  await resetBaseline();
+  const t = await post('/api/tasks', { folder_path: '/', title: 'Old title' });
+  await put(`/api/tasks/${t.data.id}`, { title: 'New title' });
+  const r = await get(`/api/tasks/${t.data.id}`);
+  assert.equal(r.data.title, 'New title');
+  const renameEvent = r.data.history.find(h => h.event_type === 'renamed');
+  assert.ok(renameEvent, 'must have renamed history event');
+  assert.equal(renameEvent.old_value, 'Old title');
+  assert.equal(renameEvent.new_value, 'New title');
+});
 
-  const afterDelete = await get('/api/projects/task_proj/tasks');
-  assert.equal(afterDelete.data.tasks.filter((x) => x.id === taskId).length, 0);
+test('TSK-07: update description records history', async () => {
+  await resetBaseline();
+  const t = await post('/api/tasks', { folder_path: '/', title: 'Desc test' });
+  await put(`/api/tasks/${t.data.id}`, { description: 'Some notes here' });
+  const r = await get(`/api/tasks/${t.data.id}`);
+  assert.equal(r.data.description, 'Some notes here');
+  const descEvent = r.data.history.find(h => h.event_type === 'description_changed');
+  assert.ok(descEvent, 'must have description_changed history event');
+});
+
+test('TSK-08: complete task sets completed_at', async () => {
+  await resetBaseline();
+  const t = await post('/api/tasks', { folder_path: '/', title: 'Complete me' });
+  await put(`/api/tasks/${t.data.id}`, { status: 'done' });
+  const r = await get(`/api/tasks/${t.data.id}`);
+  assert.equal(r.data.status, 'done');
+  assert.ok(r.data.completed_at, 'completed_at must be set');
+});
+
+test('TSK-09: reopen task clears completed_at', async () => {
+  await resetBaseline();
+  const t = await post('/api/tasks', { folder_path: '/', title: 'Reopen me' });
+  await put(`/api/tasks/${t.data.id}`, { status: 'done' });
+  await put(`/api/tasks/${t.data.id}`, { status: 'todo' });
+  const r = await get(`/api/tasks/${t.data.id}`);
+  assert.equal(r.data.status, 'todo');
+  assert.equal(r.data.completed_at, null);
+});
+
+test('TSK-10: archive task', async () => {
+  await resetBaseline();
+  const t = await post('/api/tasks', { folder_path: '/', title: 'Archive me' });
+  await put(`/api/tasks/${t.data.id}`, { status: 'archived' });
+  const r = await get(`/api/tasks/${t.data.id}`);
+  assert.equal(r.data.status, 'archived');
+});
+
+test('TSK-11: move task to different folder records history', async () => {
+  await resetBaseline();
+  const t = await post('/api/tasks', { folder_path: '/old', title: 'Move me' });
+  await put(`/api/tasks/${t.data.id}/move`, { folder_path: '/new/location' });
+  const r = await get(`/api/tasks/${t.data.id}`);
+  assert.equal(r.data.folder_path, '/new/location');
+  const moveEvent = r.data.history.find(h => h.event_type === 'moved');
+  assert.ok(moveEvent, 'must have moved history event');
+  assert.equal(moveEvent.old_value, '/old');
+  assert.equal(moveEvent.new_value, '/new/location');
+});
+
+test('TSK-12: batch reorder updates sort_order', async () => {
+  await resetBaseline();
+  const t1 = await post('/api/tasks', { folder_path: '/proj', title: 'First' });
+  const t2 = await post('/api/tasks', { folder_path: '/proj', title: 'Second' });
+  const t3 = await post('/api/tasks', { folder_path: '/proj', title: 'Third' });
+
+  // Reverse the order
+  await put('/api/tasks/reorder', {
+    orders: [
+      { id: t3.data.id, sort_order: 0 },
+      { id: t2.data.id, sort_order: 1 },
+      { id: t1.data.id, sort_order: 2 },
+    ],
+  });
+
+  const tree = await get('/api/tasks/tree?filter=todo');
+  const tasks = tree.data.tree.children.proj.tasks;
+  assert.equal(tasks[0].title, 'Third');
+  assert.equal(tasks[1].title, 'Second');
+  assert.equal(tasks[2].title, 'First');
+});
+
+test('TSK-13: delete task removes from tree', async () => {
+  await resetBaseline();
+  const t = await post('/api/tasks', { folder_path: '/', title: 'Delete me' });
+  await del(`/api/tasks/${t.data.id}`);
+  const r = await get(`/api/tasks/${t.data.id}`);
+  assert.equal(r.status, 404);
+});
+
+test('TSK-14: create task without title returns 400', async () => {
+  const r = await post('/api/tasks', { folder_path: '/' });
+  assert.equal(r.status, 400);
+});
+
+test('TSK-15: create task with title too long returns 400', async () => {
+  const r = await post('/api/tasks', { folder_path: '/', title: 'x'.repeat(501) });
+  assert.equal(r.status, 400);
+});
+
+test('TSK-16: tree pruning removes empty folders', async () => {
+  await resetBaseline();
+  const t = await post('/api/tasks', { folder_path: '/a/b/c', title: 'Deep task' });
+  let tree = await get('/api/tasks/tree?filter=todo');
+  assert.ok(tree.data.tree.children.a, 'folder a must exist');
+  assert.ok(tree.data.tree.children.a.children.b.children.c, 'folder a/b/c must exist');
+
+  await del(`/api/tasks/${t.data.id}`);
+  tree = await get('/api/tasks/tree?filter=todo');
+  assert.ok(!tree.data.tree.children.a, 'folder a must be pruned after task deleted');
+});
+
+test('TSK-17: sort order auto-increments', async () => {
+  await resetBaseline();
+  const t1 = await post('/api/tasks', { folder_path: '/proj', title: 'A' });
+  const t2 = await post('/api/tasks', { folder_path: '/proj', title: 'B' });
+  const t3 = await post('/api/tasks', { folder_path: '/proj', title: 'C' });
+  assert.equal(t1.data.sort_order, 0);
+  assert.equal(t2.data.sort_order, 1);
+  assert.equal(t3.data.sort_order, 2);
 });

@@ -90,20 +90,20 @@ test('DB-04: session CRUD and state transitions', async () => {
 
 test('DB-05: task CRUD lifecycle', async () => {
   await withDb(async (db) => {
-    const p = db.ensureProject('proj', '/workspace/proj');
-    const t = db.addTask(p.id, 'Do it', 'agent');
+    const t = db.addTask('/workspace/proj', 'Do it', '', null, 'agent');
     assert.equal(t.status, 'todo');
     assert.equal(t.created_by, 'agent');
-    db.completeTask(t.id);
-    const completed = db.getTasks(p.id)[0];
+    assert.equal(t.folder_path, '/workspace/proj');
+    db.updateTaskStatus(t.id, 'done');
+    const completed = db.getTasksByFolder('/workspace/proj')[0];
     assert.equal(completed.status, 'done');
     assert.ok(completed.completed_at);
-    db.reopenTask(t.id);
-    const reopened = db.getTasks(p.id)[0];
+    db.updateTaskStatus(t.id, 'todo');
+    const reopened = db.getTasksByFolder('/workspace/proj')[0];
     assert.equal(reopened.status, 'todo');
     assert.equal(reopened.completed_at, null);
     db.deleteTask(t.id);
-    assert.equal(db.getTasks(p.id).length, 0);
+    assert.equal(db.getTasksByFolder('/workspace/proj').length, 0);
   });
 });
 
@@ -143,18 +143,15 @@ test('DB-08: session meta upsert/get/cleanStale', async () => {
   });
 });
 
-test('DB-09: delete project cascades sessions, tasks, messages', async () => {
+test('DB-09: delete project cascades sessions and messages', async () => {
   await withDb(async (db) => {
     const p = db.ensureProject('proj', '/workspace/proj');
     db.upsertSession('s1', p.id, 'S');
-    db.addTask(p.id, 'T');
     db.sendMessage(p.id, 'a', 'b', 'M');
     assert.ok(db.db.prepare('SELECT COUNT(*) AS c FROM sessions').get().c > 0);
-    assert.ok(db.db.prepare('SELECT COUNT(*) AS c FROM tasks').get().c > 0);
     assert.ok(db.db.prepare('SELECT COUNT(*) AS c FROM messages').get().c > 0);
     db.deleteProject(p.id);
     assert.equal(db.db.prepare('SELECT COUNT(*) AS c FROM sessions').get().c, 0);
-    assert.equal(db.db.prepare('SELECT COUNT(*) AS c FROM tasks').get().c, 0);
     assert.equal(db.db.prepare('SELECT COUNT(*) AS c FROM messages').get().c, 0);
   });
 });

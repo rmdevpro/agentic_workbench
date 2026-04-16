@@ -72,22 +72,21 @@ test('MCP blueprint_reopen_task validates task_id', async () => {
   });
 });
 
-test('MCP blueprint_delete_task validates task_id', async () => {
+test('MCP blueprint_archive_task validates task_id', async () => {
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await req(port, 'POST', '/api/mcp/call', {
-      tool: 'blueprint_delete_task',
+      tool: 'blueprint_archive_task',
       args: { task_id: null },
     });
     assert.equal(r.status, 400);
   });
 });
 
-test('MCP blueprint_add_task rejects missing text', async () => {
+test('MCP blueprint_add_task rejects missing title', async () => {
   await withServer(startMcpApp(), async ({ port }) => {
-    // Requires a real project; without DB, it will throw 'Project not found'
     const r = await req(port, 'POST', '/api/mcp/call', {
       tool: 'blueprint_add_task',
-      args: { project: 'nonexistent' },
+      args: { folder_path: '/' },
     });
     assert.ok(r.status >= 400);
   });
@@ -199,64 +198,61 @@ test('MCP blueprint_get_session_notes returns notes for valid session', async ()
   });
 });
 
-test('MCP blueprint_get_tasks returns tasks for existing project', async () => {
-  db.ensureProject('taskproj', '/virtual/taskproj');
-  const proj = db.getProject('taskproj');
-  db.addTask(proj.id, 'Test task 1', 'agent');
-  db.addTask(proj.id, 'Test task 2', 'human');
+test('MCP blueprint_get_tasks returns tasks', async () => {
+  db.addTask('/virtual/taskproj', 'Test task 1', '', null, 'agent');
+  db.addTask('/virtual/taskproj', 'Test task 2', '', null, 'human');
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await (
       await req(port, 'POST', '/api/mcp/call', {
         tool: 'blueprint_get_tasks',
-        args: { project: 'taskproj' },
+        args: {},
       })
     ).json();
     assert.ok(r.result.tasks.length >= 2);
-    assert.ok(r.result.tasks.some((t) => t.text === 'Test task 1'));
+    assert.ok(r.result.tasks.some((t) => t.title === 'Test task 1'));
   });
 });
 
-test('MCP blueprint_get_tasks returns empty for unknown project', async () => {
+test('MCP blueprint_get_tasks with folder_path filter', async () => {
+  db.addTask('/folderA', 'Task A', '', null, 'agent');
+  db.addTask('/folderB', 'Task B', '', null, 'agent');
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await (
       await req(port, 'POST', '/api/mcp/call', {
         tool: 'blueprint_get_tasks',
-        args: { project: 'nope' },
+        args: { folder_path: '/folderA' },
       })
     ).json();
-    assert.deepEqual(r.result.tasks, []);
+    assert.ok(r.result.tasks.every((t) => t.folder_path === '/folderA'));
   });
 });
 
 test('MCP blueprint_add_task success path', async () => {
-  db.ensureProject('addtaskproj', '/virtual/addtaskproj');
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await (
       await req(port, 'POST', '/api/mcp/call', {
         tool: 'blueprint_add_task',
-        args: { project: 'addtaskproj', text: 'New task' },
+        args: { folder_path: '/src', title: 'New task' },
       })
     ).json();
-    assert.equal(r.result.text, 'New task');
+    assert.equal(r.result.title, 'New task');
+    assert.equal(r.result.folder_path, '/src');
     assert.equal(r.result.status, 'todo');
   });
 });
 
-test('MCP blueprint_add_task rejects overlong text', async () => {
-  db.ensureProject('addtaskproj2', '/virtual/addtaskproj2');
+test('MCP blueprint_add_task rejects overlong title', async () => {
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await req(port, 'POST', '/api/mcp/call', {
       tool: 'blueprint_add_task',
-      args: { project: 'addtaskproj2', text: 'x'.repeat(1001) },
+      args: { folder_path: '/', title: 'x'.repeat(501) },
     });
     assert.equal(r.status, 400);
   });
 });
 
 test('MCP blueprint_complete_task success path', async () => {
-  db.ensureProject('cmpltproj', '/virtual/cmpltproj');
-  const proj = db.getProject('cmpltproj');
-  const task = db.addTask(proj.id, 'to complete');
+  const task = db.addTask('/virtual/cmpltproj', 'to complete');
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await (
       await req(port, 'POST', '/api/mcp/call', {
@@ -269,10 +265,8 @@ test('MCP blueprint_complete_task success path', async () => {
 });
 
 test('MCP blueprint_reopen_task success path', async () => {
-  db.ensureProject('reopenproj', '/virtual/reopenproj');
-  const proj = db.getProject('reopenproj');
-  const task = db.addTask(proj.id, 'to reopen');
-  db.completeTask(task.id);
+  const task = db.addTask('/virtual/reopenproj', 'to reopen');
+  db.updateTaskStatus(task.id, 'done');
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await (
       await req(port, 'POST', '/api/mcp/call', {
@@ -284,18 +278,16 @@ test('MCP blueprint_reopen_task success path', async () => {
   });
 });
 
-test('MCP blueprint_delete_task success path', async () => {
-  db.ensureProject('delproj', '/virtual/delproj');
-  const proj = db.getProject('delproj');
-  const task = db.addTask(proj.id, 'to delete');
+test('MCP blueprint_archive_task success path', async () => {
+  const task = db.addTask('/virtual/archproj', 'to archive');
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await (
       await req(port, 'POST', '/api/mcp/call', {
-        tool: 'blueprint_delete_task',
+        tool: 'blueprint_archive_task',
         args: { task_id: task.id },
       })
     ).json();
-    assert.equal(r.result.deleted, true);
+    assert.equal(r.result.archived, true);
   });
 });
 

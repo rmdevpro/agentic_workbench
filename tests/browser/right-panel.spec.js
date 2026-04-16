@@ -68,25 +68,8 @@ describe('right panel (browser)', () => {
     assert.equal(errors.length, 0, errors.join(', '));
   });
 
-  it('panel tabs switch content and load data for active section', async () => {
+  it('panel tabs switch content between files and tasks', async () => {
     await page.click('#panel-toggle');
-    // Switch to notes tab and verify content area is populated
-    await page.click('[data-panel="notes"]');
-    assert.ok(
-      await page.locator('#panel-notes').isVisible(),
-      'Notes panel must be visible after tab click',
-    );
-    assert.ok(
-      !(await page.locator('#panel-tasks').isVisible()),
-      'Tasks panel must be hidden when notes is active',
-    );
-    const notesHasInput = await page
-      .locator('#panel-notes textarea, #panel-notes [contenteditable]')
-      .count();
-    assert.ok(
-      notesHasInput > 0,
-      'Notes panel must contain an editable area (textarea or contenteditable)',
-    );
 
     // Switch to tasks tab
     await page.click('[data-panel="tasks"]');
@@ -95,32 +78,28 @@ describe('right panel (browser)', () => {
       'Tasks panel must be visible after tab click',
     );
     assert.ok(
-      !(await page.locator('#panel-notes').isVisible()),
-      'Notes panel must be hidden when tasks is active',
+      !(await page.locator('#panel-files').isVisible()),
+      'Files panel must be hidden when tasks is active',
     );
     const tasksHasUI = await page
       .locator(
-        '#panel-tasks .task-item, #panel-tasks input, #panel-tasks button, #panel-tasks .task-list',
+        '#panel-tasks #task-tree, #panel-tasks input, #panel-tasks button',
       )
       .count();
     assert.ok(
       tasksHasUI > 0,
-      'Tasks panel must contain task UI elements (list, input, or buttons)',
+      'Tasks panel must contain task UI elements (tree, input, or buttons)',
     );
 
-    // Switch to messages tab
-    await page.click('[data-panel="messages"]');
+    // Switch back to files tab
+    await page.click('[data-panel="files"]');
     assert.ok(
-      await page.locator('#panel-messages').isVisible(),
-      'Messages panel must be visible after tab click',
+      await page.locator('#panel-files').isVisible(),
+      'Files panel must be visible after tab click',
     );
-    // Messages panel contains a message list div — verify it exists and has content
-    const msgList = page.locator('#message-list');
-    assert.ok((await msgList.count()) > 0, 'Messages panel must contain a #message-list element');
-    const msgContent = await msgList.textContent();
     assert.ok(
-      msgContent.length > 0,
-      'Message list must contain text (at least a placeholder like "No messages yet")',
+      !(await page.locator('#panel-tasks').isVisible()),
+      'Tasks panel must be hidden when files is active',
     );
 
     await page.screenshot({ path: `${SS}/panel--tabs.png` });
