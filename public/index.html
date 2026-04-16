@@ -1618,6 +1618,13 @@
         });
       }
 
+      // Double-click file to open in new tab
+      $(treeEl).on('dblclick', 'li.file a', function(e) {
+        e.preventDefault();
+        const path = $(this).attr('rel') || '';
+        if (path) window.open('/api/file?path=' + encodeURIComponent(path.trim()), '_blank');
+      });
+
       // Make file and directory links draggable
       $(treeEl).on('dragstart', 'a', function(e) {
         const path = $(this).attr('rel') || '';
