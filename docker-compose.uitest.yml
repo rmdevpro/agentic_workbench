@@ -1,0 +1,21 @@
+services:
+  blueprint:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: blueprint-test
+    ports:
+      - '7867:3000'
+    volumes:
+      - blueprint_test_data:/data
+    environment:
+      - WORKSPACE=/data/projects
+      - CLAUDE_HOME=/data/.claude
+      - CLAUDE_CONFIG_DIR=/data/.claude
+      - BLUEPRINT_DATA=/data/blueprint
+      - HOME=/home/hopper
+      - MAX_TMUX_SESSIONS=50
+    restart: unless-stopped
+
+volumes:
+  blueprint_test_data:

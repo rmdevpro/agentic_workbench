@@ -5,15 +5,14 @@ services:
       dockerfile: Dockerfile
     container_name: blueprint
     ports:
-      - "7866:3000"
+      - '7866:3000'
     volumes:
-      - joshua26_workspace:/workspace
-      - joshua26_storage:/storage
+      - joshua26_workspace:/mnt/workspace
+      - joshua26_storage:/mnt/storage
     environment:
-      - WORKSPACE=/workspace/blueprint/projects
-      - CLAUDE_HOME=/workspace/blueprint/.claude
-      - CLAUDE_CONFIG_DIR=/workspace/blueprint/.claude
-      - BLUEPRINT_DATA=/workspace/blueprint/data
+      - CLAUDE_HOME=/mnt/workspace/blueprint/.claude
+      - CLAUDE_CONFIG_DIR=/mnt/workspace/blueprint/.claude
+      - BLUEPRINT_DATA=/mnt/workspace/blueprint/data
       - HOME=/home/hopper
       - MAX_TMUX_SESSIONS=50
     restart: unless-stopped

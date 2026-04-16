@@ -1,183 +1,214 @@
-const { readFileSync } = require('fs');
+'use strict';
+
+const { readFile } = require('fs/promises');
 const { join } = require('path');
-const safe = require('./safe-exec');
 
-const WORKSPACE = safe.WORKSPACE;
-const CLAUDE_HOME = safe.CLAUDE_HOME;
-const REFRESH_THRESHOLD = 0.85; // Refresh if >= 85% of lifetime elapsed
-const CHECK_RANGE_LOW = 0.65; // Schedule check between 65-85% of lifetime
-const CHECK_RANGE_HIGH = 0.85;
-const FALLBACK_INTERVAL_MS = 30 * 60 * 1000; // If can't read expiry, ping every 30 min
+module.exports = function createKeepalive({ safe, config, logger }) {
+  const WORKSPACE = safe.WORKSPACE;
+  const CLAUDE_HOME = safe.CLAUDE_HOME;
 
-// Mode: 'always' (default) | 'browser' (stop when no browsers) | 'idle' (stop after inactivity timeout)
-let mode = process.env.KEEPALIVE_MODE || 'browser';
-let idleTimeoutMs = parseInt(process.env.KEEPALIVE_IDLE_MINUTES || '30') * 60 * 1000;
-let idleTimer = null;
+  const _REFRESH_THRESHOLD = config ? config.get('keepalive.refreshThreshold', 0.85) : 0.85;
+  const CHECK_RANGE_LOW = config ? config.get('keepalive.checkRangeLow', 0.65) : 0.65;
+  const CHECK_RANGE_HIGH = config ? config.get('keepalive.checkRangeHigh', 0.85) : 0.85;
+  const FALLBACK_INTERVAL_MS = config
+    ? config.get('keepalive.fallbackIntervalMs', 30 * 60 * 1000)
+    : 30 * 60 * 1000;
 
-let running = false;
-let timer = null;
-let turn = 'a';
+  let mode = process.env.KEEPALIVE_MODE || 'browser';
+  let idleTimeoutMs = parseInt(process.env.KEEPALIVE_IDLE_MINUTES || '30', 10) * 60 * 1000;
+  let idleTimer = null;
+  let running = false;
+  let timer = null;
+  let turn = 'a';
 
-function getTokenExpiry() {
-  try {
-    const raw = readFileSync(join(CLAUDE_HOME, '.credentials.json'), 'utf-8');
-    const creds = JSON.parse(raw);
-    return creds.claudeAiOauth?.expiresAt || 0;
-  } catch {
-    return 0;
-  }
-}
-
-function msUntilExpiry() {
-  const expiresAt = getTokenExpiry();
-  if (!expiresAt) return 0;
-  return expiresAt - Date.now();
-}
-
-// Dead functions removed per code review (M1)
-
-function claudeQuery(message) {
-  try {
-    return safe.claudeExec(
-      ['--print', '--no-session-persistence', '--model', 'haiku', message],
-      { cwd: WORKSPACE, timeout: 30000 }
-    ).trim();
-  } catch (err) {
-    console.error('[keepalive] Claude query failed:', err.message?.substring(0, 100));
-    return null;
-  }
-}
-
-function doRefresh() {
-  try {
-    if (turn === 'a') {
-      const q = claudeQuery('Ask a short interesting question. Just the question.');
-      if (q) {
-        const a = claudeQuery(q);
-        if (a) console.log(`[keepalive] Refreshed — Q: "${q.substring(0, 40)}..." A: "${a.substring(0, 40)}..."`);
+  async function getTokenExpiryAsync() {
+    try {
+      const raw = await readFile(join(CLAUDE_HOME, '.credentials.json'), 'utf-8');
+      const creds = JSON.parse(raw);
+      return creds.claudeAiOauth?.expiresAt || 0;
+    } catch (err) {
+      if (err.code === 'ENOENT') {
+        /* expected: credentials file may not exist yet */
+      } else if (err instanceof SyntaxError) {
+        logger.warn('Credentials file contains invalid JSON', { module: 'keepalive' });
+      } else {
+        logger.error('Failed to read credentials file', { module: 'keepalive', err: err.message });
       }
-      turn = 'b';
-    } else {
-      const q = claudeQuery('Tell me a one-sentence fun fact.');
-      if (q) console.log(`[keepalive] Refreshed — "${q.substring(0, 60)}..."`);
-      turn = 'a';
+      return 0;
     }
-  } catch (err) {
-    console.error('[keepalive] Refresh error:', err.message);
   }
-}
 
-function scheduleFromRemaining(remaining) {
-  if (!running) return;
+  async function msUntilExpiryAsync() {
+    const expiresAt = await getTokenExpiryAsync();
+    if (!expiresAt) return 0;
+    return expiresAt - Date.now();
+  }
 
-  if (remaining <= 0) {
-    // Expired or unreadable — refresh immediately
-    console.log('[keepalive] Token expired or unreadable — refreshing now');
-    doRefresh();
-    // Re-read after refresh
-    const newRemaining = msUntilExpiry();
-    if (newRemaining > 0) {
-      scheduleFromRemaining(newRemaining);
-    } else {
-      console.log(`[keepalive] Fallback — next check in ${FALLBACK_INTERVAL_MS / 60000}min`);
-      timer = setTimeout(check, FALLBACK_INTERVAL_MS);
+  async function claudeQuery(message) {
+    const queryTimeout = config ? config.get('keepalive.queryTimeoutMs', 30000) : 30000;
+    try {
+      const result = await safe.claudeExecAsync(
+        ['--print', '--no-session-persistence', '--model', 'haiku', message],
+        { cwd: WORKSPACE, timeout: queryTimeout },
+      );
+      return result.trim();
+    } catch (err) {
+      logger.error('Keepalive Claude query failed', {
+        module: 'keepalive',
+        err: err.message?.substring(0, 100),
+      });
+      return null;
     }
-    return;
   }
 
-  // Calculate what percentage of remaining time to wait
-  // Pick a random point between 65-85% of remaining time
-  const fraction = CHECK_RANGE_LOW + Math.random() * (CHECK_RANGE_HIGH - CHECK_RANGE_LOW);
-  const sleepMs = Math.max(60000, remaining * fraction); // At least 1 minute
-  const remainMins = Math.round(remaining / 60000);
-  const sleepMins = Math.round(sleepMs / 60000);
-  const pct = Math.round(fraction * 100);
+  async function doRefresh() {
+    try {
+      const promptA = config ? config.getPrompt('keepalive-question', {}) : '';
+      const promptB = config ? config.getPrompt('keepalive-fact', {}) : '';
 
-  console.log(`[keepalive] Token valid for ${remainMins}min — next check at ${pct}% (${sleepMins}min)`);
-  timer = setTimeout(check, sleepMs);
-}
-
-function check() {
-  if (!running) return;
-
-  const remaining = msUntilExpiry();
-
-  // If remaining is less than 15% of what a reasonable lifetime looks like, refresh
-  // Since we scheduled at 65-85%, if we're here and remaining is small, time to refresh
-  if (remaining <= 0) {
-    console.log('[keepalive] Token expired — refreshing');
-    doRefresh();
-    const newRemaining = msUntilExpiry();
-    scheduleFromRemaining(newRemaining);
-  } else {
-    // We're at the check point — refresh now and reschedule
-    const mins = Math.round(remaining / 60000);
-    console.log(`[keepalive] Check — ${mins}min remaining — refreshing`);
-    doRefresh();
-    const newRemaining = msUntilExpiry();
-    scheduleFromRemaining(newRemaining);
+      if (turn === 'a') {
+        const q = await claudeQuery(
+          promptA || 'Ask a short interesting question. Just the question.',
+        );
+        if (q) {
+          const a = await claudeQuery(q);
+          if (a)
+            logger.info('Keepalive refreshed', {
+              module: 'keepalive',
+              q: q.substring(0, 40),
+              a: a.substring(0, 40),
+            });
+        }
+        turn = 'b';
+      } else {
+        const q = await claudeQuery(promptB || 'Tell me a one-sentence fun fact.');
+        if (q)
+          logger.info('Keepalive refreshed', { module: 'keepalive', fact: q.substring(0, 60) });
+        turn = 'a';
+      }
+    } catch (err) {
+      logger.error('Keepalive refresh error', { module: 'keepalive', err: err.message });
+    }
   }
-}
 
-module.exports = {
-  start() {
-    if (running) return;
-    running = true;
-    const remaining = msUntilExpiry();
-    const mins = remaining > 0 ? Math.round(remaining / 60000) : 0;
-    console.log(`[keepalive] Started (mode: ${mode}) — token expires in ${mins}min`);
-    // Schedule based on remaining time
-    scheduleFromRemaining(remaining);
-  },
-
-  stop() {
+  function scheduleFromRemaining(remaining) {
     if (!running) return;
-    running = false;
-    if (timer) { clearTimeout(timer); timer = null; }
-    if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
-    console.log('[keepalive] Stopped');
-  },
-
-  isRunning() {
-    return running;
-  },
-
-  getMode() {
-    return mode;
-  },
-
-  getStatus() {
-    const remaining = msUntilExpiry();
-    return {
-      running,
-      mode,
-      token_expires_in_minutes: remaining > 0 ? Math.round(remaining / 60000) : 0,
-      token_expires_at: new Date(getTokenExpiry()).toISOString(),
-    };
-  },
-
-  setMode(newMode, idleMinutes) {
-    mode = newMode;
-    if (idleMinutes) idleTimeoutMs = idleMinutes * 60 * 1000;
-    console.log(`[keepalive] Mode set to: ${mode}` + (mode === 'idle' ? ` (${idleMinutes || idleTimeoutMs / 60000}min)` : ''));
-  },
-
-  onBrowserConnect() {
-    if (mode === 'browser' && !running) this.start();
-    if (mode === 'idle') {
-      if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
-      if (!running) this.start();
+    if (remaining <= 0) {
+      logger.info('Token expired or unreadable — refreshing now', { module: 'keepalive' });
+      doRefresh().then(async () => {
+        const newRemaining = await msUntilExpiryAsync();
+        if (newRemaining > 0) {
+          scheduleFromRemaining(newRemaining);
+        } else {
+          logger.info('Fallback keepalive interval', {
+            module: 'keepalive',
+            intervalMin: FALLBACK_INTERVAL_MS / 60000,
+          });
+          timer = setTimeout(check, FALLBACK_INTERVAL_MS);
+        }
+      });
+      return;
     }
-  },
+    const fraction = CHECK_RANGE_LOW + Math.random() * (CHECK_RANGE_HIGH - CHECK_RANGE_LOW);
+    const sleepMs = Math.max(60000, remaining * fraction);
+    logger.info('Keepalive next check scheduled', {
+      module: 'keepalive',
+      remainingMin: Math.round(remaining / 60000),
+      sleepMin: Math.round(sleepMs / 60000),
+    });
+    timer = setTimeout(check, sleepMs);
+  }
 
-  onBrowserDisconnect(remainingBrowsers) {
-    if (mode === 'browser' && remainingBrowsers === 0) this.stop();
-    if (mode === 'idle' && remainingBrowsers === 0) {
-      console.log(`[keepalive] No browsers — stopping in ${idleTimeoutMs / 60000}min`);
-      idleTimer = setTimeout(() => {
-        console.log('[keepalive] Idle timeout reached');
-        this.stop();
-      }, idleTimeoutMs);
-    }
-  },
+  function check() {
+    if (!running) return;
+    msUntilExpiryAsync().then((remaining) => {
+      logger.info('Keepalive check — refreshing', {
+        module: 'keepalive',
+        remainingMin: Math.round(remaining / 60000),
+      });
+      doRefresh().then(() => {
+        msUntilExpiryAsync().then((newRemaining) => {
+          scheduleFromRemaining(newRemaining);
+        });
+      });
+    });
+  }
+
+  const instance = {
+    start() {
+      if (running) return;
+      running = true;
+      msUntilExpiryAsync().then((remaining) => {
+        logger.info('Keepalive started', {
+          module: 'keepalive',
+          mode,
+          tokenExpiresMin: remaining > 0 ? Math.round(remaining / 60000) : 0,
+        });
+        scheduleFromRemaining(remaining);
+      });
+    },
+    stop() {
+      if (!running) return;
+      running = false;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      if (idleTimer) {
+        clearTimeout(idleTimer);
+        idleTimer = null;
+      }
+      logger.info('Keepalive stopped', { module: 'keepalive' });
+    },
+    isRunning() {
+      return running;
+    },
+    getMode() {
+      return mode;
+    },
+    async getStatus() {
+      const remaining = await msUntilExpiryAsync();
+      const expiresAt = await getTokenExpiryAsync();
+      return {
+        running,
+        mode,
+        token_expires_in_minutes: remaining > 0 ? Math.round(remaining / 60000) : 0,
+        token_expires_at: new Date(expiresAt).toISOString(),
+      };
+    },
+    setMode(newMode, idleMinutes) {
+      mode = newMode;
+      if (idleMinutes) idleTimeoutMs = idleMinutes * 60 * 1000;
+      logger.info('Keepalive mode set', {
+        module: 'keepalive',
+        mode,
+        idleMinutes: idleMinutes || idleTimeoutMs / 60000,
+      });
+    },
+    onBrowserConnect() {
+      if (mode === 'browser' && !running) instance.start();
+      if (mode === 'idle') {
+        if (idleTimer) {
+          clearTimeout(idleTimer);
+          idleTimer = null;
+        }
+        if (!running) instance.start();
+      }
+    },
+    onBrowserDisconnect(remainingBrowsers) {
+      if (mode === 'browser' && remainingBrowsers === 0) instance.stop();
+      if (mode === 'idle' && remainingBrowsers === 0) {
+        logger.info('No browsers — idle timeout starting', {
+          module: 'keepalive',
+          timeoutMin: idleTimeoutMs / 60000,
+        });
+        idleTimer = setTimeout(() => {
+          logger.info('Keepalive idle timeout reached', { module: 'keepalive' });
+          instance.stop();
+        }, idleTimeoutMs);
+      }
+    },
+  };
+
+  return instance;
 };

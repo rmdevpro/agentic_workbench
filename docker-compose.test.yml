@@ -1,0 +1,38 @@
+# Test isolation compose override per §3.1
+# Usage: docker compose -p blueprint-test -f docker-compose.yml -f docker-compose.test.yml up -d
+
+services:
+  blueprint:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: blueprint-test-blueprint-1
+    ports:
+      - '7867:3000'
+    volumes:
+      - blueprint-test_workspace:/workspace
+      - blueprint-test_storage:/storage
+      - ./tests/fixtures/stub-claude.sh:/usr/local/bin/claude:ro
+    environment:
+      - PORT=3000
+      - WORKSPACE=/workspace
+      - CLAUDE_HOME=/storage/.claude
+      - CLAUDE_CONFIG_DIR=/storage/.claude
+      - BLUEPRINT_DATA=/storage
+      - HOME=/home/hopper
+      - MAX_TMUX_SESSIONS=10
+      - TMUX_CLEANUP_MINUTES=2
+      - LOG_LEVEL=DEBUG
+    networks:
+      - blueprint-test
+    dns:
+      - 127.0.0.1
+    restart: 'no'
+
+networks:
+  blueprint-test:
+    driver: bridge
+
+volumes:
+  blueprint-test_workspace:
+  blueprint-test_storage:

@@ -1,65 +1,78 @@
-const { describe, it, before, after } = require('node:test');
-const assert = require('node:assert');
-const { mkdirSync, rmSync } = require('fs');
+'use strict';
 
-describe('Webhook Logic', () => {
-  let webhooks, db;
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const http = require('node:http');
+const https = require('node:https');
+const fixtures = require('../fixtures/test-data');
+const { freshRequire } = require('../helpers/module');
+const path = require('node:path');
 
-  before(() => {
-    const TEST_DIR = '/tmp/webhook-test-' + process.pid;
-    process.env.BLUEPRINT_DATA = TEST_DIR;
-    mkdirSync(TEST_DIR, { recursive: true });
-
-    delete require.cache[require.resolve('../../db')];
-    delete require.cache[require.resolve('../../webhooks')];
-    db = require('../../db');
-    webhooks = require('../../webhooks');
+test('WHK-08 / WHK-09 / WHK-11: fireEvent sends filtered payloads with correct modes', (t) => {
+  const db = require('../../db.js');
+  t.mock.method(db, 'getSetting', () => JSON.stringify(fixtures.webhooks.hooks));
+  const requests = [];
+  const factory = (_o) => ({
+    on() {},
+    write(b) {
+      this.body = b;
+    },
+    end() {
+      requests.push(JSON.parse(this.body));
+    },
+    setTimeout() {},
   });
+  t.mock.method(http, 'request', factory);
+  t.mock.method(https, 'request', factory);
+  const { fireEvent } = freshRequire(path.join(__dirname, '../../webhooks.js'));
 
-  after(() => {
-    try { rmSync('/tmp/webhook-test-' + process.pid, { recursive: true, force: true }); } catch {}
+  fireEvent('session_created', { session_id: 's1', project: 'p' });
+  fireEvent('task_added', { task_id: 7, project: 'p', text: 'T' });
+
+  assert.equal(requests.length, 3);
+  assert.equal(requests[0].event, 'session_created');
+  assert.ok(requests[0].ids);
+  assert.ok(!requests[0].data);
+  assert.equal(requests[2].event, 'task_added');
+  assert.ok(requests[2].data);
+  assert.equal(requests[2].data.text, 'T');
+});
+
+test('WHK-10: delivery failure does not crash', (t) => {
+  const db = require('../../db.js');
+  t.mock.method(db, 'getSetting', () =>
+    JSON.stringify([{ url: 'http://localhost:9999/fail', events: ['*'], mode: 'event_only' }]),
+  );
+  t.mock.method(http, 'request', () => {
+    const r = {
+      on(e, h) {
+        if (e === 'error') setImmediate(() => h(new Error('refused')));
+      },
+      write() {},
+      end() {},
+      setTimeout() {},
+    };
+    return r;
   });
+  const { fireEvent } = freshRequire(path.join(__dirname, '../../webhooks.js'));
+  assert.doesNotThrow(() => fireEvent('test', {}));
+});
 
-  it('should return empty webhooks by default', () => {
-    // Simulate the getWebhooks internal function
-    const raw = db.getSetting('webhooks', '[]');
-    const hooks = JSON.parse(raw);
-    assert.deepStrictEqual(hooks, []);
-  });
-
-  it('should fire event without error when no webhooks configured', () => {
-    // Should not throw
-    webhooks.fireEvent('test_event', { data: 'test' });
-  });
-
-  it('should store webhook config in settings', () => {
-    const hooks = [
-      { url: 'http://example.com/hook', events: ['*'], mode: 'event_only' },
-    ];
-    db.setSetting('webhooks', JSON.stringify(hooks));
-    const stored = JSON.parse(db.getSetting('webhooks'));
-    assert.strictEqual(stored.length, 1);
-    assert.strictEqual(stored[0].url, 'http://example.com/hook');
-  });
-
-  it('should filter events by webhook subscription', () => {
-    const hooks = [
-      { url: 'http://example.com/hook', events: ['session_created'], mode: 'event_only' },
-    ];
-    db.setSetting('webhooks', JSON.stringify(hooks));
-
-    // fireEvent with non-matching event should not attempt to send
-    // (we can't easily verify without mocking HTTP, but it shouldn't throw)
-    webhooks.fireEvent('task_added', { task_id: 1 });
-  });
-
-  it('should match wildcard event subscriptions', () => {
-    const hooks = [
-      { url: 'http://example.com/hook', events: ['*'], mode: 'event_only' },
-    ];
-    db.setSetting('webhooks', JSON.stringify(hooks));
-
-    // Wildcard should match any event — shouldn't throw
-    webhooks.fireEvent('any_event', { data: 'test' });
-  });
+test('WHK-11: event filtering prevents non-matching events', (t) => {
+  const db = require('../../db.js');
+  t.mock.method(db, 'getSetting', () =>
+    JSON.stringify([{ url: 'http://localhost:9999', events: ['task_added'], mode: 'event_only' }]),
+  );
+  const requests = [];
+  t.mock.method(http, 'request', () => ({
+    on() {},
+    write(b) {
+      requests.push(b);
+    },
+    end() {},
+    setTimeout() {},
+  }));
+  const { fireEvent } = freshRequire(path.join(__dirname, '../../webhooks.js'));
+  fireEvent('session_created', { session_id: 's1' });
+  assert.equal(requests.length, 0);
 });

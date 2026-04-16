@@ -39,8 +39,15 @@ run_as_hopper() {
   fi
   mkdir -p "$BP_DATA"
   mkdir -p "$CLAUDE/projects"
-  mkdir -p "$BP_DATA/bridges" 2>/dev/null || true
   mkdir -p "$BP_DATA/quorum" 2>/dev/null || true
+
+  # Export API keys from Blueprint DB for CLI use
+  if [ -f "$BP_DATA/blueprint.db" ]; then
+    GEMINI_KEY=$(node -e "try{const d=require('/app/db.js');console.log(d.getSetting('gemini_api_key',''))}catch{}" 2>/dev/null)
+    CODEX_KEY=$(node -e "try{const d=require('/app/db.js');console.log(d.getSetting('codex_api_key',''))}catch{}" 2>/dev/null)
+    [ -n "$GEMINI_KEY" ] && export GOOGLE_API_KEY="$GEMINI_KEY" && echo "[entrypoint] Exported GOOGLE_API_KEY from settings"
+    [ -n "$CODEX_KEY" ] && export OPENAI_API_KEY="$CODEX_KEY" && echo "[entrypoint] Exported OPENAI_API_KEY from settings"
+  fi
 
   # Ensure Claude CLI settings exist
   if [ ! -f "$CLAUDE/settings.json" ]; then
@@ -92,7 +99,8 @@ run_as_hopper() {
 }
 
 # Fix ownership of workspace for hopper user
-chown -R hopper:hopper /workspace 2>/dev/null || true
+chown -R hopper:hopper /mnt/workspace 2>/dev/null || true
+chown -R hopper:hopper /mnt/storage 2>/dev/null || true
 
 # Run setup as hopper, then exec the main command as hopper
 export -f run_as_hopper
