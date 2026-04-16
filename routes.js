@@ -813,85 +813,8 @@ function registerCoreRoutes(
 
   // ── Inter-session messages ────────────────────────────────────────────────
 
-  app.get('/api/projects/:name/messages', (req, res) => {
-    const project = db.getProject(req.params.name);
-    if (!project) return res.status(404).json({ error: 'project not found' });
-    res.json({ messages: db.getRecentMessages(project.id) });
-  });
-
-  app.post('/api/projects/:name/messages', async (req, res) => {
-    try {
-      const project = db.getProject(req.params.name);
-      if (!project) return res.status(404).json({ error: 'project not found' });
-      const { from_session, to_session, content } = req.body;
-      if (!content) return res.status(400).json({ error: 'content required' });
-      if (content.length > MESSAGE_CONTENT_MAX_LEN)
-        return res.status(400).json({ error: `content too long (max ${MESSAGE_CONTENT_MAX_LEN})` });
-
-      const msg = db.sendMessage(project.id, from_session || null, to_session || null, content);
-      fireEvent('message_sent', {
-        message_id: msg.id,
-        project: req.params.name,
-        from_session,
-        to_session,
-        content,
-      });
-
-      if (to_session) {
-        const bridgeDir = join(db.DATA_DIR, 'bridges');
-        await mkdir(bridgeDir, { recursive: true });
-        const bridgeFile = join(bridgeDir, `msg_${crypto.randomUUID()}.md`);
-        await writeFile(bridgeFile, `# Message from ${from_session || 'human'}\n\n${content}\n`);
-
-        const tmux = tmuxName(to_session);
-        let delivered = false;
-        if (await safe.tmuxExists(tmux)) {
-          try {
-            const claudeTimeout = config.get('claude.defaultTimeoutMs', 120000);
-            await safe.claudeExecAsync(
-              [
-                '--resume',
-                to_session,
-                '--dangerously-skip-permissions',
-                '--no-session-persistence',
-                '--print',
-                bridgeFile,
-              ],
-              { cwd: project.path, timeout: claudeTimeout },
-            );
-            delivered = true;
-          } catch (err) {
-            logger.error('Failed to deliver bridge file', {
-              module: 'routes',
-              to_session,
-              err: err.message,
-            });
-          }
-        }
-
-        const bridgeCleanupSentMs = config.get('bridge.cleanupSentMs', 5000);
-        const bridgeCleanupUnsentMs = config.get('bridge.cleanupUnsentMs', 3600000);
-        setTimeout(
-          async () => {
-            try {
-              await unlink(bridgeFile);
-            } catch (cleanupErr) {
-              if (cleanupErr.code !== 'ENOENT')
-                logger.debug('Bridge file cleanup failed', {
-                  module: 'routes',
-                  err: cleanupErr.message,
-                });
-            }
-          },
-          delivered ? bridgeCleanupSentMs : bridgeCleanupUnsentMs,
-        );
-      }
-      res.json(msg);
-    } catch (err) {
-      logger.error('Error sending message', { module: 'routes', err: err.message });
-      res.status(500).json({ error: err.message });
-    }
-  });
+  // Inter-session messaging removed — tmux handles agent communication natively.
+  // See issue #51 for the tmux-based agent mesh architecture.
 
   // ── Settings ──────────────────────────────────────────────────────────────
 

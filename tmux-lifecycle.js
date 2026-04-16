@@ -121,46 +121,7 @@ module.exports = function createTmuxLifecycle({
     }
   }
 
-  async function cleanBridgeFiles(bridgeDir) {
-    try {
-      const files = await readdir(bridgeDir);
-      const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
-      let cleaned = 0;
-      for (const file of files) {
-        const fullPath = join(bridgeDir, file);
-        try {
-          const mtime = (await stat(fullPath)).mtimeMs;
-          if (mtime < twoHoursAgo) {
-            await unlink(fullPath);
-            cleaned++;
-          }
-        } catch (err) {
-          if (err.code !== 'ENOENT') {
-            logger.debug('cleanBridgeFiles: could not stat/unlink file', {
-              module: 'tmux-lifecycle',
-              file,
-              err: err.message,
-            });
-          }
-          /* expected: file removed between readdir and stat */
-        }
-      }
-      if (cleaned > 0)
-        logger.info('Cleaned up old bridge files on startup', {
-          module: 'tmux-lifecycle',
-          count: cleaned,
-        });
-    } catch (err) {
-      if (err.code === 'ENOENT') {
-        /* expected: bridge directory does not exist yet on first run */
-      } else {
-        logger.error('cleanBridgeFiles: bridge dir read error', {
-          module: 'tmux-lifecycle',
-          err: err.message,
-        });
-      }
-    }
-  }
+  // cleanBridgeFiles removed — bridge messaging replaced by tmux (#51)
 
   function setOnSessionKilled(callback) {
     _onSessionKilled = callback;
@@ -174,7 +135,6 @@ module.exports = function createTmuxLifecycle({
     cancelTmuxCleanup,
     enforceTmuxLimit,
     cleanOrphanedTmuxSessions,
-    cleanBridgeFiles,
     setOnSessionKilled,
   };
 };

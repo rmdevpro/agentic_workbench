@@ -172,7 +172,7 @@ if (require.main === module) {
       await watchers.ensureSettings();
 
       await tmux.cleanOrphanedTmuxSessions();
-      await tmux.cleanBridgeFiles(join(db.DATA_DIR, 'bridges'));
+      // Bridge file cleanup removed — messaging replaced by tmux (#51)
 
       resolver.resolveStaleNewSessions().catch((err) =>
         logger.error('Startup stale-session resolution error', {

@@ -39,7 +39,6 @@ run_as_hopper() {
   fi
   mkdir -p "$BP_DATA"
   mkdir -p "$CLAUDE/projects"
-  mkdir -p "$BP_DATA/bridges" 2>/dev/null || true
   mkdir -p "$BP_DATA/quorum" 2>/dev/null || true
 
   # Export API keys from Blueprint DB for CLI use

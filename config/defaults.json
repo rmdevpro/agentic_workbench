@@ -18,9 +18,5 @@
     "maxSessions": 50,
     "windowWidth": 200,
     "windowHeight": 50
-  },
-  "bridges": {
-    "deliveredCleanupMs": 5000,
-    "undeliveredCleanupMs": 3600000
   }
 }

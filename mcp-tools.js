@@ -57,7 +57,6 @@ function registerMcpRoutes(app) {
         { name: 'blueprint_session', description: 'Session management — info, transition, or resume.' },
         { name: 'blueprint_ask_cli', description: 'Ask any installed CLI (claude, gemini, codex) a question.' },
         { name: 'blueprint_ask_quorum', description: 'Ask a question to a multi-model quorum.' },
-        { name: 'blueprint_send_message', description: 'Send a message to another session.' },
         { name: 'blueprint_set_session_config', description: 'Set session configuration.' },
         { name: 'blueprint_reopen_task', description: 'Reopen a completed task.' },
         { name: 'blueprint_delete_task', description: 'Delete a task.' },
@@ -270,84 +269,7 @@ function registerMcpRoutes(app) {
           result = await r.json();
           break;
         }
-        case 'blueprint_send_message': {
-          const project = db.getProject(args.project);
-          if (!project) throw new Error('Project not found');
-          if (!args.content) return res.status(400).json({ error: 'content required' });
-          if (args.content.length > CONTENT_MAX_LEN)
-            return res.status(400).json({ error: `content too long (max ${CONTENT_MAX_LEN})` });
-          if (!validateMcpSessionId(args.to_session))
-            return res.status(400).json({ error: 'invalid to_session format' });
-
-          const bridgeDir = join(WORKSPACE, '.blueprint', 'bridges');
-          await mkdir(bridgeDir, { recursive: true });
-          const bridgeFile = join(bridgeDir, `msg_${randomUUID()}.md`);
-          await writeFile(bridgeFile, args.content);
-
-          db.sendMessage(project.id, null, args.to_session, `[file: ${bridgeFile}]`);
-
-          const tmuxSessName = safe.sanitizeTmuxName(`bp_${args.to_session.substring(0, 12)}`);
-          let sent = false;
-          try {
-            if (!(await safe.tmuxExists(tmuxSessName))) throw new Error('not running');
-            const claudeTimeout = config.get('claude.defaultTimeoutMs', 120000);
-            await safe.claudeExecAsync(
-              [
-                '--resume',
-                args.to_session,
-                '--dangerously-skip-permissions',
-                '--no-session-persistence',
-                '--print',
-                bridgeFile,
-              ],
-              { cwd: safe.resolveProjectPath(args.project), timeout: claudeTimeout },
-            );
-            sent = true;
-          } catch (err) {
-            if (err.message !== 'not running') {
-              logger.error('Failed to deliver message to session', {
-                module: 'mcp-tools',
-                op: 'blueprint_send_message',
-                err: err.message,
-              });
-            }
-            /* expected: session not running */
-          }
-
-          const bridgeCleanupSentMs = config.get('bridge.cleanupSentMs', 5000);
-          const bridgeCleanupUnsentMs = config.get('bridge.cleanupUnsentMs', 3600000);
-
-          if (sent) {
-            setTimeout(async () => {
-              try {
-                await unlink(bridgeFile);
-              } catch (cleanupErr) {
-                if (cleanupErr.code !== 'ENOENT')
-                  logger.debug('Bridge file cleanup failed', {
-                    module: 'mcp-tools',
-                    err: cleanupErr.message,
-                  });
-              }
-            }, bridgeCleanupSentMs);
-          } else {
-            setTimeout(async () => {
-              try {
-                await unlink(bridgeFile);
-              } catch (cleanupErr) {
-                if (cleanupErr.code !== 'ENOENT')
-                  logger.debug('Bridge file cleanup failed', {
-                    module: 'mcp-tools',
-                    err: cleanupErr.message,
-                  });
-              }
-            }, bridgeCleanupUnsentMs);
-          }
-
-          result = sent
-            ? { sent: true, delivered: true }
-            : { sent: false, note: 'Target session not running. Message saved in DB.' };
-          break;
-        }
+        // blueprint_send_message removed — use tmux for inter-session communication (#51)
         default:
           return res.status(404).json({ error: `Unknown tool: ${tool}` });
       }
