@@ -247,6 +247,15 @@
     .file-tab-icon { font-size:11px; margin-right:2px; }
     .tab-dirty .tab-name::after { content:' ●'; color:var(--warning); }
     .toastui-editor-defaultUI { height:100% !important; }
+
+    /* ── Context menu ── */
+    .context-menu {
+      position:fixed; z-index:1000; background:var(--bg-secondary); border:1px solid var(--border);
+      border-radius:6px; padding:4px 0; min-width:160px; box-shadow:0 4px 12px rgba(0,0,0,0.3);
+    }
+    .context-menu-item { padding:6px 12px; font-size:13px; cursor:pointer; color:var(--text-primary); }
+    .context-menu-item:hover { background:var(--bg-hover); }
+    .context-menu-divider { border-top:1px solid var(--border); margin:4px 0; }
     .toastui-editor-defaultUI .toastui-editor-main { background:var(--bg-primary); }
 
     #task-detail-modal { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.7); z-index:999; align-items:center; justify-content:center; }
@@ -522,11 +531,7 @@
         <input id="add-task-input" type="text" placeholder="Add task to selected folder... (Enter)">
       </div>
       <div id="panel-files" class="panel-section">
-        <div style="display:flex;justify-content:flex-end;margin-bottom:4px;gap:4px">
-          <button onclick="fileBrowserNewFolder()" style="background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);cursor:pointer;font-size:11px;padding:2px 8px" title="New folder">+ Folder</button>
-          <button onclick="document.getElementById('file-upload-input').click()" style="background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);cursor:pointer;font-size:11px;padding:2px 8px" title="Upload file">Upload</button>
-          <input id="file-upload-input" type="file" multiple style="display:none" onchange="fileBrowserUpload(this.files)">
-        </div>
+        <input id="file-upload-input" type="file" multiple style="display:none" onchange="fileBrowserUpload(this.files)">
         <div id="file-browser-tree" style="overflow-y:auto;background:var(--bg-primary);border:1px solid var(--border);border-radius:6px;padding:4px;flex:1;min-height:0"></div>
       </div>
     </div>
@@ -1993,6 +1998,120 @@
       $(treeEl).on('mouseenter', 'a', function() {
         $(this).attr('draggable', 'true');
       });
+
+      // ── Context menu ──
+      $(treeEl).on('contextmenu', 'a', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        removeContextMenu();
+        const path = $(this).attr('rel') || '';
+        const isDir = $(this).closest('li').hasClass('directory');
+        const menu = document.createElement('div');
+        menu.className = 'context-menu';
+        menu.style.left = e.pageX + 'px';
+        menu.style.top = e.pageY + 'px';
+
+        if (isDir) {
+          menu.innerHTML = `
+            <div class="context-menu-item" data-action="new-file">New File</div>
+            <div class="context-menu-item" data-action="new-folder">New Folder</div>
+            <div class="context-menu-item" data-action="upload">Upload</div>
+            <div class="context-menu-divider"></div>
+            <div class="context-menu-item" data-action="rename">Rename</div>
+            <div class="context-menu-item" data-action="delete" style="color:var(--danger)">Delete</div>
+          `;
+        } else {
+          menu.innerHTML = `
+            <div class="context-menu-item" data-action="open">Open</div>
+            <div class="context-menu-divider"></div>
+            <div class="context-menu-item" data-action="rename">Rename</div>
+            <div class="context-menu-item" data-action="delete" style="color:var(--danger)">Delete</div>
+          `;
+        }
+
+        menu.addEventListener('click', async (ev) => {
+          const action = ev.target.dataset.action;
+          if (!action) return;
+          removeContextMenu();
+          if (action === 'open') {
+            openFileTab(path.trim());
+          } else if (action === 'new-file') {
+            const name = prompt('File name:', 'new-file.md');
+            if (!name) return;
+            const newPath = path.replace(/\/?$/, '/') + name;
+            await fetch('/api/file-new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: newPath }) });
+            refreshFileBrowserDir(path);
+            openFileTab(newPath);
+          } else if (action === 'new-folder') {
+            const name = prompt('Folder name:');
+            if (!name) return;
+            await fetch('/api/mkdir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: path.replace(/\/?$/, '/') + name }) });
+            refreshFileBrowserDir(path);
+          } else if (action === 'upload') {
+            selectedUploadDir = path;
+            document.getElementById('file-upload-input').click();
+          } else if (action === 'rename') {
+            const oldName = path.split('/').filter(Boolean).pop();
+            const newName = prompt('New name:', oldName);
+            if (!newName || newName === oldName) return;
+            const parentDir = path.replace(/[^/]+\/?$/, '');
+            await fetch('/api/rename', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ oldPath: path.replace(/\/$/, ''), newPath: parentDir + newName + (isDir ? '/' : '') }) });
+            refreshFileBrowserDir(parentDir || '/');
+          } else if (action === 'delete') {
+            const name = path.split('/').filter(Boolean).pop();
+            if (!confirm(`Delete "${name}"${isDir ? ' and all its contents' : ''}?`)) return;
+            await fetch('/api/file?path=' + encodeURIComponent(path.replace(/\/$/, '')), { method: 'DELETE' });
+            const parentDir = path.replace(/[^/]+\/?$/, '');
+            refreshFileBrowserDir(parentDir || '/');
+          }
+        });
+
+        document.body.appendChild(menu);
+      });
+
+      // Drop on directory to move files
+      $(treeEl).on('dragover', 'li.directory > a', function(e) {
+        e.preventDefault();
+        e.originalEvent.dataTransfer.dropEffect = 'move';
+        $(this).css('background', 'var(--accent)').css('color', 'var(--bg-primary)');
+      });
+      $(treeEl).on('dragleave', 'li.directory > a', function() {
+        $(this).css('background', '').css('color', '');
+      });
+      $(treeEl).on('drop', 'li.directory > a', async function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        $(this).css('background', '').css('color', '');
+        const source = e.originalEvent.dataTransfer.getData('text/plain').trim();
+        const dest = $(this).attr('rel') || '';
+        if (!source || !dest || source === dest) return;
+        await fetch('/api/move', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: source.replace(/\/$/, ''), destination: dest.replace(/\/$/, '') }) });
+        const srcParent = source.replace(/[^/]+\/?$/, '');
+        refreshFileBrowserDir(srcParent || '/');
+        refreshFileBrowserDir(dest);
+      });
+    }
+
+    let selectedUploadDir = null;
+
+    function removeContextMenu() {
+      document.querySelectorAll('.context-menu').forEach(m => m.remove());
+    }
+    document.addEventListener('click', removeContextMenu);
+
+    function refreshFileBrowserDir(dirPath) {
+      const treeEl = document.getElementById('file-browser-tree');
+      const link = treeEl.querySelector(`a[rel="${dirPath}"], a[rel="${dirPath}/"]`);
+      if (link) {
+        const li = link.closest('li.directory');
+        if (li) {
+          const childUl = li.querySelector(':scope > ul');
+          if (childUl) childUl.remove();
+          li.classList.remove('expanded');
+          li.classList.add('collapsed');
+          $(link).trigger('click');
+        }
+      }
     }
 
 

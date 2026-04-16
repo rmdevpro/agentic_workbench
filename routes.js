@@ -311,6 +311,57 @@ function registerCoreRoutes(
     }
   });
 
+  app.post('/api/file-new', async (req, res) => {
+    try {
+      const filePath = req.body.path;
+      if (!filePath) return res.status(400).json({ error: 'path required' });
+      const { access } = require('fs/promises');
+      try { await access(filePath); return res.status(409).json({ error: 'file already exists' }); } catch {}
+      await writeFile(filePath, '');
+      res.json({ ok: true, path: filePath });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.put('/api/rename', async (req, res) => {
+    try {
+      const { oldPath, newPath } = req.body;
+      if (!oldPath || !newPath) return res.status(400).json({ error: 'oldPath and newPath required' });
+      const { rename } = require('fs/promises');
+      await rename(oldPath, newPath);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.delete('/api/file', async (req, res) => {
+    try {
+      const filePath = req.query.path;
+      if (!filePath) return res.status(400).json({ error: 'path required' });
+      const { rm } = require('fs/promises');
+      await rm(filePath, { recursive: true });
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.put('/api/move', async (req, res) => {
+    try {
+      const { source, destination } = req.body;
+      if (!source || !destination) return res.status(400).json({ error: 'source and destination required' });
+      const { rename } = require('fs/promises');
+      const { basename, join } = require('path');
+      const destPath = join(destination, basename(source));
+      await rename(source, destPath);
+      res.json({ ok: true, path: destPath });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   // ── POST /api/jqueryfiletree ───────────────────────────────────────────────
 
   app.post('/api/jqueryfiletree', jqftConnector.getDirList);
