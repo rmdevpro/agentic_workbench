@@ -19,7 +19,6 @@
     "express": "4.21.2",
     "jquery": "4.0.0",
     "jqueryfiletree": "2.1.4",
-    "@toast-ui/editor": "3.2.2",
     "node-pty": "1.0.0",
     "ws": "8.18.0"
   },
