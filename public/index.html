@@ -1431,7 +1431,6 @@
       document.querySelectorAll('.panel-tab').forEach(b => b.classList.toggle('active', b.dataset.panel === panel));
       document.getElementById('panel-notes').style.display = panel === 'notes' ? '' : 'none';
       document.getElementById('panel-tasks').style.display = panel === 'tasks' ? '' : 'none';
-      document.getElementById('panel-messages').style.display = panel === 'messages' ? '' : 'none';
       document.getElementById('panel-files').style.display = panel === 'files' ? '' : 'none';
       loadPanelData();
     }
