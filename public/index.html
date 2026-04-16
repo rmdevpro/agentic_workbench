@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Blueprint</title>
+  <link rel="icon" href="/favicon.ico" type="image/x-icon">
   <link rel="stylesheet" href="/lib/xterm/css/xterm.css">
   <link rel="stylesheet" href="/lib/jqueryfiletree/jQueryFileTree.min.css">
   <style>
@@ -63,7 +64,9 @@
       justify-content: space-between;
     }
 
-    #sidebar-header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; }
+    .sidebar-logo { height: 28px; width: auto; }
+    .logo-light { display: none; }
+    .logo-dark { display: block; }
 
     #sidebar-header button {
       background: none; border: none; color: var(--text-secondary);
@@ -420,7 +423,8 @@
 
   <div id="sidebar">
     <div id="sidebar-header">
-      <h1>Blueprint</h1>
+      <img src="/logo-white.png" alt="Blueprint" class="sidebar-logo logo-dark" height="28">
+      <img src="/logo-blue.png" alt="Blueprint" class="sidebar-logo logo-light" height="28">
       <div style="display:flex;gap:4px">
         <button onclick="addProject()" title="Add Project">+</button>
         <button onclick="loadState()" title="Refresh">&#x21bb;</button>
@@ -2203,6 +2207,11 @@
       for (const [, tab] of tabs) {
         tab.term.options.theme = config.term;
       }
+
+      // Toggle sidebar logo for theme
+      const isDark = theme === 'dark' || theme === 'blueprint-dark';
+      document.querySelectorAll('.logo-dark').forEach(el => el.style.display = isDark ? 'block' : 'none');
+      document.querySelectorAll('.logo-light').forEach(el => el.style.display = isDark ? 'none' : 'block');
     }
 
     function applyFontSize(size) {

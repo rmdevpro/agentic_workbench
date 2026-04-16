@@ -160,7 +160,7 @@ app.use((req, res, next) => {
   // Allow health checks
   if (req.path === '/api/health' || req.path === '/health') return next();
   // Allow gate assets
-  if (req.path === '/blueprint-preview.png') return next();
+  if (['/blueprint-preview.png', '/planlogo.png', '/favicon.ico'].includes(req.path)) return next();
 
   // Password mode: check session cookie
   if (authMode === 'password') {
