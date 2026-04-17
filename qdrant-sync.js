@@ -4,7 +4,7 @@
  * Qdrant vector sync — watches directories for changes, embeds content
  * via OpenAI-compatible API (Gemini), and upserts to Qdrant collections.
  *
- * Collections: docs, claude_sessions, gemini_sessions, codex_sessions
+ * Collections: documents, code, claude_sessions, gemini_sessions, codex_sessions
  * Embedding: 384 dims via MRL truncation (matches Qdrant default model dims)
  *
  * Zero npm dependencies — uses native fetch and fs.watch.
@@ -29,7 +29,7 @@ const WORKSPACE = safe.WORKSPACE;
 const CLAUDE_HOME = safe.CLAUDE_HOME;
 
 const COLLECTIONS = {
-  docs: 'docs',
+  documents: 'documents',
   code: 'code',
   claude: 'claude_sessions',
   gemini: 'gemini_sessions',
@@ -44,7 +44,7 @@ function _parseSetting(key, fallback) {
 
 function getCollectionConfig(col) {
   const defaults = {
-    docs: { enabled: true, dims: 384, patterns: ['*.md', '*.txt', '*.pdf', '*.rst', '*.adoc'] },
+    documents: { enabled: true, dims: 384, patterns: ['*.md', '*.txt', '*.pdf', '*.rst', '*.adoc'] },
     code: { enabled: false, dims: 384, patterns: ['*.js', '*.ts', '*.py', '*.go', '*.rs', '*.java', '*.sh', 'Dockerfile', 'Makefile', '*.yml', '*.yaml', '*.json'] },
     claude: { enabled: true, dims: 384 },
     gemini: { enabled: true, dims: 384 },
@@ -546,10 +546,10 @@ async function scanCollection(collection, dirs, patterns, dims) {
 }
 
 async function scanDocs() {
-  const cfg = getCollectionConfig('docs');
+  const cfg = getCollectionConfig('documents');
   if (!cfg.enabled) return 0;
-  const dirs = [join(WORKSPACE, 'docs'), ...getAdditionalPaths().filter(p => existsSync(p))];
-  return scanCollection(COLLECTIONS.docs, dirs, cfg.patterns || ['*.md', '*.txt'], cfg.dims);
+  const dirs = [WORKSPACE, ...getAdditionalPaths().filter(p => existsSync(p))];
+  return scanCollection(COLLECTIONS.documents, dirs, cfg.patterns || ['*.md', '*.txt'], cfg.dims);
 }
 
 async function scanCode() {
@@ -715,7 +715,7 @@ async function start() {
     const codexCount = await scanCodexSessions();
     logger.info('Qdrant initial sync complete', {
       module: 'qdrant-sync',
-      docs: docCount,
+      documents: docCount,
       code: codeCount,
       claude: claudeCount,
       gemini: geminiCount,
@@ -725,8 +725,8 @@ async function start() {
     logger.error('Qdrant initial sync error', { module: 'qdrant-sync', err: err.message });
   }
 
-  // Set up file watchers
-  watchDir(join(WORKSPACE, 'docs'), scanDocs);
+  // Set up file watchers — both documents and code watch the workspace
+  watchDir(WORKSPACE, scanDocs);
   watchDir(WORKSPACE, scanCode);
   watchDir(join(CLAUDE_HOME, 'projects'), scanClaudeSessions);
 
@@ -801,7 +801,7 @@ async function reindexCollection(colKey) {
   // Re-scan
   let count = 0;
   switch (colKey) {
-    case 'docs': count = await scanDocs(); break;
+    case 'documents': count = await scanDocs(); break;
     case 'code': count = await scanCode(); break;
     case 'claude': count = await scanClaudeSessions(); break;
     case 'gemini': count = await scanGeminiSessions(); break;

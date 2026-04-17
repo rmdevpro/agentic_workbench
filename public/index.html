@@ -686,23 +686,23 @@
 
       <div class="settings-group">
         <h3>Collections</h3>
-        <div id="vector-collection-docs" style="border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:8px">
+        <div id="vector-collection-documents" style="border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:8px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
             <div style="display:flex;align-items:center;gap:8px">
-              <input type="checkbox" id="vector-col-docs-enabled" checked onchange="saveCollectionConfig('docs')">
+              <input type="checkbox" id="vector-col-documents-enabled" checked onchange="saveCollectionConfig('documents')">
               <span style="font-size:13px;font-weight:600">Documents</span>
-              <span id="vector-col-docs-count" style="font-size:11px;color:var(--text-muted)"></span>
+              <span id="vector-col-documents-count" style="font-size:11px;color:var(--text-muted)"></span>
             </div>
             <div style="display:flex;align-items:center;gap:8px">
               <label style="font-size:11px;color:var(--text-muted)">Dims</label>
-              <input type="number" id="vector-col-docs-dims" min="64" max="3072" value="384" style="width:70px;padding:2px 6px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px"
-                onchange="saveCollectionConfig('docs')">
-              <button onclick="reindexCollection('docs')" style="font-size:11px;padding:2px 8px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);cursor:pointer">Re-index</button>
+              <input type="number" id="vector-col-documents-dims" min="64" max="3072" value="384" style="width:70px;padding:2px 6px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px"
+                onchange="saveCollectionConfig('documents')">
+              <button onclick="reindexCollection('documents')" style="font-size:11px;padding:2px 8px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);cursor:pointer">Re-index</button>
             </div>
           </div>
           <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px">File patterns (one per line)</label>
-          <textarea id="vector-col-docs-patterns" rows="3" style="width:100%;padding:4px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;font-family:monospace;resize:vertical"
-            onchange="saveCollectionConfig('docs')">*.md
+          <textarea id="vector-col-documents-patterns" rows="3" style="width:100%;padding:4px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;font-family:monospace;resize:vertical"
+            onchange="saveCollectionConfig('documents')">*.md
 *.txt
 *.pdf
 *.rst
@@ -3075,8 +3075,7 @@ build/**</textarea>
         if (s.vector_custom_key) document.getElementById('setting-vector-custom-key').value = s.vector_custom_key;
 
         // Collections
-        const colNames = ['docs', 'code', 'claude', 'gemini', 'codex'];
-        const qdrantNames = { docs: 'docs', code: 'code', claude: 'claude', gemini: 'gemini', codex: 'codex' };
+        const colNames = ['documents', 'code', 'claude', 'gemini', 'codex'];
         for (const col of colNames) {
           const cfg = s['vector_collection_' + col] || {};
           const enabledEl = document.getElementById('vector-col-' + col + '-enabled');
