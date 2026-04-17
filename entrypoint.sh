@@ -112,6 +112,15 @@ run_as_hopper() {
 chown -R hopper:hopper /mnt/workspace 2>/dev/null || true
 chown -R hopper:hopper /mnt/storage 2>/dev/null || true
 
+# Start Qdrant vector database in background
+QDRANT_STORAGE="${BLUEPRINT_DATA:-$HOME/.blueprint}/qdrant"
+mkdir -p "$QDRANT_STORAGE" 2>/dev/null || true
+chown -R hopper:hopper "$QDRANT_STORAGE" 2>/dev/null || true
+if command -v qdrant &>/dev/null; then
+  gosu hopper qdrant --storage-path "$QDRANT_STORAGE" --port 6333 &
+  echo "[entrypoint] Qdrant started on port 6333 (storage: $QDRANT_STORAGE)"
+fi
+
 # Run setup as hopper, then exec the main command as hopper
 export -f run_as_hopper
 gosu hopper bash -c "run_as_hopper"

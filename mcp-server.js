@@ -215,16 +215,24 @@ const TOOLS = [
     },
   },
   {
-    name: 'blueprint_send_message',
-    description: 'Send inter-session message.',
+    name: 'blueprint_vector_search',
+    description: 'Search across docs and session history using vector similarity. Returns semantically similar content from indexed documents and conversations.',
     inputSchema: {
       type: 'object',
       properties: {
-        project: { type: 'string' },
-        to_session: { type: 'string' },
-        content: { type: 'string' },
+        query: { type: 'string', description: 'Natural language search query' },
+        collections: { type: 'string', description: 'Comma-separated collection names to search (docs, claude_sessions, gemini_sessions, codex_sessions). Default: all.' },
+        limit: { type: 'number', description: 'Max results (default 10)' },
       },
-      required: ['project', 'to_session', 'content'],
+      required: ['query'],
+    },
+  },
+  {
+    name: 'blueprint_vector_status',
+    description: 'Get Qdrant vector index status — availability, collection stats, point counts.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
     },
   },
 ];

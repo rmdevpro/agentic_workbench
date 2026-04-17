@@ -4,6 +4,10 @@ RUN apt-get update && apt-get install -y \
     git curl ca-certificates python3 make g++ tmux ssh openssh-client jq \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Qdrant vector database
+RUN curl -fsSL https://github.com/qdrant/qdrant/releases/download/v1.17.1/qdrant-x86_64-unknown-linux-musl.tar.gz \
+    | tar xz -C /usr/local/bin && chmod +x /usr/local/bin/qdrant
+
 # Install AI CLIs from public npm
 RUN npm install -g @anthropic-ai/claude-code @google/gemini-cli @openai/codex
 

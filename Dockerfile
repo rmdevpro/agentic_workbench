@@ -15,6 +15,10 @@ RUN curl -fsSL https://download.docker.com/linux/static/stable/$(uname -m)/docke
        -o /usr/local/lib/docker/cli-plugins/docker-compose \
     && chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
+# Install Qdrant vector database
+RUN curl -fsSL https://github.com/qdrant/qdrant/releases/download/v1.17.1/qdrant-x86_64-unknown-linux-musl.tar.gz \
+    | tar xz -C /usr/local/bin && chmod +x /usr/local/bin/qdrant
+
 # Install Claude CLI and Playwright MCP
 ARG NPM_REGISTRY=http://192.168.1.110:4873
 RUN npm config set registry ${NPM_REGISTRY}

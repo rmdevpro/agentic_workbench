@@ -62,6 +62,8 @@ function registerMcpRoutes(app) {
         { name: 'blueprint_ask_quorum', description: 'Ask a question to a multi-model quorum.' },
         { name: 'blueprint_set_session_config', description: 'Set session configuration.' },
         { name: 'blueprint_get_token_usage', description: 'Get token usage for a session.' },
+        { name: 'blueprint_vector_search', description: 'Search across docs and session history using vector similarity.' },
+        { name: 'blueprint_vector_status', description: 'Get Qdrant vector index status and collection stats.' },
       ],
     });
   });
@@ -340,7 +342,21 @@ function registerMcpRoutes(app) {
           result = await r.json();
           break;
         }
-        // blueprint_send_message removed — use tmux for inter-session communication (#51)
+        case 'blueprint_vector_search': {
+          if (!args.query || args.query.length < 2)
+            return res.status(400).json({ error: 'query must be at least 2 characters' });
+          const qdrant = require('./qdrant-sync');
+          const collections = args.collections
+            ? args.collections.split(',').map(c => c.trim())
+            : null;
+          result = await qdrant.search(args.query, collections, args.limit || 10);
+          break;
+        }
+        case 'blueprint_vector_status': {
+          const qdrant = require('./qdrant-sync');
+          result = await qdrant.status();
+          break;
+        }
         default:
           return res.status(404).json({ error: `Unknown tool: ${tool}` });
       }

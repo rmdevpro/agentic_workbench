@@ -76,5 +76,13 @@ node -e "
   }
 " "$CLI_VERSION" || echo "[entrypoint] WARNING: Failed to set onboarding state"
 
+# Start Qdrant vector database in background
+QDRANT_STORAGE="${BP_DATA}/qdrant"
+mkdir -p "$QDRANT_STORAGE" 2>/dev/null || true
+if command -v qdrant &>/dev/null; then
+  qdrant --storage-path "$QDRANT_STORAGE" --port 6333 &
+  echo "[entrypoint] Qdrant started on port 6333 (storage: $QDRANT_STORAGE)"
+fi
+
 echo "[entrypoint] Blueprint starting on port ${PORT:-7860}"
 exec "$@"
