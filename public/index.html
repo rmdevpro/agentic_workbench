@@ -2266,12 +2266,12 @@
         console.log('submitAuthCode tab:', { wsState: tab.ws?.readyState, wsOpen: tab.ws?.readyState === WebSocket.OPEN });
         if (tab.ws && tab.ws.readyState === WebSocket.OPEN) {
           tab.ws.send(code);
-          setTimeout(() => tab.ws.send('\n'), 100);
-          console.log('submitAuthCode: sent via tab ws');
+          setTimeout(() => { tab.ws.send('\r'); console.log('submitAuthCode: sent Enter'); }, 500);
+          console.log('submitAuthCode: sent code via tab ws');
         }
       } else if (window._loginWs && window._loginWs.readyState === WebSocket.OPEN) {
         window._loginWs.send(code);
-        setTimeout(() => window._loginWs.send('\n'), 100);
+        setTimeout(() => window._loginWs.send('\r'), 500);
         console.log('submitAuthCode: sent via _loginWs');
       } else {
         console.log('submitAuthCode: NO WEBSOCKET AVAILABLE');
