@@ -21,7 +21,7 @@ The monolithic `server.js` has been decomposed into focused modules using factor
 | `logger.js`           | Structured JSON logging (stdout/stderr)                                          |
 | `keepalive.js`        | OAuth token refresh with configurable timing (fully async)                       |
 
-Supporting modules: `mcp-server.js`, `mcp-tools.js`, `mcp-external.js`, `openai-compat.js`, `webhooks.js`, `safe-exec.js`, `session-utils.js`, `qdrant-sync.js`.
+Supporting modules: `mcp-server.js`, `mcp-tools.js`, `webhooks.js`, `safe-exec.js`, `session-utils.js`, `qdrant-sync.js`.
 
 ### Dependency Graph
 

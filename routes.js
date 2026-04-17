@@ -19,7 +19,6 @@ const crypto = require('crypto');
 const express = require('express');
 const { registerMcpRoutes } = require('./mcp-tools');
 const { registerWebhookRoutes } = require('./webhooks');
-const { registerExternalMcpRoutes } = require('./mcp-external');
 const jqftConnector = require('jqueryfiletree/dist/connectors/jqueryFileTree');
 
 const SESSION_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
@@ -1289,7 +1288,6 @@ function registerCoreRoutes(
 
   registerMcpRoutes(app);
   registerWebhookRoutes(app);
-  registerExternalMcpRoutes(app);
 
   return { checkAuthStatus, trustDir };
 }
