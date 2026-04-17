@@ -188,6 +188,20 @@ const TOOLS = [
     },
   },
   {
+    name: 'blueprint_docs',
+    description: 'Manage Blueprint documentation library. Actions: list, search, read, create, update, delete.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['list', 'search', 'read', 'create', 'update', 'delete'], description: 'CRUDS operation' },
+        path: { type: 'string', description: 'Path relative to /workspace/docs/ (e.g. guides/installing-aider.md)' },
+        content: { type: 'string', description: 'Content for create/update actions' },
+        query: { type: 'string', description: 'Search query for search action' },
+      },
+      required: ['action'],
+    },
+  },
+  {
     name: 'blueprint_ask_quorum',
     description: 'Ask the quorum.',
     inputSchema: {

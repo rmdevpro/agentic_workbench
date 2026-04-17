@@ -41,6 +41,15 @@ run_as_hopper() {
   mkdir -p "$CLAUDE/projects"
   mkdir -p "$BP_DATA/quorum" 2>/dev/null || true
 
+  # Ensure docs library exists with standard structure
+  WORKSPACE="${WORKSPACE:-/mnt/workspace}"
+  mkdir -p "$WORKSPACE/docs/guides" "$WORKSPACE/docs/processes" "$WORKSPACE/docs/reference" "$WORKSPACE/docs/system-prompts"
+  # Seed standard docs from /app/config/guides if docs/guides is empty
+  if [ -d /app/config/guides ] && [ -z "$(ls -A "$WORKSPACE/docs/guides" 2>/dev/null)" ]; then
+    cp /app/config/guides/*.md "$WORKSPACE/docs/guides/" 2>/dev/null || true
+    echo "[entrypoint] Seeded docs library from config/guides"
+  fi
+
   # Export API keys from Blueprint DB for CLI use
   if [ -f "$BP_DATA/blueprint.db" ]; then
     GEMINI_KEY=$(node -e "try{const d=require('/app/db.js');console.log(d.getSetting('gemini_api_key',''))}catch{}" 2>/dev/null)

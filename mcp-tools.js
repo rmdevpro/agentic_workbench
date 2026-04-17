@@ -58,6 +58,7 @@ function registerMcpRoutes(app) {
         { name: 'blueprint_update_plan', description: "Write or update a session's plan file." },
         { name: 'blueprint_session', description: 'Session management — info, transition, or resume.' },
         { name: 'blueprint_ask_cli', description: 'Ask any installed CLI (claude, gemini, codex) a question.' },
+        { name: 'blueprint_docs', description: 'Manage documentation library (list, search, read, create, update, delete).' },
         { name: 'blueprint_ask_quorum', description: 'Ask a question to a multi-model quorum.' },
         { name: 'blueprint_set_session_config', description: 'Set session configuration.' },
         { name: 'blueprint_get_token_usage', description: 'Get token usage for a session.' },
@@ -213,6 +214,84 @@ function registerMcpRoutes(app) {
           if (args.state !== undefined) db.setSessionState(args.session_id, args.state);
           if (args.notes !== undefined) db.setSessionNotes(args.session_id, args.notes);
           result = { saved: true };
+          break;
+        }
+        case 'blueprint_docs': {
+          const DOCS_DIR = join(safe.WORKSPACE, 'docs');
+          const docPath = args.path ? join(DOCS_DIR, args.path) : DOCS_DIR;
+
+          // Prevent path traversal
+          if (args.path && !docPath.startsWith(DOCS_DIR)) {
+            return res.status(403).json({ error: 'path traversal blocked' });
+          }
+
+          switch (args.action) {
+            case 'list': {
+              const { readdirSync, statSync } = require('fs');
+              const target = args.path ? docPath : DOCS_DIR;
+              try {
+                const entries = readdirSync(target).map(name => {
+                  const full = join(target, name);
+                  const isDir = statSync(full).isDirectory();
+                  return { name, type: isDir ? 'directory' : 'file' };
+                });
+                result = { path: args.path || '/', entries };
+              } catch (e) {
+                result = { path: args.path || '/', entries: [], error: e.code === 'ENOENT' ? 'directory not found' : e.message };
+              }
+              break;
+            }
+            case 'search': {
+              if (!args.query) return res.status(400).json({ error: 'query required' });
+              const { execSync } = require('child_process');
+              try {
+                const out = execSync(`grep -rl --include='*.md' ${safe.shellEscape(args.query)} ${safe.shellEscape(DOCS_DIR)}`, { encoding: 'utf-8', timeout: 5000 }).trim();
+                const matches = out ? out.split('\n').map(f => f.replace(DOCS_DIR + '/', '')) : [];
+                result = { query: args.query, matches };
+              } catch {
+                result = { query: args.query, matches: [] };
+              }
+              break;
+            }
+            case 'read': {
+              if (!args.path) return res.status(400).json({ error: 'path required' });
+              try {
+                const content = require('fs').readFileSync(docPath, 'utf-8');
+                result = { path: args.path, content };
+              } catch (e) {
+                result = { error: e.code === 'ENOENT' ? 'doc not found' : e.message };
+              }
+              break;
+            }
+            case 'create': {
+              if (!args.path || !args.content) return res.status(400).json({ error: 'path and content required' });
+              const dir = require('path').dirname(docPath);
+              require('fs').mkdirSync(dir, { recursive: true });
+              if (require('fs').existsSync(docPath)) return res.status(409).json({ error: 'doc already exists, use update' });
+              require('fs').writeFileSync(docPath, args.content);
+              result = { created: args.path };
+              break;
+            }
+            case 'update': {
+              if (!args.path || !args.content) return res.status(400).json({ error: 'path and content required' });
+              if (!require('fs').existsSync(docPath)) return res.status(404).json({ error: 'doc not found, use create' });
+              require('fs').writeFileSync(docPath, args.content);
+              result = { updated: args.path };
+              break;
+            }
+            case 'delete': {
+              if (!args.path) return res.status(400).json({ error: 'path required' });
+              try {
+                require('fs').unlinkSync(docPath);
+                result = { deleted: args.path };
+              } catch (e) {
+                result = { error: e.code === 'ENOENT' ? 'doc not found' : e.message };
+              }
+              break;
+            }
+            default:
+              return res.status(400).json({ error: 'invalid action' });
+          }
           break;
         }
         case 'blueprint_session': {

@@ -11,6 +11,13 @@ WORK="${WORKSPACE:-$HOME/workspace}"
 mkdir -p "$WORK" "$BP_DATA" "$CLAUDE/projects" 2>/dev/null || true
 mkdir -p "$BP_DATA/quorum" 2>/dev/null || true
 
+# Ensure docs library exists with standard structure
+mkdir -p "$WORK/docs/guides" "$WORK/docs/processes" "$WORK/docs/reference" "$WORK/docs/system-prompts"
+if [ -d /app/config/guides ] && [ -z "$(ls -A "$WORK/docs/guides" 2>/dev/null)" ]; then
+  cp /app/config/guides/*.md "$WORK/docs/guides/" 2>/dev/null || true
+  echo "[entrypoint] Seeded docs library from config/guides"
+fi
+
 # Ensure .claude.json exists for workspace trust
 test -f "$HOME/.claude.json" || echo '{}' > "$HOME/.claude.json"
 
