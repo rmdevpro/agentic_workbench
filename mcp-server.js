@@ -202,19 +202,6 @@ const TOOLS = [
     },
   },
   {
-    name: 'blueprint_ask_quorum',
-    description: 'Ask the quorum.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        question: { type: 'string' },
-        project: { type: 'string' },
-        mode: { type: 'string' },
-      },
-      required: ['question', 'project'],
-    },
-  },
-  {
     name: 'blueprint_vector_search',
     description: 'Search across docs and session history using vector similarity. Returns semantically similar content from indexed documents and conversations.',
     inputSchema: {

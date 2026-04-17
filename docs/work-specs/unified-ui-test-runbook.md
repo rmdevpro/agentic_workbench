@@ -1,10 +1,38 @@
 # Unified UI Test Runbook
 
-**Target:** http://192.168.1.120:7869
-**Container:** blueprint-merged on M5
-**Branch:** merge/easy-fixes-into-refactor
-**Tool:** Local Playwright MCP (NOT Malory)
+**Target:** https://aristotle9-blueprint.hf.space (HF public Space with password auth)
+**Fallback Target:** http://192.168.1.120:7869 (M5 test container — NOT a substitute for HF testing)
+**Branch:** huggingface-space
+**Tool:** Playwright MCP (local, NOT Malory)
 **Total:** 131 test blocks (79 from refactor + 38 NF + 14 settings/vector)
+
+## CRITICAL: Test on HF Spaces, NOT just M5
+
+M5 containers use `Dockerfile` with different paths, ports, and user setup than HF Spaces (`Dockerfile.huggingface`). Testing on M5 does NOT verify the app works on HF. All UI testing MUST be done against the actual HF Space.
+
+### HF Public Space with Password Auth
+
+To test the full app on the public Space (which normally shows a gate/block page):
+
+1. Set `BLUEPRINT_USER` and `BLUEPRINT_PASS` as Space secrets via HF API:
+```bash
+curl -X POST "https://huggingface.co/api/spaces/aristotle9/blueprint/secrets" \
+  -H "Authorization: Bearer $HF_TOKEN" -H "Content-Type: application/json" \
+  -d '{"key":"BLUEPRINT_USER","value":"testuser"}'
+curl -X POST "https://huggingface.co/api/spaces/aristotle9/blueprint/secrets" \
+  -H "Authorization: Bearer $HF_TOKEN" -H "Content-Type: application/json" \
+  -d '{"key":"BLUEPRINT_PASS","value":"testpass123"}'
+```
+
+2. The gate page will show a login form instead of the "Duplicate this Space" template.
+
+3. Use Playwright to navigate to the Space URL, fill in the login form, and submit.
+
+4. After login, the full app is accessible — run all UI tests.
+
+### Why not the private Space?
+
+Private Spaces require HF account authentication at the proxy level. Playwright cannot authenticate to HF's proxy (it's not a simple cookie — HF uses server-side session validation). The public Space with password auth bypasses this by handling auth at the app level.
 
 ## CRITICAL: What "test" means
 

@@ -57,9 +57,7 @@ function registerMcpRoutes(app) {
         { name: 'blueprint_read_plan', description: "Read a session's plan file." },
         { name: 'blueprint_update_plan', description: "Write or update a session's plan file." },
         { name: 'blueprint_session', description: 'Session management — info, transition, or resume.' },
-        { name: 'blueprint_ask_cli', description: 'Ask any installed CLI (claude, gemini, codex) a question.' },
         { name: 'blueprint_docs', description: 'Manage documentation library (list, search, read, create, update, delete).' },
-        { name: 'blueprint_ask_quorum', description: 'Ask a question to a multi-model quorum.' },
         { name: 'blueprint_set_session_config', description: 'Set session configuration.' },
         { name: 'blueprint_get_token_usage', description: 'Get token usage for a session.' },
         { name: 'blueprint_vector_search', description: 'Search across docs and session history using vector similarity.' },
@@ -311,35 +309,6 @@ function registerMcpRoutes(app) {
           } else {
             result = data.prompt || data.error || 'No response';
           }
-          break;
-        }
-        case 'blueprint_ask_cli': {
-          const r = await fetch(
-            `http://localhost:${process.env.BLUEPRINT_PORT || 3000}/api/cli/ask`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ cli: args.cli, prompt: args.prompt, model: args.model, cwd: args.cwd }),
-            },
-          );
-          const cliData = await r.json();
-          result = cliData.result || cliData.error || 'No response';
-          break;
-        }
-        case 'blueprint_ask_quorum': {
-          const r = await fetch(
-            `http://localhost:${process.env.BLUEPRINT_PORT || 3000}/api/quorum/ask`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                question: args.question,
-                project: args.project,
-              }),
-            },
-          );
-          if (!r.ok) throw new Error(`Quorum internal call failed: ${r.status}`);
-          result = await r.json();
           break;
         }
         case 'blueprint_vector_search': {

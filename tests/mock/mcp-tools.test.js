@@ -57,7 +57,7 @@ test('MCP tool list returns expected tools', async () => {
     assert.ok(r.tools.length >= 14);
     assert.ok(r.tools.some((t) => t.name === 'blueprint_search_sessions'));
     assert.ok(r.tools.some((t) => t.name === 'blueprint_session'));
-    assert.ok(r.tools.some((t) => t.name === 'blueprint_ask_cli'));
+    assert.ok(r.tools.some((t) => t.name === 'blueprint_vector_search'));
     assert.ok(r.tools.some((t) => t.name === 'blueprint_get_token_usage'));
   });
 });

@@ -45,20 +45,13 @@ codex exec "What is the difference between Promise.all and Promise.allSettled?"
 
 ### Code Review (tmux)
 ```bash
-tmux send-keys -t codex "Review quorum.js against our error handling patterns" Enter
+tmux send-keys -t codex "Review routes.js against our error handling patterns" Enter
 ```
 
 ### Debugging Help (tmux)
 ```bash
 tmux send-keys -t codex "I'm getting this error: [paste]. Look at server.js and tell me what's wrong." Enter
 ```
-
-### Second Opinion (via blueprint_ask_cli MCP tool)
-From any Claude session:
-```
-Use blueprint_ask_cli with cli="codex" and prompt="Review this approach..."
-```
-Note: `blueprint_ask_cli` uses non-interactive mode. For complex questions, use tmux.
 
 ### Multi-Turn Consultation (tmux)
 ```bash

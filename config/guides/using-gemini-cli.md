@@ -47,20 +47,13 @@ gemini -p "What is the difference between Promise.all and Promise.allSettled?"
 
 ### Code Review (tmux)
 ```bash
-tmux send-keys -t gemini "Review quorum.js for error handling gaps" Enter
+tmux send-keys -t gemini "Review routes.js for error handling gaps" Enter
 ```
 
 ### Architecture Critique (tmux)
 ```bash
 tmux send-keys -t gemini "I'm planning to add WebSocket multiplexing to the session manager. Review server.js and tell me if this is sound." Enter
 ```
-
-### Second Opinion (via blueprint_ask_cli MCP tool)
-From any Claude session, use the MCP tool:
-```
-Use blueprint_ask_cli with cli="gemini" and prompt="Review this approach..."
-```
-Note: `blueprint_ask_cli` uses `--print` mode internally. For complex questions that need file access, use tmux instead.
 
 ## Options
 

@@ -23,7 +23,6 @@ test('ENG-20: all application modules importable', () => {
     'ws-terminal',
     'keepalive',
     'voice',
-    'quorum',
     'webhooks',
     'shared-state',
     'mcp-tools',
@@ -63,7 +62,6 @@ test('ENG-09: no bare catch {} blocks in application code', () => {
     'mcp-external.js',
     'mcp-server.js',
     'openai-compat.js',
-    'quorum.js',
     'webhooks.js',
   ];
   for (const file of files) {

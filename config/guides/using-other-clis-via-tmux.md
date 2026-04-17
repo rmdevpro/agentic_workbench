@@ -73,24 +73,6 @@ codex --model gpt-5.3-codex exec "Quick one-shot question"
 codex --cd /mnt/workspace/my-project exec "Explain the codebase"
 ```
 
-## blueprint_ask_cli MCP Tool
-
-For simple one-shot questions without needing file access or tools, use the MCP tool from any Claude session:
-
-```
-Use blueprint_ask_cli with cli="gemini" and prompt="Your question here"
-```
-
-This uses non-interactive mode internally. For complex questions that need file access, use tmux instead.
-
-## blueprint_ask_quorum
-
-Ask all configured CLIs the same question and get a multi-model consensus:
-
-```
-Use blueprint_ask_quorum with question="Your question" and project="project-name"
-```
-
 ## When Non-Interactive Mode is OK
 
 - Simple one-shot questions that don't need tools or file access
