@@ -109,6 +109,11 @@ let authMode = 'open'; // 'template' | 'password' | 'open'
 const sessionTokens = new Set();
 
 async function detectAuthMode() {
+  // Password auth takes priority — if credentials are set, use them regardless of Space visibility
+  if (process.env.BLUEPRINT_USER && process.env.BLUEPRINT_PASS) {
+    authMode = 'password';
+    return;
+  }
   const spaceId = process.env.SPACE_ID;
   if (spaceId) {
     try {
@@ -121,11 +126,7 @@ async function detectAuthMode() {
       authMode = 'template'; return; // fail safe: assume public
     }
   }
-  if (process.env.BLUEPRINT_USER && process.env.BLUEPRINT_PASS) {
-    authMode = 'password';
-  } else {
-    authMode = 'open';
-  }
+  authMode = 'open';
 }
 
 function parseCookie(req, name) {
