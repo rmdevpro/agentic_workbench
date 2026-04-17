@@ -2260,21 +2260,15 @@
       if (!code) return;
 
       // Send the code then Enter as separate messages
-      console.log('submitAuthCode:', { code: code.substring(0, 20) + '...', authTriggerTabId, hasTabs: tabs.has(authTriggerTabId), hasLoginWs: !!window._loginWs });
       if (authTriggerTabId && tabs.has(authTriggerTabId)) {
         const tab = tabs.get(authTriggerTabId);
-        console.log('submitAuthCode tab:', { wsState: tab.ws?.readyState, wsOpen: tab.ws?.readyState === WebSocket.OPEN });
         if (tab.ws && tab.ws.readyState === WebSocket.OPEN) {
           tab.ws.send(code);
-          setTimeout(() => { tab.ws.send('\r'); console.log('submitAuthCode: sent Enter'); }, 500);
-          console.log('submitAuthCode: sent code via tab ws');
+          setTimeout(() => tab.ws.send('\r'), 500);
         }
       } else if (window._loginWs && window._loginWs.readyState === WebSocket.OPEN) {
         window._loginWs.send(code);
         setTimeout(() => window._loginWs.send('\r'), 500);
-        console.log('submitAuthCode: sent via _loginWs');
-      } else {
-        console.log('submitAuthCode: NO WEBSOCKET AVAILABLE');
       }
 
       // Dismiss modal after a short delay to let the CLI process
