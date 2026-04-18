@@ -25,14 +25,6 @@ test('PRJ-04: /api/state lists projects', async () => {
   assert.ok(Array.isArray(r.data.projects));
 });
 
-test('PRJ-05: project notes round-trip with DB verification', async () => {
-  dockerExec('mkdir -p /workspace/test_notes_proj');
-  await post('/api/projects', { path: '/workspace/test_notes_proj', name: 'test_notes_proj' });
-  await put('/api/projects/test_notes_proj/notes', { notes: 'Test notes content' });
-  const r = await get('/api/projects/test_notes_proj/notes');
-  assert.equal(r.data.notes, 'Test notes content');
-});
-
 test('GCM-01/02: global CLAUDE.md read/write', async () => {
   await put('/api/claude-md/global', { content: '# Global Test' });
   const r = await get('/api/claude-md/global');

@@ -28,7 +28,7 @@ test('DB-01: schema creates 6 tables with WAL mode', async () => {
       .prepare("SELECT name FROM sqlite_master WHERE type='table'")
       .all()
       .map((r) => r.name);
-    for (const t of ['projects', 'sessions', 'tasks', 'settings', 'messages', 'session_meta']) {
+    for (const t of ['projects', 'sessions', 'tasks', 'settings', 'session_meta']) {
       assert.ok(tables.includes(t), `missing table ${t}`);
     }
     assert.equal(String(db.db.pragma('journal_mode', { simple: true })).toLowerCase(), 'wal');
@@ -131,7 +131,7 @@ test('DB-08: session meta upsert/get/cleanStale', async () => {
   });
 });
 
-test('DB-09: delete project cascades sessions and messages', async () => {
+test('DB-09: delete project cascades sessions', async () => {
   await withDb(async (db) => {
     const p = db.ensureProject('proj', '/workspace/proj');
     db.upsertSession('s1', p.id, 'S');

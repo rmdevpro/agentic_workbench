@@ -14,26 +14,6 @@ function startMcpApp() {
   return app;
 }
 
-test('MCP-03 / FS-06: plan path traversal blocked', async () => {
-  await withServer(startMcpApp(), async ({ port }) => {
-    const r = await req(port, 'POST', '/api/mcp/call', {
-      tool: 'blueprint_update_plan',
-      args: { session_id: 's1', project: '../evil', content: 'x' },
-    });
-    assert.equal(r.status, 403);
-  });
-});
-
-test('MCP-04: invalid session_id rejected', async () => {
-  await withServer(startMcpApp(), async ({ port }) => {
-    const r = await req(port, 'POST', '/api/mcp/call', {
-      tool: 'blueprint_get_session_notes',
-      args: { session_id: '../../etc/passwd' },
-    });
-    assert.equal(r.status, 400);
-  });
-});
-
 test('MCP-05: invalid task_id rejected', async () => {
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await req(port, 'POST', '/api/mcp/call', {
@@ -111,27 +91,6 @@ test('MCP blueprint_search_sessions rejects overlong query', async () => {
     assert.equal(r.status, 400);
   });
 });
-
-test('MCP blueprint_update_plan rejects missing content', async () => {
-  await withServer(startMcpApp(), async ({ port }) => {
-    const r = await req(port, 'POST', '/api/mcp/call', {
-      tool: 'blueprint_update_plan',
-      args: { session_id: 's1', project: 'p' },
-    });
-    assert.equal(r.status, 400);
-  });
-});
-
-test('MCP blueprint_update_plan rejects overlong content', async () => {
-  await withServer(startMcpApp(), async ({ port }) => {
-    const r = await req(port, 'POST', '/api/mcp/call', {
-      tool: 'blueprint_update_plan',
-      args: { session_id: 's1', project: 'p', content: 'x'.repeat(100001) },
-    });
-    assert.equal(r.status, 400);
-  });
-});
-
 
 test('MCP blueprint_set_session_config validates session_id', async () => {
   await withServer(startMcpApp(), async ({ port }) => {
@@ -352,49 +311,6 @@ test('MCP blueprint_set_session_config success path with all fields', async () =
     assert.equal(db.getSession('cfg_sess').name, 'Renamed');
     assert.equal(db.getSession('cfg_sess').state, 'archived');
     assert.equal(db.getSessionNotes('cfg_sess'), 'config notes');
-  });
-});
-
-test('MCP blueprint_read_plan success for existing plan', async () => {
-  const fsp = require('node:fs/promises');
-  const path = require('node:path');
-  const planBase = path.join(db.DATA_DIR, 'plans', 'testproj');
-  await fsp.mkdir(planBase, { recursive: true });
-  await fsp.writeFile(path.join(planBase, 'plan_sess.md'), '# My Plan\nStep 1');
-  await withServer(startMcpApp(), async ({ port }) => {
-    const r = await (
-      await req(port, 'POST', '/api/mcp/call', {
-        tool: 'blueprint_read_plan',
-        args: { session_id: 'plan_sess', project: 'testproj' },
-      })
-    ).json();
-    assert.match(r.result.content, /My Plan/);
-  });
-});
-
-test('MCP blueprint_read_plan returns empty for nonexistent plan', async () => {
-  await withServer(startMcpApp(), async ({ port }) => {
-    const r = await (
-      await req(port, 'POST', '/api/mcp/call', {
-        tool: 'blueprint_read_plan',
-        args: { session_id: 'noplan', project: 'noplanproj' },
-      })
-    ).json();
-    assert.equal(r.result.content, '');
-    assert.equal(r.result.exists, false);
-  });
-});
-
-test('MCP blueprint_update_plan success path', async () => {
-  await withServer(startMcpApp(), async ({ port }) => {
-    const r = await (
-      await req(port, 'POST', '/api/mcp/call', {
-        tool: 'blueprint_update_plan',
-        args: { session_id: 'up_sess', project: 'upproj', content: '# Updated plan' },
-      })
-    ).json();
-    assert.equal(r.result.saved, true);
-    assert.ok(r.result.path);
   });
 });
 

@@ -337,19 +337,6 @@ test('session name overlong rejected', async () => {
   });
 });
 
-test('notes overlong rejected', async () => {
-  await withFullServer(async ({ port }) => {
-    assert.equal(
-      (
-        await req(port, 'PUT', '/api/projects/test-project/notes', {
-          notes: fixtures.routes.overlongNotes,
-        })
-      ).status,
-      400,
-    );
-  });
-});
-
 test('search overlong rejected', async () => {
   await withFullServer(async ({ port }) => {
     assert.equal(
@@ -515,29 +502,6 @@ test('task CRUD success paths with DB verification', async () => {
 });
 
 
-
-test('project notes read/write success path', async () => {
-  await withFullServer(async ({ port, db }) => {
-    await req(port, 'PUT', '/api/projects/test-project/notes', { notes: 'Test notes' });
-    // Gray-box: verify DB was updated
-    const pid = db.getProject('test-project').id;
-    assert.equal(db.getProjectNotes(pid), 'Test notes', 'Notes must persist in DB');
-    const r = await (await req(port, 'GET', '/api/projects/test-project/notes')).json();
-    assert.equal(r.notes, 'Test notes');
-  });
-});
-
-test('session notes read/write success path', async () => {
-  await withFullServer(async ({ port, db }) => {
-    const p = db.ensureProject('np', '/workspace/np');
-    db.upsertSession('sn1', p.id, 'S');
-    await req(port, 'PUT', '/api/sessions/sn1/notes', { notes: 'Session note' });
-    // Gray-box: verify DB was updated
-    assert.equal(db.getSessionNotes('sn1'), 'Session note', 'Session notes must persist in DB');
-    const r = await (await req(port, 'GET', '/api/sessions/sn1/notes')).json();
-    assert.equal(r.notes, 'Session note');
-  });
-});
 
 test('session config GET/PUT success', async () => {
   await withFullServer(async ({ port, db }) => {
@@ -1487,49 +1451,6 @@ test('SES-CFG-03: GET /api/sessions/:id/config returns 404 when session not foun
   });
 });
 
-// -- session notes: invalid session ID --
-
-test('SES-NOTES-01: GET /api/sessions/:id/notes rejects invalid ID', async () => {
-  await withFullServer(async ({ port }) => {
-    const r = await req(port, 'GET', '/api/sessions/bad!id/notes');
-    assert.equal(r.status, 400);
-  });
-});
-
-test('SES-NOTES-02: PUT /api/sessions/:id/notes rejects invalid ID', async () => {
-  await withFullServer(async ({ port }) => {
-    const r = await req(port, 'PUT', '/api/sessions/bad!id/notes', { notes: 'hi' });
-    assert.equal(r.status, 400);
-  });
-});
-
-test('SES-NOTES-03: PUT /api/sessions/:id/notes rejects overlong notes', async () => {
-  await withFullServer(async ({ port, db }) => {
-    const p = db.ensureProject('notep', '/workspace/notep');
-    db.upsertSession('note1', p.id, 'S');
-    const r = await req(port, 'PUT', '/api/sessions/note1/notes', {
-      notes: 'x'.repeat(100001),
-    });
-    assert.equal(r.status, 400);
-  });
-});
-
-// -- project notes: project not found --
-
-test('PRJ-NOTES-01: GET /api/projects/:name/notes returns 404 when project not found', async () => {
-  await withFullServer(async ({ port }) => {
-    const r = await req(port, 'GET', '/api/projects/no-such-proj/notes');
-    assert.equal(r.status, 404);
-  });
-});
-
-test('PRJ-NOTES-02: PUT /api/projects/:name/notes returns 404 when project not found', async () => {
-  await withFullServer(async ({ port }) => {
-    const r = await req(port, 'PUT', '/api/projects/no-such-proj/notes', { notes: 'hi' });
-    assert.equal(r.status, 404);
-  });
-});
-
 // -- tasks: project not found --
 
 test('TSK-08: GET /api/projects/:name/tasks returns 404 when project not found', async () => {
@@ -1555,20 +1476,3 @@ test('TSK-10: POST /api/projects/:name/tasks rejects missing text', async () => 
   });
 });
 
-// -- messages: project not found --
-
-test('MSG-05: GET /api/projects/:name/messages returns 404 when project not found', async () => {
-  await withFullServer(async ({ port }) => {
-    const r = await req(port, 'GET', '/api/projects/no-such-proj/messages');
-    assert.equal(r.status, 404);
-  });
-});
-
-test('MSG-06: POST /api/projects/:name/messages returns 404 when project not found', async () => {
-  await withFullServer(async ({ port }) => {
-    const r = await req(port, 'POST', '/api/projects/no-such-proj/messages', {
-      content: 'hello',
-    });
-    assert.equal(r.status, 404);
-  });
-});

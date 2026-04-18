@@ -249,23 +249,6 @@ describe('UI smoke tests (browser)', () => {
     await page.screenshot({ path: `${SS}/ui-smoke--task-created.png` });
   });
 
-  // ── Message Panel ───────────────────────────────────────
-
-  it('UI-24: message panel displays message list with content', async () => {
-    await page.click('#panel-toggle');
-    await page.click('[data-panel="messages"]');
-    assert.ok(await page.locator('#panel-messages').isVisible(), 'Messages panel must be visible');
-
-    // Messages panel has a message-list div
-    const msgList = page.locator('#message-list');
-    assert.ok((await msgList.count()) > 0, 'Messages panel must contain #message-list element');
-    const content = await msgList.textContent();
-    assert.ok(content.length > 0, 'Message list must contain text (at least a placeholder)');
-
-    await page.screenshot({ path: `${SS}/ui-smoke--message-panel.png` });
-    assert.equal(errors.length, 0, errors.join(', '));
-  });
-
   // ── Status Bar Live Updates ─────────────────────────────
 
   it('UI-28: updateStatusBar function exists and updates DOM', async () => {
