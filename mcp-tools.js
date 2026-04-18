@@ -162,12 +162,12 @@ async function handleSessions(args, res) {
       const proj = db.getProject(args.project);
       if (!proj) return res.status(404).json({ error: 'project not found' });
       const projectPath = proj.path;
-      const tmpId = `new_${Date.now()}`;
-      const tmux = `bp_${safe.sanitizeTmuxName(tmpId.substring(0, 12))}`;
+      const tmpId = `new_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      const tmux = `bp_${safe.sanitizeTmuxName(tmpId.substring(0, 16))}`;
       switch (cliType) {
         case 'gemini': safe.tmuxCreateGemini(tmux, projectPath); break;
         case 'codex': safe.tmuxCreateCodex(tmux, projectPath); break;
-        default: safe.tmuxCreateClaude(tmux, projectPath, ['--dangerously-skip-permissions']); break;
+        default: safe.tmuxCreateClaude(tmux, projectPath); break;
       }
       db.upsertSession(tmpId, proj.id, args.prompt || 'New Session', cliType);
       return { session_id: tmpId, tmux, project: args.project, cli: cliType };
