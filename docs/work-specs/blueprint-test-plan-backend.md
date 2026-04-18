@@ -1,12 +1,42 @@
-# Blueprint Test Plan
+# Blueprint Test Plan (Backend — Gates A & B)
 
-**Status:** Active
-**Date:** 2026-04-10
-**Revision:** 6.0 (revised from 5.0 per WPR-103 standard update: §1 Discovery Phase removed, structural coverage tooling replaces manual audit)
+**Status:** Active — Updated 2026-04-18
+**Original Date:** 2026-04-10
+**Revision:** 7.0 (updated for feature changes: removed quorum, openai-compat, smart compaction, messages, notes endpoints, plan tools; added multi-CLI, Qdrant vector search, MCP management, session lifecycle)
 **Standard:** WPR-103 (State 4 Test Plan Work Product Standard)
-**Application:** Blueprint -- Browser-based CLI workbench managing Claude Code sessions in Docker
+**Application:** Blueprint -- Agentic Workbench managing Claude/Gemini/Codex CLI sessions in tmux/Docker
 **Engineering Requirements:** ERQ-001
 **Synthesized from:** Independent plans by Claude, Gemini, Grok, GPT
+
+## IMPORTANT: Changes Since Revision 6.0
+
+### Removed modules (tests marked REMOVED)
+- `quorum.js` — entire module deleted, QRM tests removed
+- `openai-compat.js` — entire module deleted, OAI tests removed
+- `mcp-external.js` — entire module deleted
+- Smart compaction — CMP tests for compaction pipeline removed
+- Messages system — send/get/mark-read functions and table removed from db.js
+- Notes endpoints — `/api/projects/:name/notes` and `/api/sessions/:id/notes` GET/PUT removed from routes.js
+- Plan tools — `blueprint_read_plan`, `blueprint_update_plan` removed from mcp-tools.js
+- `blueprint_send_message`, `blueprint_get_project_notes`, `blueprint_get_session_notes`, `blueprint_ask_cli`, `blueprint_ask_quorum`, `blueprint_smart_compaction` — all removed
+
+### Changed modules
+- `mcp-tools.js` — 17 tools consolidated to 3 (`blueprint_files`, `blueprint_sessions`, `blueprint_tasks`)
+- `mcp-server.js` — tool definitions updated to match
+- `db.js` — added `cli_type` column, `mcp_registry` and `mcp_project_enabled` tables, `searchSessionsByName()`
+- `safe-exec.js` — added `tmuxCreateGemini()`, `tmuxCreateCodex()`, user `blueprint` (was `hopper`)
+- `routes.js` — `POST /api/sessions` accepts `cli_type`, resume launches correct CLI
+- `tmux-lifecycle.js` — periodic scan, idle timeouts, session limits
+- `qdrant-sync.js` — new module for vector search
+- `server.js` — MAX_TMUX_SESSIONS default 10, periodic scan startup
+
+### New modules
+- `qdrant-sync.js` — Qdrant vector sync, embedding pipeline, file watching
+
+### Path changes
+- Container user: `blueprint` (was `hopper`)
+- Workspace: `/home/blueprint/workspace` (was `/mnt/workspace`)
+- No `CLAUDE_HOME` override — uses `$HOME/.claude` naturally
 **Reviewed by (R1):** Claude (Sonnet 4.6), Gemini, Grok, GPT
 **Reviewed by (R2):** Claude (Sonnet 4.6), Gemini, Grok, GPT
 **Review disposition:** R1 incorporated into Revision 2.0/3.0; R2 incorporated into Revision 4.0; see Appendix A and Appendix B
@@ -17,7 +47,7 @@
 
 ## 0. Executive Summary
 
-Blueprint is a UI-first operational workbench that manages Claude CLI sessions through tmux, WebSockets, SQLite persistence, file watchers, MCP tooling, OpenAI-compatible APIs, quorum orchestration, keepalive token management, health monitoring, and a custom smart compaction pipeline.
+Blueprint is a UI-first agentic workbench that manages Claude, Gemini, and Codex CLI sessions through tmux, WebSockets, SQLite persistence, file watchers, MCP tooling (3 consolidated tools), Qdrant vector search, keepalive token management, health monitoring, and project-scoped MCP server management.
 
 This test plan is built to satisfy WPR-103 and explicitly addresses the systemic failures documented in the review findings -- a prior 785-test suite with 98.3% pass rate that caught zero of 38 filed bugs. The root causes were: tests reimplementing application logic locally instead of importing real code, browser tests verifying DOM presence instead of behavior, multi-stage pipelines never exercised end-to-end, and silent error swallowing in 22 bare `catch {}` blocks.
 
@@ -155,7 +185,7 @@ Per WPR-103 §2, the test plan defines a two-layer strategy. Each layer has sub-
 
 **Coverage:** Every exported function from every module. Every error path (including all 22 former bare-catch remediation paths), edge case, state transition, JSON parsing, token calculation, and input validation branch.
 
-**14 modules each get dedicated test files:** `config.test.js`, `logger.test.js`, `db.test.js`, `safe-exec.test.js`, `session-utils.test.js`, `tmux-lifecycle.test.js`, `session-resolver.test.js`, `watchers.test.js`, `ws-terminal.test.js`, `keepalive.test.js`, `compaction.test.js`, `quorum.test.js`, `webhooks.test.js`, `server.test.js`.
+**12 modules each get dedicated test files:** `config.test.js`, `logger.test.js`, `db.test.js`, `safe-exec.test.js`, `session-utils.test.js`, `tmux-lifecycle.test.js`, `session-resolver.test.js`, `watchers.test.js`, `ws-terminal.test.js`, `keepalive.test.js`, `webhooks.test.js`, `server.test.js`. (Removed: `compaction.test.js`, `quorum.test.js`. Added coverage needed: `qdrant-sync.test.js`, `mcp-tools.test.js`.)
 
 **`routes.test.js` scope:** This file contains route-level input validation tests only (missing params, invalid types, boundary values, path traversal). Domain logic tests belong in their domain files (e.g., session CRUD logic in `session-utils.test.js`). Scenarios assigned: ENG-06, ENG-07, PRJ-07, PRJ-08, SES-12, TSK-06, TSK-07, MSG-04..07, RTE-01, RTE-02, FS-06.
 
@@ -864,43 +894,49 @@ This is the highest-risk subsystem. It requires both granular stage tests and fu
 | ID | Capability | Layer | Status |
 |----|-----------|-------|--------|
 | MCS-01 | JSON-RPC `initialize` returns protocol version | Mock + Live | NONE |
-| MCS-02 | `tools/list` returns all 14 tools | Mock | NONE |
+| MCS-02 | `tools/list` returns all 3 tools (blueprint_files, blueprint_sessions, blueprint_tasks) | Mock | NONE |
 | MCS-03 | `tools/call` delegates to Blueprint HTTP API | Live | NONE |
-| MCS-04a | `blueprint_search_sessions` via stdio | Live | NONE |
-| MCS-04b | `blueprint_list_sessions` via stdio | Live | NONE |
-| MCS-04c | `blueprint_summarize_session` via stdio | Live | NONE |
-| MCS-04d | `blueprint_get_tasks` via stdio | Live | NONE |
-| MCS-04e | `blueprint_add_task` via stdio | Live | NONE |
-| MCS-04f | `blueprint_complete_task` via stdio | Live | NONE |
-| MCS-04g | `blueprint_get_project_notes` via stdio | Live | NONE |
-| MCS-04h | `blueprint_get_project_claude_md` via stdio | Live | NONE |
-| MCS-04i | `blueprint_read_plan` via stdio | Live | NONE |
-| MCS-04j | `blueprint_update_plan` via stdio | Live | NONE |
-| MCS-04k | `blueprint_smart_compaction` via stdio | Live | NONE |
-| MCS-04l | `blueprint_send_message` via stdio | Live | NONE |
-| MCS-04m | `blueprint_set_session_config` via stdio | Live | NONE |
-| MCS-04n | `blueprint_get_token_usage` via stdio | Live | NONE |
+| MCS-04a | `blueprint_files action=list` via stdio | Live | NONE |
+| MCS-04b | `blueprint_files action=read` via stdio | Live | NONE |
+| MCS-04c | `blueprint_files action=grep` via stdio | Live | NONE |
+| MCS-04d | `blueprint_files action=create` via stdio | Live | NONE |
+| MCS-04e | `blueprint_sessions action=list` via stdio | Live | NONE |
+| MCS-04f | `blueprint_sessions action=new` via stdio | Live | NONE |
+| MCS-04g | `blueprint_sessions action=connect` via stdio | Live | NONE |
+| MCS-04h | `blueprint_sessions action=config` via stdio | Live | NONE |
+| MCS-04i | `blueprint_sessions action=mcp_register` via stdio | Live | NONE |
+| MCS-04j | `blueprint_sessions action=mcp_enable` via stdio | Live | NONE |
+| MCS-04k | `blueprint_tasks action=get` via stdio | Live | NONE |
+| MCS-04l | `blueprint_tasks action=add` via stdio | Live | NONE |
+| MCS-04m | `blueprint_tasks action=complete` via stdio | Live | NONE |
 | MCS-05 | Invalid tool name returns error | Mock | NONE |
 | MCS-06 | Malformed JSON-RPC request handling | Mock | NONE |
 | MCS-07 | `notifications/initialized` no-op | Live | NONE |
 
-#### 4.1.24 OpenAI-Compatible API (`openai-compat.js`)
+#### 4.1.24 OpenAI-Compatible API — REMOVED
+
+`openai-compat.js` deleted. OAI-01..11 permanently removed.
+
+#### 4.1.25 Quorum System — REMOVED
+
+`quorum.js` deleted. QRM-01..15 permanently removed.
+
+#### 4.1.25a Qdrant Vector Search (`qdrant-sync.js`) — NEW
 
 | ID | Capability | Layer | Status |
 |----|-----------|-------|--------|
-| OAI-01 | `GET /v1/models` returns model list | Live | NONE |
-| OAI-02 | `POST /v1/chat/completions` non-streaming | Live | NONE |
-| OAI-03 | `POST /v1/chat/completions` streaming (SSE) | Live | NONE |
-| OAI-04 | Session routing via `bp:` model prefix | Live | NONE |
-| OAI-05 | Session routing via `X-Blueprint-Session` header | Live | NONE |
-| OAI-06 | Project inference from `X-Blueprint-Project` header | Live | NONE |
-| OAI-07 | 100KB prompt limit enforcement | Mock | NONE |
-| OAI-08 | Invalid model name handling | Mock | NONE |
-| OAI-09 | Missing/no-user messages rejected | Live | NONE |
-| OAI-10 | Default project inference | Live | NONE |
-| OAI-11 | Claude exec failure returns server_error | Mock + Live | NONE |
+| QDR-01 | Qdrant health check | Live | NONE |
+| QDR-02 | Collection creation with per-collection dims | Live | NONE |
+| QDR-03 | Document file sync (scan, embed, upsert) | Live | NONE |
+| QDR-04 | Session file sync (JSONL parsing, chunking, embed) | Live | NONE |
+| QDR-05 | Vector search returns ranked results | Live | NONE |
+| QDR-06 | Configurable glob patterns and ignore patterns | Mock | NONE |
+| QDR-07 | Multi-provider embedding (HF, Gemini, OpenAI, Custom) | Mock | NONE |
+| QDR-08 | Reindex collection (delete + recreate + rescan) | Live | NONE |
+| QDR-09 | File watcher debounced sync | Live | NONE |
+| QDR-10 | Graceful degradation when Qdrant unavailable | Mock | NONE |
 
-#### 4.1.25 Quorum System (`quorum.js`)
+Previously in this section:
 
 | ID | Capability | Layer | Status |
 |----|-----------|-------|--------|
@@ -930,7 +966,7 @@ This is the highest-risk subsystem. It requires both granular stage tests and fu
 | WHK-04 | Delete webhook by index | Live | NONE |
 | WHK-05 | Fire `session_created` event | Live | NONE |
 | WHK-06 | Fire `task_added` event | Live | NONE |
-| WHK-07 | Fire `message_sent` event | Live | NONE |
+| WHK-07 | ~~Fire `message_sent` event~~ REMOVED — messages deleted | — | — |
 | WHK-08 | `event_only` mode (IDs only, no content) | Mock + Live | NONE |
 | WHK-09 | `full_content` mode (complete payload) | Mock + Live | NONE |
 | WHK-10 | Webhook delivery failure (non-200 target, no crash) | Mock | NONE |
@@ -941,7 +977,7 @@ This is the highest-risk subsystem. It requires both granular stage tests and fu
 | ID | Capability | Layer | Status |
 |----|-----------|-------|--------|
 | ENT-01 | Docker socket group matching (dynamic GID) | Live | NONE |
-| ENT-02 | User drop from root to hopper via gosu | Live | NONE |
+| ENT-02 | User drop from root to blueprint via gosu | Live | NONE |
 | ENT-03 | Data directory creation | Live | NONE |
 | ENT-04 | CLAUDE_HOME symlink setup | Live | NONE |
 | ENT-05 | Settings.json creation with defaults | Live | NONE |
