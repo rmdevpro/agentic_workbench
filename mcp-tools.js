@@ -159,18 +159,18 @@ async function handleSessions(args, res) {
       const VALID_CLI_TYPES = ['claude', 'gemini', 'codex'];
       if (!VALID_CLI_TYPES.includes(cliType))
         return res.status(400).json({ error: `invalid cli type: ${cliType}` });
-      // Create via the sessions API
-      const r = await fetch(
-        `http://localhost:${process.env.BLUEPRINT_PORT || process.env.PORT || 3000}/api/sessions`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ project: args.project, cli_type: cliType, prompt: args.prompt || '' }),
-        },
-      );
-      const data = await r.json();
-      if (data.error) return { error: data.error };
-      return { session_id: data.id, tmux: data.tmux, project: data.project, cli: cliType };
+      const proj = db.getProject(args.project);
+      if (!proj) return res.status(404).json({ error: 'project not found' });
+      const projectPath = proj.path;
+      const tmpId = `new_${Date.now()}`;
+      const tmux = `bp_${safe.sanitizeTmuxName(tmpId.substring(0, 12))}`;
+      switch (cliType) {
+        case 'gemini': safe.tmuxCreateGemini(tmux, projectPath); break;
+        case 'codex': safe.tmuxCreateCodex(tmux, projectPath); break;
+        default: safe.tmuxCreateClaude(tmux, projectPath, ['--dangerously-skip-permissions']); break;
+      }
+      db.upsertSession(tmpId, proj.id, args.prompt || 'New Session', cliType);
+      return { session_id: tmpId, tmux, project: args.project, cli: cliType };
     }
     case 'connect': {
       // Find session by name query or session_id, ensure tmux running, return tmux name
@@ -234,30 +234,26 @@ async function handleSessions(args, res) {
       return await sessionUtils.summarizeSession(args.session_id, args.project);
     }
     case 'transition': {
-      const r = await fetch(
-        `http://localhost:${process.env.BLUEPRINT_PORT || process.env.PORT || 3000}/api/sessions/${args.session_id || 'current'}/session`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode: 'transition' }),
-        },
-      );
-      const data = await r.json();
-      return data.prompt || data.error || 'No response';
+      const config = require('./config');
+      return config.getPrompt('session-transition', {});
     }
     case 'resume': {
       if (!validateSessionId(args.session_id))
         return res.status(400).json({ error: 'session_id required' });
-      const r = await fetch(
-        `http://localhost:${process.env.BLUEPRINT_PORT || process.env.PORT || 3000}/api/sessions/${args.session_id}/session`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode: 'resume', tailLines: args.tail_lines || 60 }),
-        },
-      );
-      const data = await r.json();
-      return data.prompt || data.error || 'No response';
+      const config = require('./config');
+      const session = db.getSessionFull(args.session_id);
+      const projectPath = session?.project_path || '';
+      const sessDir = sessionUtils.sessionsDir(projectPath);
+      const sessionFile = join(sessDir, `${args.session_id}.jsonl`);
+      let tail = '';
+      try {
+        const content = fs.readFileSync(sessionFile, 'utf-8');
+        const lines = content.trim().split('\n').filter(Boolean);
+        tail = lines.slice(-(args.tail_lines || 60)).join('\n');
+      } catch {
+        tail = '(could not read session file)';
+      }
+      return config.getPrompt('session-resume', { SESSION_TAIL: tail });
     }
     case 'grep': {
       if (!args.pattern) return res.status(400).json({ error: 'pattern required' });
