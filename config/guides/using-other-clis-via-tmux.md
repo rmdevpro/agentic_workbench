@@ -27,6 +27,25 @@ tmux send-keys -t helper "Follow-up question" Enter
 tmux kill-session -t helper
 ```
 
+## CRITICAL: Handle Startup Prompts Before Sending Work
+
+Interactive CLIs have startup prompts that MUST be handled before any real prompts will work. If you send a prompt while a startup dialog is active, your text either answers the dialog incorrectly or goes into a buffer that never gets processed.
+
+**After launching any CLI, you MUST:**
+1. Check the screen with `tmux capture-pane`
+2. Handle any interactive prompts (trust dialogs, update prompts, model selection)
+3. Verify the CLI is at an empty input prompt ready for work
+4. Only THEN send your actual prompt
+5. Check the screen AGAIN to verify it started processing ("Thinking...", "Searching...", etc.)
+
+**Common startup blockers:**
+- **Codex**: "Do you trust the contents of this directory?" — must answer before prompts work
+- **Codex**: "Update available! Press enter to continue" — blocks all input until dismissed
+- **Gemini**: "Do you trust the files in this folder?" — same blocking pattern
+- **Gemini**: First Enter after sending text may be consumed by the multiline editor — check if prompt submitted, send another Enter if needed
+
+**The rule: ONE send-keys, then CHECK the screen. Never send a second command without verifying the first one was received and processed.** Prompts that pile up in the input buffer are lost work — they accumulate as text but never execute.
+
 ## Important: Hide Sub-Sessions
 
 When you launch a Claude sub-session via tmux, it will appear in Blueprint's session list in the left sidebar automatically. After launching, update the sub-session to hidden status so it does not clutter the user's session list:
@@ -78,6 +97,17 @@ codex --cd /mnt/workspace/my-project exec "Explain the codebase"
 - Simple one-shot questions that don't need tools or file access
 - Scripted pipelines where you just need text output
 - When you explicitly don't want the CLI to use tools
+
+## Gemini-Specific Notes
+
+- **CWD matters**: Gemini can only see its CWD and directories below it. Launch from a broad directory (e.g. `/storage`) or use `/add-directory` to grant access to paths outside the CWD.
+- **Multiline editor**: Gemini uses a multiline text editor for input. The first Enter from `send-keys` sometimes acts as a newline rather than submit. Always verify "Thinking..." appears — if the text is sitting in the input field, send another Enter.
+- **Double Escape**: Clears the input buffer and rewinds conversation. Use this to recover from accumulated text in the input field.
+
+## Codex-Specific Notes
+
+- **Web search works**: Codex CAN search the web — it will show "Searching the web" when doing so. If prompts silently return with no response, the session is stuck on an unhandled startup prompt.
+- **Trust dialog**: Must be answered before any prompts work. Check for it after every fresh launch.
 
 ## Known Limitations
 
