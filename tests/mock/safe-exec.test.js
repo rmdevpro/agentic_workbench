@@ -30,10 +30,10 @@ function freshSafe(env = {}) {
 }
 
 test('SAF-01: resolveProjectPath joins WORKSPACE correctly', () => {
-  const { safe, restore } = freshSafe();
+  const { safe, restore } = freshSafe({ HOME: '/home/blueprint' });
   try {
-    // WORKSPACE is hardcoded to /mnt/workspace
-    assert.equal(safe.resolveProjectPath('proj'), path.resolve('/mnt/workspace', 'proj'));
+    // Default WORKSPACE = join(HOME, 'workspace') where HOME defaults to /home/blueprint
+    assert.equal(safe.resolveProjectPath('proj'), path.resolve('/home/blueprint/workspace', 'proj'));
   } finally {
     restore();
   }

@@ -13,19 +13,62 @@ The `--print` / `-p` / `exec` modes are limited: no MCP tool access, no multi-tu
 tmux new-session -d -s helper -x 200 -y 50
 tmux send-keys -t helper "claude --model haiku --dangerously-skip-permissions" Enter
 
-# Wait for startup, then send a prompt
+# IMPORTANT: Check for startup prompts before sending any work
 sleep 5
+tmux capture-pane -t helper -p -S -30  # Look for trust dialogs, update prompts, etc.
+
+# Send a prompt (note: Gemini and Codex need TWO Enters - see CLI-specific notes)
 tmux send-keys -t helper "Your question or instruction here" Enter
+# Check the screen to see if it submitted
+tmux capture-pane -t helper -p | tail -5
+# If text is in input field but not processing, send another Enter:
+tmux send-keys -t helper Enter
 
 # Read the output (check periodically)
 tmux capture-pane -t helper -p -S -30 | tail -20
 
-# Send follow-ups
+# Send follow-ups (same two-step Enter for Gemini/Codex)
 tmux send-keys -t helper "Follow-up question" Enter
+tmux capture-pane -t helper -p | tail -5  # verify before sending second Enter
+tmux send-keys -t helper Enter
 
 # Kill when done
 tmux kill-session -t helper
 ```
+
+## Long Prompts: Use load-buffer, Not send-keys
+
+`tmux send-keys` works for short commands but has problems with long text:
+- Codex truncates pasted content at ~1024 characters
+- Special characters in the prompt can be interpreted by the shell
+- Multiline text gets mangled
+
+For anything over a few hundred characters, use the buffer approach:
+
+```bash
+# Write prompt to a temp file
+cat > /tmp/prompt.txt << 'EOF'
+Your long prompt here. Can be multiple lines,
+contain special characters, and be any length.
+EOF
+
+# Load into tmux paste buffer and paste into the session
+tmux load-buffer /tmp/prompt.txt
+tmux paste-buffer -t helper
+
+# Check the screen to verify text appeared
+tmux capture-pane -t helper -p | tail -5
+
+# Send Enter to submit (may need two Enters for Gemini/Codex)
+tmux send-keys -t helper Enter
+tmux capture-pane -t helper -p | tail -5  # verify it submitted
+tmux send-keys -t helper Enter  # second Enter if needed
+
+# Clean up
+rm /tmp/prompt.txt
+```
+
+This is the same pattern `safe-exec.js:tmuxSendKeysAsync` uses internally.
 
 ## CRITICAL: Handle Startup Prompts Before Sending Work
 
@@ -106,8 +149,11 @@ codex --cd /mnt/workspace/my-project exec "Explain the codebase"
 
 ## Codex-Specific Notes
 
+- **1024-char paste limit**: Codex truncates pasted content at ~1024 characters, showing "[Pasted Content 1024 chars]". For long prompts, use `load-buffer`/`paste-buffer` (see above) — though even this may be truncated in the display. Verify the full prompt was received by checking if Codex references content from the end of your prompt.
 - **Web search works**: Codex CAN search the web — it will show "Searching the web" when doing so. If prompts silently return with no response, the session is stuck on an unhandled startup prompt.
 - **Trust dialog**: Must be answered before any prompts work. Check for it after every fresh launch.
+- **Update prompt**: Codex shows an update prompt on every launch ("Update available! Press enter to continue"). Must be dismissed (select "2" to skip) before any prompts work.
+- **Multiline editor needs extra Enter**: Same as Gemini — the first `Enter` from `send-keys` creates a newline in the text editor, it does NOT submit. After sending text + Enter, the prompt will appear in the input field but won't be submitted. Send ONE additional `Enter` separately to submit. Do NOT send `Enter Enter` in the same send-keys command — that creates two newlines instead of submitting.
 
 ## Known Limitations
 

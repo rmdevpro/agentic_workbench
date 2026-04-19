@@ -3,10 +3,11 @@ set -e
 
 # Blueprint HF Spaces entrypoint — runs as non-root user (UID 1000)
 
-CLAUDE="$HOME/.claude"
-BP_DATA="${BLUEPRINT_DATA:-$HOME/.blueprint}"
-WORK="${WORKSPACE:-$HOME/workspace}"
+CLAUDE="/data/.claude"
+BP_DATA="/data/.blueprint"
+WORK="/data/workspace"
 
+# Ensure /data structure exists (volume mount may be empty on first run)
 mkdir -p "$WORK" "$BP_DATA" "$CLAUDE/projects" 2>/dev/null || true
 
 # Ensure docs library exists with standard structure
@@ -23,7 +24,7 @@ if [ -f /app/config/CLAUDE.md ] && [ ! -f "$CLAUDE/CLAUDE.md" ]; then
 fi
 
 # Ensure .claude.json exists for workspace trust
-test -f "$HOME/.claude.json" || echo '{}' > "$HOME/.claude.json"
+test -f "/data/.claude.json" || echo '{}' > "/data/.claude.json"
 if [ ! -f "$CLAUDE/.claude.json" ]; then
   echo '{}' > "$CLAUDE/.claude.json"
 fi
@@ -62,7 +63,7 @@ CLI_VERSION=$(claude --version 2>/dev/null | sed 's/ .*//' || true)
 CLI_VERSION="${CLI_VERSION:-99.99.99}"
 node -e "
   const fs = require('fs');
-  const f = (process.env.HOME + '/.claude') + '/.claude.json';
+  const f = '/data/.claude/.claude.json';
   let d = {};
   try { d = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
   const ver = process.argv[1] || '99.99.99';

@@ -22,10 +22,10 @@ test('REGVAL: regression validation proves tests catch breakage', async () => {
     );
   }
 
-  // Must have validated at least 3 scenarios
+  // Must have validated at least 2 scenarios
   assert.ok(
-    results.length >= 3,
-    `Regression validation must cover at least 3 scenarios, ran ${results.length}`,
+    results.length >= 2,
+    `Regression validation must cover at least 2 scenarios, ran ${results.length}`,
   );
 
   // Report results

@@ -1,6 +1,6 @@
 const path = require('path');
 const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
-const RESULTS_BASE = process.env.TEST_RESULTS_DIR || '/storage/test-results/blueprint';
+const RESULTS_BASE = process.env.TEST_RESULTS_DIR || '/home/blueprint/.blueprint/test-results';
 
 module.exports = {
   testDir: '.',

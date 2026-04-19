@@ -229,13 +229,20 @@ function registerCoreRoutes(
   // ── GET /api/mounts ────────────────────────────────────────────────────────
 
   app.get('/api/mounts', async (req, res) => {
+    const mounts = [];
+    // Always include the workspace
+    const workspace = safe.WORKSPACE;
+    mounts.push({ path: workspace });
+    // Add any directories under /mnt
     try {
       const entries = await readdir('/mnt', { withFileTypes: true });
-      const mounts = entries.filter(e => e.isDirectory()).map(e => ({ path: '/mnt/' + e.name }));
-      res.json(mounts);
-    } catch (err) {
-      res.json([]);
+      for (const e of entries) {
+        if (e.isDirectory()) mounts.push({ path: '/mnt/' + e.name });
+      }
+    } catch (_err) {
+      /* /mnt may not exist */
     }
+    res.json(mounts);
   });
 
   // ── GET /api/browse ────────────────────────────────────────────────────────

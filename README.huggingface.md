@@ -27,6 +27,10 @@ Blueprint auto-detects whether it's running on a public or private HF Space:
 - **Private Space** — full access. Optionally set `BLUEPRINT_USER` and `BLUEPRINT_PASS` as Space Secrets to add password protection.
 - **Self-hosted** (docker-compose) — full access, no auth gate.
 
+## Persistent Storage
+
+Blueprint stores all data (database, sessions, workspace) under `/data`. To persist data across Space rebuilds, enable persistent storage in your Space settings. Without it, all data is lost on every rebuild.
+
 ## Notes
 
 - Free Spaces sleep after ~15 min of inactivity — tmux sessions will be lost on wake

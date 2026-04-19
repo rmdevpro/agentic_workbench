@@ -27,8 +27,8 @@ test('CST: prime-test-session.js exists and has valid context-filling logic', ()
 
 test('CST: create session and verify token usage API returns structured data', async () => {
   await resetBaseline();
-  dockerExec('mkdir -p /workspace/cst_proj');
-  await post('/api/projects', { path: '/workspace/cst_proj', name: 'cst_proj' });
+  dockerExec('mkdir -p /home/blueprint/workspace/cst_proj');
+  await post('/api/projects', { path: '/home/blueprint/workspace/cst_proj', name: 'cst_proj' });
 
   const sessResult = await createSession('cst_proj', 'context stress test session');
   assert.ok(
@@ -59,56 +59,14 @@ test('CST: create session and verify token usage API returns structured data', a
   assert.ok(dbCount > 0, 'Session must exist in database after creation');
 });
 
-test('CST: compaction thresholds are configured and queryable', async () => {
-  await resetBaseline();
-  const healthResult = await get('/health');
-  assert.equal(healthResult.status, 200, 'Server must be healthy');
-
-  const settings = await get('/api/settings');
-  assert.equal(settings.status, 200, 'Settings API must respond');
-
-  // Verify compaction infrastructure is available by calling smart-compact on a valid session.
-  // The stub Claude CLI in the test container exits quickly, so session creation may return
-  // 500 if tmux paste-buffer fails after the CLI exits. The session ID is still allocated
-  // and the API path still exercised — accept 200 or 500 from session creation.
-  dockerExec('mkdir -p /workspace/cst_threshold_proj');
-  await post('/api/projects', {
-    path: '/workspace/cst_threshold_proj',
-    name: 'cst_threshold_proj',
-  });
-  const sess = await createSession('cst_threshold_proj', 'threshold test');
-  assert.ok(
-    sess.status === 200 || sess.status === 500,
-    `Session creation must return 200 or 500 (stub CLI race), got ${sess.status}`,
-  );
-  assert.ok(sess.data.id, 'Session must return an ID');
-
-  // Trigger compaction on the session — it should respond with compacted:false
-  // (session is new/dead, has no context to compact) but NOT crash with 500
-  const compactResult = await post(`/api/sessions/${sess.data.id}/smart-compact`, {
-    project: 'cst_threshold_proj',
-  });
-  assert.equal(
-    compactResult.status,
-    200,
-    `Smart-compact must not crash (500) on valid session, got ${compactResult.status}`,
-  );
-  assert.ok(
-    'compacted' in compactResult.data,
-    'Smart-compact response must include compacted field',
-  );
-  assert.equal(
-    compactResult.data.compacted,
-    false,
-    'Brand new session should not trigger actual compaction',
-  );
-  assert.ok(compactResult.data.reason, 'Response must explain why compaction was skipped');
-});
+// REMOVED: 'CST: compaction thresholds are configured and queryable'
+// The /api/sessions/:id/smart-compact endpoint has been deleted. This test called
+// POST /api/sessions/${id}/smart-compact which no longer exists in the server.
 
 test('CST: multi-session stress — concurrent token queries do not crash', async () => {
   await resetBaseline();
-  dockerExec('mkdir -p /workspace/cst_stress_proj');
-  await post('/api/projects', { path: '/workspace/cst_stress_proj', name: 'cst_stress_proj' });
+  dockerExec('mkdir -p /home/blueprint/workspace/cst_stress_proj');
+  await post('/api/projects', { path: '/home/blueprint/workspace/cst_stress_proj', name: 'cst_stress_proj' });
 
   // Create multiple sessions sequentially with retry (stub CLI may cause tmux name
   // collisions when sessions are created within the same truncated-timestamp window).
@@ -151,8 +109,8 @@ test('CST: multi-session stress — concurrent token queries do not crash', asyn
 
 test('CST-GRAY: session creation produces filesystem artifacts in container', async () => {
   await resetBaseline();
-  dockerExec('mkdir -p /workspace/cst_fs_proj');
-  await post('/api/projects', { path: '/workspace/cst_fs_proj', name: 'cst_fs_proj' });
+  dockerExec('mkdir -p /home/blueprint/workspace/cst_fs_proj');
+  await post('/api/projects', { path: '/home/blueprint/workspace/cst_fs_proj', name: 'cst_fs_proj' });
 
   const sess = await createSession('cst_fs_proj', 'filesystem artifact test');
   assert.ok(
@@ -161,12 +119,12 @@ test('CST-GRAY: session creation produces filesystem artifacts in container', as
   );
   assert.ok(sess.data.id, 'Session must return an ID');
 
-  // Gray-box: verify the storage directory with DB exists in the container
-  const storageDir = dockerExec('ls /storage/blueprint.db 2>/dev/null || echo MISSING');
-  assert.ok(storageDir !== 'MISSING', '/storage/blueprint.db must exist in the container');
+  // Gray-box: verify the DB exists in the container
+  const storageDir = dockerExec('ls /home/blueprint/.blueprint/blueprint.db 2>/dev/null || echo MISSING');
+  assert.ok(storageDir !== 'MISSING', '/home/blueprint/.blueprint/blueprint.db must exist in the container');
 
   // Verify the project directory was created
-  const projExists = dockerExec('test -d /workspace/cst_fs_proj && echo YES || echo NO');
+  const projExists = dockerExec('test -d /home/blueprint/workspace/cst_fs_proj && echo YES || echo NO');
   assert.equal(projExists, 'YES', 'Project workspace directory must exist in the container');
 
   // Verify DB has both the project and session records — use project FK for sessions
@@ -181,8 +139,8 @@ test('CST-GRAY: session creation produces filesystem artifacts in container', as
 
 test('CST-GRAY: token usage response has all required fields for monitoring', async () => {
   await resetBaseline();
-  dockerExec('mkdir -p /workspace/cst_token_proj');
-  await post('/api/projects', { path: '/workspace/cst_token_proj', name: 'cst_token_proj' });
+  dockerExec('mkdir -p /home/blueprint/workspace/cst_token_proj');
+  await post('/api/projects', { path: '/home/blueprint/workspace/cst_token_proj', name: 'cst_token_proj' });
 
   const sess = await createSession('cst_token_proj', 'token field test');
   assert.ok(sess.data.id, 'Session must return an ID');
@@ -212,9 +170,9 @@ test('CST-GRAY: token usage response has all required fields for monitoring', as
 
 test('CST-GRAY: concurrent session creation does not corrupt DB with duplicate IDs', async () => {
   await resetBaseline();
-  dockerExec('mkdir -p /workspace/cst_concurrent_proj');
+  dockerExec('mkdir -p /home/blueprint/workspace/cst_concurrent_proj');
   await post('/api/projects', {
-    path: '/workspace/cst_concurrent_proj',
+    path: '/home/blueprint/workspace/cst_concurrent_proj',
     name: 'cst_concurrent_proj',
   });
 

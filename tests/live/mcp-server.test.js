@@ -9,7 +9,7 @@ test('MCS-01: initialize returns protocol version', async () => {
     const cp = spawn('docker', [
       'exec',
       '-i',
-      'blueprint-test-blueprint-1',
+      'blueprint-test',
       'node',
       '/app/mcp-server.js',
     ]);

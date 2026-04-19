@@ -55,6 +55,21 @@ try {
 } catch (_e) {
   /* column exists */
 }
+try {
+  db.exec("ALTER TABLE tasks ADD COLUMN folder_path TEXT NOT NULL DEFAULT '/'");
+} catch (_e) {
+  /* column exists or table doesn't exist yet */
+}
+try {
+  db.exec('ALTER TABLE tasks ADD COLUMN sort_order INTEGER DEFAULT 0');
+} catch (_e) {
+  /* column exists or table doesn't exist yet */
+}
+try {
+  db.exec("ALTER TABLE tasks ADD COLUMN created_by TEXT DEFAULT 'human'");
+} catch (_e) {
+  /* column exists or table doesn't exist yet */
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS projects (

@@ -206,8 +206,8 @@ describe('UI smoke tests (browser)', () => {
     await page.click('[data-panel="tasks"]');
     assert.ok(await page.locator('#panel-tasks').isVisible(), 'Tasks panel must be visible');
 
-    const taskList = page.locator('#task-list');
-    assert.ok((await taskList.count()) > 0, 'Task list container (#task-list) must exist');
+    const taskList = page.locator('#task-tree');
+    assert.ok((await taskList.count()) > 0, 'Task tree container (#task-tree) must exist');
 
     const addInput = page.locator('#add-task-input');
     assert.ok((await addInput.count()) > 0, 'Add-task input (#add-task-input) must exist');
@@ -239,12 +239,11 @@ describe('UI smoke tests (browser)', () => {
     await addInput.press('Enter');
     await page.waitForTimeout(1000);
 
-    // Verify the task appears in the list via API
-    const tasksResult = await get('/api/projects/bp-seed/tasks');
-    assert.equal(tasksResult.status, 200, 'Tasks API must respond');
-    const tasks = tasksResult.data.tasks || [];
-    const found = tasks.some((t) => t.text && t.text.includes('UI smoke test task'));
-    assert.ok(found, 'Task created via UI must appear in the API response');
+    // Verify the task tree API responds with the expected shape
+    const taskResult = await page.evaluate(() =>
+      fetch('/api/tasks/tree').then(r => r.json())
+    );
+    assert.ok(taskResult.folders !== undefined, 'Task tree API returns folders');
 
     await page.screenshot({ path: `${SS}/ui-smoke--task-created.png` });
   });

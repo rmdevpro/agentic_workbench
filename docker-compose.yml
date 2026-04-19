@@ -5,17 +5,7 @@ services:
       dockerfile: Dockerfile
     container_name: blueprint
     ports:
-      - '7866:3000'
+      - "6342:3000"
     volumes:
-      - joshua26_workspace:/home/blueprint/workspace
-      - joshua26_storage:/home/blueprint/storage
-    environment:
-      - HOME=/home/blueprint
-      - MAX_TMUX_SESSIONS=50
+      - /mnt/workspace/blueprint:/data
     restart: unless-stopped
-
-volumes:
-  joshua26_workspace:
-    external: true
-  joshua26_storage:
-    external: true

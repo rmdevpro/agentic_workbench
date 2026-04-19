@@ -2,12 +2,12 @@
 
 const { execSync } = require('child_process');
 
-const CONTAINER = process.env.TEST_CONTAINER || 'blueprint-test-blueprint-1';
+const CONTAINER = process.env.TEST_CONTAINER || 'blueprint-test';
 const BASE_URL = process.env.TEST_URL || 'http://localhost:7867';
 
 function dockerExec(cmd) {
   try {
-    return execSync(`docker exec ${CONTAINER} ${cmd}`, {
+    return execSync(`docker exec -u blueprint ${CONTAINER} ${cmd}`, {
       encoding: 'utf-8',
       timeout: 30000,
     }).trim();
@@ -20,11 +20,11 @@ async function resetBaseline(page = null) {
   try {
     // Clean up test data but preserve the browser seed project (name = 'bp-seed')
     execSync(
-      `docker exec ${CONTAINER} sqlite3 /storage/blueprint.db "DELETE FROM sessions WHERE id LIKE 'test_%' OR id LIKE 'new_%' OR project_id IN (SELECT id FROM projects WHERE (name LIKE '%_proj' OR name LIKE 'test_%') AND name != 'bp-seed'); DELETE FROM projects WHERE (name LIKE '%_proj' OR name LIKE 'test_%') AND name != 'bp-seed'; DELETE FROM tasks; DELETE FROM task_history;"`,
+      `docker exec -u blueprint ${CONTAINER} sqlite3 /home/blueprint/.blueprint/blueprint.db "DELETE FROM sessions WHERE id LIKE 'test_%' OR id LIKE 'new_%' OR project_id IN (SELECT id FROM projects WHERE (name LIKE '%_proj' OR name LIKE 'test_%') AND name != 'bp-seed'); DELETE FROM projects WHERE (name LIKE '%_proj' OR name LIKE 'test_%') AND name != 'bp-seed'; DELETE FROM tasks; DELETE FROM task_history;"`,
       { stdio: 'ignore', timeout: 10000 },
     );
     execSync(
-      `docker exec ${CONTAINER} sh -c "rm -f /storage/bridges/* && tmux ls -F '#{session_name}' 2>/dev/null | grep '^bp_' | xargs -I {} tmux kill-session -t {} 2>/dev/null || true"`,
+      `docker exec -u blueprint ${CONTAINER} sh -c "tmux ls -F '#{session_name}' 2>/dev/null | grep '^bp_' | xargs -I {} tmux kill-session -t {} 2>/dev/null || true"`,
       { stdio: 'ignore', timeout: 10000 },
     );
   } catch {
@@ -34,31 +34,32 @@ async function resetBaseline(page = null) {
   // Seed a browser test project with exactly 2 sessions so browser tests have data to render.
   // Clean all bp-seed sessions first to prevent accumulation across test runs.
   try {
-    execSync(`docker exec ${CONTAINER} mkdir -p /workspace/bp-seed`, {
+    execSync(`docker exec -u blueprint ${CONTAINER} mkdir -p /home/blueprint/workspace/bp-seed`, {
       stdio: 'ignore',
       timeout: 5000,
     });
     // Delete all bp-seed sessions to ensure exactly 2 after re-seeding
     execSync(
-      `docker exec ${CONTAINER} sqlite3 /storage/blueprint.db "DELETE FROM sessions WHERE project_id IN (SELECT id FROM projects WHERE name = 'bp-seed');"`,
+      `docker exec -u blueprint ${CONTAINER} sqlite3 /home/blueprint/.blueprint/blueprint.db "DELETE FROM sessions WHERE project_id IN (SELECT id FROM projects WHERE name = 'bp-seed');"`,
       { stdio: 'ignore', timeout: 5000 },
     );
     // Ensure bp-seed project exists
     await fetch(`${BASE_URL}/api/projects`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: '/workspace/bp-seed', name: 'bp-seed' }),
+      body: JSON.stringify({ path: '/home/blueprint/workspace/bp-seed', name: 'bp-seed' }),
     }).catch(() => null);
-    // Create exactly 2 seed sessions
-    await fetch(`${BASE_URL}/api/sessions`, {
+    // Create exactly 2 seed sessions using terminals (bash), NOT Claude sessions.
+    // Claude sessions die immediately without auth, crashing the tmux server. (See #87)
+    await fetch(`${BASE_URL}/api/terminals`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ project: 'bp-seed', prompt: 'alpha seed session' }),
+      body: JSON.stringify({ project: 'bp-seed' }),
     }).catch(() => null);
-    await fetch(`${BASE_URL}/api/sessions`, {
+    await fetch(`${BASE_URL}/api/terminals`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ project: 'bp-seed', prompt: 'beta seed session' }),
+      body: JSON.stringify({ project: 'bp-seed' }),
     }).catch(() => null);
   } catch {
     /* seed is best-effort */

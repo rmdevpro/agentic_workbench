@@ -19,11 +19,10 @@ const { post, get } = require('./http-client');
 
 /**
  * Validate that the system detects breakage in critical paths.
- * Tests 3 independent regression scenarios:
+ * Tests 2 independent regression scenarios:
  *
  * 1. Health endpoint degrades when DB is temporarily inaccessible
  * 2. Session creation fails when workspace directory is missing
- * 3. Compaction rejects when session ID validation is exercised
  */
 async function validateRegression() {
   const results = [];
@@ -66,21 +65,8 @@ async function validateRegression() {
     results.push({ scenario: 'session-bad-project', passed: false, error: err.message });
   }
 
-  // ── Scenario 3: Compaction must reject malformed session IDs ──
-  try {
-    // Use !!!invalid!!! which stays within URL routing but is clearly invalid
-    const r = await post('/api/sessions/!!!invalid!!!/smart-compact', {
-      project: 'test',
-    });
-    // Must return 400 for malformed session IDs (not 500 crash)
-    results.push({
-      scenario: 'compaction-bad-id',
-      passed: r.status === 400,
-      note: `Got status ${r.status}`,
-    });
-  } catch (err) {
-    results.push({ scenario: 'compaction-bad-id', passed: false, error: err.message });
-  }
+  // Scenario 3 (compaction-bad-id) removed: the /api/sessions/:id/smart-compact
+  // endpoint has been deleted. No longer a valid regression target.
 
   return results;
 }

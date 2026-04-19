@@ -89,26 +89,32 @@ test('ENG-12: no blocking I/O in async functions', () => {
 test('SRV-05: uncaught exception exits with structured error', async () => {
   await fsp.mkdir(fixtures.paths.workspace, { recursive: true });
   await fsp.mkdir(fixtures.paths.claudeHome, { recursive: true });
-  await fsp.mkdir(fixtures.paths.data, { recursive: true });
 
-  const trigger = path.join(ROOT, 'tests', 'fixtures', 'trigger-uncaught.js');
-  const child = spawn(process.execPath, ['server.js'], {
-    cwd: ROOT,
-    env: {
-      ...process.env,
-      PORT: '0',
-      NODE_OPTIONS: `--require ${trigger}`,
-      WORKSPACE: fixtures.paths.workspace,
-      CLAUDE_HOME: fixtures.paths.claudeHome,
-      BLUEPRINT_DATA: fixtures.paths.data,
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  let stderr = '';
-  child.stderr.on('data', (c) => {
-    stderr += String(c);
-  });
-  const code = await new Promise((r) => child.on('exit', r));
-  assert.notEqual(code, 0);
-  assert.match(stderr, /test-uncaught-exception/);
+  const tmpData = require('os').tmpdir() + '/bp-srv05-' + Date.now();
+  await fsp.mkdir(tmpData, { recursive: true });
+
+  try {
+    const trigger = path.join(ROOT, 'tests', 'fixtures', 'trigger-uncaught.js');
+    const child = spawn(process.execPath, ['server.js'], {
+      cwd: ROOT,
+      env: {
+        ...process.env,
+        PORT: '0',
+        NODE_OPTIONS: `--require ${trigger}`,
+        WORKSPACE: fixtures.paths.workspace,
+        CLAUDE_HOME: fixtures.paths.claudeHome,
+        BLUEPRINT_DATA: tmpData,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stderr = '';
+    child.stderr.on('data', (c) => {
+      stderr += String(c);
+    });
+    const code = await new Promise((r) => child.on('exit', r));
+    assert.notEqual(code, 0);
+    assert.match(stderr, /test-uncaught-exception/);
+  } finally {
+    await fsp.rm(tmpData, { recursive: true, force: true });
+  }
 });

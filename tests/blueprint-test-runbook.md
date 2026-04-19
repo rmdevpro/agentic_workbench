@@ -8,7 +8,7 @@ Executed by an AI agent using Playwright MCP against the HF Space. Output is a p
 
 | Phase | Total | Status |
 |-------|-------|--------|
-| 0. OAuth | 3 | Hymie-only (skip for Playwright runs) |
+| 0. OAuth | 3 | Required for CLI tests (Phase 5+). See options below. |
 | 1. Smoke | 3 | — |
 | 2. Core | 11 | — |
 | 3. Features | 18 | (3 removed: Notes Tab, Messages Tab, MCP Servers moved) |
@@ -53,7 +53,7 @@ These changes affect many test steps. Read before executing.
 ## How to Use This Runbook
 
 1. Execute tests in phase order. Phase 1 (Smoke) must fully pass before proceeding.
-2. For each test, follow the **Steps** exactly using Malory MCP tools.
+2. For each test, follow the **Steps** exactly using Playwright MCP tools.
 3. After each verification step, mark the **Result** as PASS, FAIL, or SKIP.
 4. On FAIL: capture a screenshot (`browser_screenshot`), note the failure details, and file a GitHub issue per the protocol below. Continue to the next test unless the failure blocks downstream tests.
 5. On SKIP: record the reason in **Notes** (e.g., "blocked by BRW-02 failure").
@@ -144,6 +144,30 @@ Before starting, verify all of the following:
 
 ## Test Execution
 
+### Phase 0: Claude Authentication (required for Phase 5+)
+
+Claude CLI tests (Phase 5: CLI & Terminal) require valid Claude credentials in the container. Without auth, `/status`, `/plan`, `/model`, and all prompt-based tests will fail with "Not logged in."
+
+**Option A: Hymie desktop automation (full OAuth flow)**
+Use Hymie MCP to automate the browser-based OAuth flow. This tests the actual auth pipeline end-to-end. Requires Hymie MCP server connected.
+
+**Option B: Inject credentials from an authenticated device (with user permission)**
+Copy the credentials file from a machine that already has valid Claude auth into the container. This skips the OAuth flow but ensures CLI tests can run.
+
+```bash
+# From the authenticated machine, copy credentials to the HF Space container:
+# 1. Read the local credentials
+cat ~/.claude/credentials.json
+
+# 2. Inject into the container via the terminal
+# Open a terminal session in Blueprint, then:
+echo '<paste credentials JSON>' > ~/.claude/credentials.json
+```
+
+Ask the user which option to use. If neither is available, skip Phase 5 CLI tests and document the skip reason.
+
+---
+
 ### Phase 1: Smoke (must pass before proceeding)
 
 These 3 tests validate that the app is functional. If any fail, stop and investigate.
@@ -221,13 +245,10 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 - Health endpoint returns `{status:'ok'}`
 - Auth status returns `{valid:true}` (not `authenticated`)
 - WebSocket readyState is `1` (OPEN) for the active tab
-- Mounts endpoint returns at least 1 mount
+- Mounts endpoint returns array (may be empty on HF Spaces if nothing mounted under `/mnt`)
 
 **Verify:**
 - All four checks return expected values
-
-**Result:** PASS (with filed bug)
-**Notes:** Health OK, auth valid, WebSocket readyState=1. Mounts returns [] — bug filed as #39: regex `/proc|sys|dev|.../` matches "dev" in device path `/dev/nvme0n1p1`, filtering out all real mounts. Fix: match against type field only.
 
 ---
 

@@ -231,11 +231,6 @@
     .task-node.drag-over-below { border-bottom:2px solid var(--accent); }
     .task-folder.drag-over > .task-folder-label { background:var(--accent); color:var(--bg-primary); }
 
-    #add-task-input {
-      width:100%; padding:8px; background:var(--bg-primary); border:1px solid var(--border);
-      border-radius:6px; color:var(--text-primary); font-size:13px; margin-top:8px; outline:none;
-    }
-    #add-task-input:focus { border-color:var(--accent); }
 
     /* ── File editor panes ── */
     .file-editor-pane { width:100%; height:100%; display:flex; flex-direction:column; }
@@ -530,7 +525,6 @@
           <label id="task-auto-label"><input type="checkbox" id="task-auto-nav" onchange="taskAutoNav=this.checked;if(taskAutoNav)autoNavigateTaskTree()"> Auto</label>
         </div>
         <div id="task-tree"></div>
-        <input id="add-task-input" type="text" placeholder="Add task to selected folder... (Enter)">
       </div>
       <div id="panel-files" class="panel-section">
         <input id="file-upload-input" type="file" multiple style="display:none" onchange="fileBrowserUpload(this.files)">
@@ -975,12 +969,21 @@ build/**</textarea>
       container.innerHTML = '';
 
       for (const project of projectState) {
-        // Filter projects by state
+        // Show project if it has any sessions matching the current filter.
+        // Hidden projects (project-level state, not session state) are excluded from 'all' view.
         const projState = project.state || 'active';
-        if (sessionFilter === 'active' && projState !== 'active') continue;
-        if (sessionFilter === 'archived' && projState !== 'archived') continue;
         if (sessionFilter === 'all' && projState === 'hidden') continue;
-        if (sessionFilter === 'hidden' && projState !== 'hidden') continue;
+        const hasMatchingSessions = project.sessions.some(s => {
+          const state = s.state || (s.archived ? 'archived' : 'active');
+          if (sessionFilter === 'active') return state === 'active';
+          if (sessionFilter === 'archived') return state === 'archived';
+          if (sessionFilter === 'all') return state !== 'hidden';
+          if (sessionFilter === 'hidden') return state === 'hidden';
+          return true;
+        });
+        // Always show projects in 'active' and 'all' views (even with 0 sessions)
+        // Only skip projects in 'archived'/'hidden' views if they have no matching sessions
+        if (!hasMatchingSessions && sessionFilter !== 'active' && sessionFilter !== 'all') continue;
 
         const group = document.createElement('div');
         group.className = 'project-group';
@@ -1738,161 +1741,326 @@ build/**</textarea>
       loadTaskTree();
     }
 
+    // Task-by-folder lookup built from /api/tasks/tree
+    let _tasksByFolder = {};
+
     async function loadTaskTree() {
       try {
-        const res = await fetch(`/api/tasks/tree?filter=${taskFilter}`);
-        const data = await res.json();
-        taskTreeData = data.tree;
-        renderTaskTree(data.tree);
-      } catch {}
-    }
+        // Fetch tasks from DB and build folder lookup
+        const taskRes = await fetch(`/api/tasks/tree?filter=${taskFilter}`);
+        const taskData = await taskRes.json();
+        taskTreeData = taskData.tree;
+        _tasksByFolder = {};
+        _flattenTaskTree(taskData.tree, _tasksByFolder);
 
-    function renderTaskTree(tree) {
-      const container = document.getElementById('task-tree');
-      container.innerHTML = '';
-      const ul = document.createElement('ul');
-      renderTaskNode(tree, ul, true);
-      container.appendChild(ul);
-    }
+        // Fetch filesystem mounts (same as file browser and project picker)
+        let mounts = [];
+        try {
+          const mountRes = await fetch('/api/mounts');
+          mounts = await mountRes.json();
+        } catch {}
+        if (mounts.length === 0) mounts = [{ path: window._workspace || '/home/blueprint/workspace' }];
 
-    function renderTaskNode(node, parentUl, isRoot) {
-      // Render tasks at this level
-      node.tasks.forEach((task, idx) => {
-        const li = document.createElement('li');
-        li.className = 'task-node' + (task.status === 'done' ? ' done' : '') + (task.status === 'archived' ? ' archived' : '');
-        li.dataset.taskId = task.id;
-        li.dataset.folderPath = node.path;
-        li.draggable = true;
-        li.innerHTML = `
-          <input type="checkbox" style="cursor:pointer" ${task.status === 'done' ? 'checked' : ''}>
-          <span class="task-index">${idx + 1}</span>
-          <span class="task-label">${escHtml(task.title)}</span>
-          <button class="task-delete" title="Delete">&#10005;</button>
-        `;
-        li.querySelector('input[type=checkbox]').addEventListener('change', async (e) => {
-          await fetch(`/api/tasks/${task.id}`, {
-            method: 'PUT', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: e.target.checked ? 'done' : 'todo' }),
+        const container = document.getElementById('task-tree');
+        container.innerHTML = '';
+
+        for (const mount of mounts) {
+          const section = document.createElement('div');
+          section.style.cssText = 'margin-bottom:4px';
+          const header = document.createElement('div');
+          header.style.cssText = 'font-size:12px;font-family:monospace;color:var(--text-secondary);padding:4px 6px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:4px';
+          const mountTaskCount = _countTasksUnderPath(mount.path);
+          header.innerHTML = `<span class="mount-arrow" style="font-size:10px;transition:transform 0.15s">&#9654;</span> ${escHtml(mount.path)}${mountTaskCount ? ' <span class="folder-count">' + mountTaskCount + '</span>' : ''}`;
+          const treeContainer = document.createElement('div');
+          treeContainer.style.cssText = 'display:none;padding-left:4px';
+          section.appendChild(header);
+          section.appendChild(treeContainer);
+          container.appendChild(section);
+
+          // Context menu on mount header
+          header.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            _showTaskContextMenu(e, mount.path, null);
           });
-          loadTaskTree();
-        });
-        li.querySelector('.task-delete').addEventListener('click', async (e) => {
-          e.stopPropagation();
-          await fetch(`/api/tasks/${task.id}`, { method: 'DELETE' });
-          loadTaskTree();
-        });
-        li.addEventListener('dblclick', () => openTaskDetail(task.id));
-        // Drag
-        li.addEventListener('dragstart', (e) => {
-          e.dataTransfer.setData('application/x-task-id', String(task.id));
-          e.dataTransfer.effectAllowed = 'move';
-        });
-        li.addEventListener('dragover', (e) => {
-          e.preventDefault();
-          e.dataTransfer.dropEffect = 'move';
-          const rect = li.getBoundingClientRect();
-          const mid = rect.top + rect.height / 2;
-          li.classList.toggle('drag-over-above', e.clientY < mid);
-          li.classList.toggle('drag-over-below', e.clientY >= mid);
-        });
-        li.addEventListener('dragleave', () => {
-          li.classList.remove('drag-over-above', 'drag-over-below');
-        });
-        li.addEventListener('drop', async (e) => {
-          e.preventDefault();
-          li.classList.remove('drag-over-above', 'drag-over-below');
-          const dragId = e.dataTransfer.getData('application/x-task-id');
-          if (!dragId || dragId === String(task.id)) return;
-          const rect = li.getBoundingClientRect();
-          const above = e.clientY < rect.top + rect.height / 2;
-          // Reorder: move dragged task to this folder at this position
-          const folderTasks = node.tasks.filter(t => String(t.id) !== dragId);
-          const insertIdx = above ? idx : idx + 1;
-          const orders = [];
-          let pos = 0;
-          for (let i = 0; i < folderTasks.length; i++) {
-            if (i === insertIdx) pos++; // leave gap for dragged item
-            orders.push({ id: folderTasks[i].id, sort_order: pos++ });
-          }
-          // Move the dragged task
-          await fetch(`/api/tasks/${dragId}/move`, {
-            method: 'PUT', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ folder_path: node.path, sort_order: insertIdx }),
-          });
-          if (orders.length) {
-            await fetch('/api/tasks/reorder', {
-              method: 'PUT', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ orders }),
-            });
-          }
-          loadTaskTree();
-        });
-        parentUl.appendChild(li);
-      });
 
-      // Render child folders
-      const sortedChildren = Object.keys(node.children).sort();
-      for (const key of sortedChildren) {
-        const child = node.children[key];
-        const li = document.createElement('li');
-        li.className = 'task-folder' + (selectedTaskFolder === child.path ? ' selected' : '');
-        const totalCount = countTasks(child);
-        li.innerHTML = `<span class="task-folder-label">
-          <span class="folder-arrow">&#9654;</span>
-          <span class="folder-icon">&#128193;</span>
-          <span>${escHtml(child.name)}</span>
-          <span class="folder-count">${totalCount}</span>
-        </span>`;
-        const childUl = document.createElement('ul');
-        renderTaskNode(child, childUl, false);
-        li.appendChild(childUl);
-        li.querySelector('.task-folder-label').addEventListener('click', (e) => {
-          e.stopPropagation();
-          li.classList.toggle('collapsed');
-          selectedTaskFolder = child.path;
-          document.querySelectorAll('.task-folder.selected').forEach(f => f.classList.remove('selected'));
-          li.classList.add('selected');
-        });
-        // Drop on folder = move task into it
-        const label = li.querySelector('.task-folder-label');
-        label.addEventListener('dragover', (e) => {
-          e.preventDefault();
-          e.dataTransfer.dropEffect = 'move';
-          li.classList.add('drag-over');
-        });
-        label.addEventListener('dragleave', () => li.classList.remove('drag-over'));
-        label.addEventListener('drop', async (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          li.classList.remove('drag-over');
-          const dragId = e.dataTransfer.getData('application/x-task-id');
-          if (!dragId) return;
-          await fetch(`/api/tasks/${dragId}/move`, {
-            method: 'PUT', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ folder_path: child.path }),
+          header.addEventListener('click', async function() {
+            const arrow = header.querySelector('.mount-arrow');
+            if (treeContainer.style.display === 'none') {
+              treeContainer.style.display = '';
+              arrow.style.transform = 'rotate(90deg)';
+              selectedTaskFolder = mount.path;
+              if (!treeContainer.dataset.loaded) {
+                treeContainer.dataset.loaded = '1';
+                await _loadTaskFolder(mount.path, treeContainer);
+              }
+            } else {
+              treeContainer.style.display = 'none';
+              arrow.style.transform = '';
+            }
           });
-          loadTaskTree();
-        });
-        parentUl.appendChild(li);
-      }
 
-      // Root-level drop target for workspace root
-      if (isRoot) {
-        const rootLabel = parentUl.parentElement;
-        if (rootLabel) {
-          rootLabel.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
-          rootLabel.addEventListener('drop', async (e) => {
+          // Drop on mount root
+          header.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
+          header.addEventListener('drop', async (e) => {
             e.preventDefault();
             const dragId = e.dataTransfer.getData('application/x-task-id');
             if (!dragId) return;
             await fetch(`/api/tasks/${dragId}/move`, {
               method: 'PUT', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ folder_path: '/' }),
+              body: JSON.stringify({ folder_path: mount.path }),
             });
             loadTaskTree();
           });
+
+          // Auto-expand first mount
+          if (mounts.indexOf(mount) === 0) header.click();
         }
+      } catch (err) {
+        console.error('loadTaskTree error', err);
       }
+    }
+
+    function _flattenTaskTree(node, map) {
+      if (node.tasks.length) map[node.path] = node.tasks;
+      for (const key of Object.keys(node.children || {})) {
+        _flattenTaskTree(node.children[key], map);
+      }
+    }
+
+    function _countTasksUnderPath(dirPath) {
+      let count = 0;
+      for (const [path, tasks] of Object.entries(_tasksByFolder)) {
+        if (path === dirPath || path.startsWith(dirPath.replace(/\/?$/, '/'))) count += tasks.length;
+      }
+      return count;
+    }
+
+    async function _loadTaskFolder(dirPath, container) {
+      const ul = document.createElement('ul');
+
+      // Render tasks for this folder path
+      const tasks = _tasksByFolder[dirPath] || [];
+      tasks.forEach((task, idx) => {
+        ul.appendChild(_createTaskNode(task, idx, dirPath));
+      });
+
+      // Browse real filesystem for subdirectories
+      try {
+        const res = await fetch(`/api/browse?path=${encodeURIComponent(dirPath)}`);
+        const data = await res.json();
+        const dirs = (data.entries || data).filter(e => e.type === 'directory').sort((a, b) => a.name.localeCompare(b.name));
+        for (const dir of dirs) {
+          const childPath = dirPath.replace(/\/?$/, '/') + dir.name;
+          const li = document.createElement('li');
+          li.className = 'task-folder' + (selectedTaskFolder === childPath ? ' selected' : '');
+          const taskCount = _countTasksUnderPath(childPath);
+          li.innerHTML = `<span class="task-folder-label">
+            <span class="folder-arrow">&#9654;</span>
+            <span class="folder-icon">&#128193;</span>
+            <span>${escHtml(dir.name)}</span>
+            ${taskCount ? '<span class="folder-count">' + taskCount + '</span>' : ''}
+          </span>`;
+          const childContainer = document.createElement('div');
+          childContainer.style.cssText = 'display:none';
+
+          li.querySelector('.task-folder-label').addEventListener('click', async (e) => {
+            e.stopPropagation();
+            selectedTaskFolder = childPath;
+            document.querySelectorAll('.task-folder.selected').forEach(f => f.classList.remove('selected'));
+            li.classList.add('selected');
+            if (childContainer.style.display === 'none') {
+              childContainer.style.display = '';
+              li.querySelector('.folder-arrow').style.transform = 'rotate(90deg)';
+              if (!childContainer.dataset.loaded) {
+                childContainer.dataset.loaded = '1';
+                await _loadTaskFolder(childPath, childContainer);
+              }
+            } else {
+              childContainer.style.display = 'none';
+              li.querySelector('.folder-arrow').style.transform = '';
+            }
+          });
+
+          // Context menu on folder
+          li.querySelector('.task-folder-label').addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            _showTaskContextMenu(e, childPath, null);
+          });
+
+          // Drop on folder = move task into it
+          const label = li.querySelector('.task-folder-label');
+          label.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            li.classList.add('drag-over');
+          });
+          label.addEventListener('dragleave', () => li.classList.remove('drag-over'));
+          label.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            li.classList.remove('drag-over');
+            const dragId = e.dataTransfer.getData('application/x-task-id');
+            if (!dragId) return;
+            await fetch(`/api/tasks/${dragId}/move`, {
+              method: 'PUT', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ folder_path: childPath }),
+            });
+            loadTaskTree();
+          });
+
+          li.appendChild(childContainer);
+          ul.appendChild(li);
+        }
+      } catch {}
+
+      container.appendChild(ul);
+    }
+
+    function _createTaskNode(task, idx, folderPath) {
+      const li = document.createElement('li');
+      li.className = 'task-node' + (task.status === 'done' ? ' done' : '') + (task.status === 'archived' ? ' archived' : '');
+      li.dataset.taskId = task.id;
+      li.dataset.folderPath = folderPath;
+      li.draggable = true;
+      li.innerHTML = `
+        <input type="checkbox" style="cursor:pointer" ${task.status === 'done' ? 'checked' : ''}>
+        <span class="task-index">${idx + 1}</span>
+        <span class="task-label">${escHtml(task.title)}</span>
+        <button class="task-delete" title="Delete">&#10005;</button>
+      `;
+      li.querySelector('input[type=checkbox]').addEventListener('change', async (e) => {
+        await fetch(`/api/tasks/${task.id}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: e.target.checked ? 'done' : 'todo' }),
+        });
+        loadTaskTree();
+      });
+      li.querySelector('.task-delete').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await fetch(`/api/tasks/${task.id}`, { method: 'DELETE' });
+        loadTaskTree();
+      });
+      li.addEventListener('dblclick', () => openTaskDetail(task.id));
+      // Context menu on task
+      li.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        _showTaskContextMenu(e, folderPath, task);
+      });
+      // Drag
+      li.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('application/x-task-id', String(task.id));
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      li.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const rect = li.getBoundingClientRect();
+        const mid = rect.top + rect.height / 2;
+        li.classList.toggle('drag-over-above', e.clientY < mid);
+        li.classList.toggle('drag-over-below', e.clientY >= mid);
+      });
+      li.addEventListener('dragleave', () => {
+        li.classList.remove('drag-over-above', 'drag-over-below');
+      });
+      li.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        li.classList.remove('drag-over-above', 'drag-over-below');
+        const dragId = e.dataTransfer.getData('application/x-task-id');
+        if (!dragId || dragId === String(task.id)) return;
+        await fetch(`/api/tasks/${dragId}/move`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folder_path: folderPath, sort_order: idx }),
+        });
+        loadTaskTree();
+      });
+      return li;
+    }
+
+    function _showTaskContextMenu(e, folderPath, task) {
+      document.querySelectorAll('.context-menu').forEach(m => m.remove());
+      const menu = document.createElement('div');
+      menu.className = 'context-menu';
+      menu.style.cssText = `position:fixed;top:${e.clientY}px;left:${e.clientX}px;z-index:2000;background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;padding:4px 0;min-width:140px;box-shadow:0 4px 12px rgba(0,0,0,0.3)`;
+
+      if (task) {
+        // Context menu for a task
+        menu.innerHTML = `
+          <div class="context-menu-item" data-action="edit">Edit</div>
+          <div class="context-menu-item" data-action="${task.status === 'done' ? 'reopen' : 'complete'}">${task.status === 'done' ? 'Reopen' : 'Complete'}</div>
+          <div class="context-menu-item" data-action="archive">Archive</div>
+          <div class="context-menu-divider"></div>
+          <div class="context-menu-item" data-action="delete" style="color:var(--danger)">Delete</div>
+        `;
+      } else {
+        // Context menu for a folder
+        menu.innerHTML = `
+          <div class="context-menu-item" data-action="add-task">Add Task</div>
+          <div class="context-menu-divider"></div>
+          <div class="context-menu-item" data-action="new-folder">New Folder</div>
+        `;
+      }
+
+      menu.querySelectorAll('.context-menu-item').forEach(item => {
+        item.addEventListener('mouseenter', () => item.style.background = 'var(--bg-hover)');
+        item.addEventListener('mouseleave', () => item.style.background = '');
+        item.addEventListener('click', async () => {
+          menu.remove();
+          const action = item.dataset.action;
+          if (action === 'add-task') {
+            const title = prompt('Task title:');
+            if (title && title.trim()) {
+              await fetch('/api/tasks', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ folder_path: folderPath, title: title.trim() }),
+              });
+              loadTaskTree();
+            }
+          } else if (action === 'new-folder') {
+            const name = prompt('Folder name:');
+            if (name && name.trim()) {
+              await fetch('/api/mkdir', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: folderPath.replace(/\/?$/, '/') + name.trim() }),
+              });
+              loadTaskTree();
+            }
+          } else if (action === 'edit') {
+            openTaskDetail(task.id);
+          } else if (action === 'complete') {
+            await fetch(`/api/tasks/${task.id}`, {
+              method: 'PUT', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'done' }),
+            });
+            loadTaskTree();
+          } else if (action === 'reopen') {
+            await fetch(`/api/tasks/${task.id}`, {
+              method: 'PUT', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'todo' }),
+            });
+            loadTaskTree();
+          } else if (action === 'archive') {
+            await fetch(`/api/tasks/${task.id}`, {
+              method: 'PUT', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'archived' }),
+            });
+            loadTaskTree();
+          } else if (action === 'delete') {
+            await fetch(`/api/tasks/${task.id}`, { method: 'DELETE' });
+            loadTaskTree();
+          }
+        });
+      });
+
+      document.body.appendChild(menu);
+      // Dismiss on click outside
+      setTimeout(() => {
+        document.addEventListener('click', function dismiss() {
+          menu.remove();
+          document.removeEventListener('click', dismiss);
+        }, { once: true });
+      }, 0);
     }
 
     function countTasks(node) {
@@ -1953,19 +2121,7 @@ build/**</textarea>
       });
     }
 
-    document.getElementById('add-task-input').addEventListener('keydown', async (e) => {
-      if (e.key !== 'Enter') return;
-      const input = e.target;
-      const title = input.value.trim();
-      if (!title) return;
-      await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folder_path: selectedTaskFolder, title }),
-      });
-      input.value = '';
-      loadTaskTree();
-    });
+    // Add-task-input removed — tasks are now added via right-click context menu on folders
 
     // ── File Editor Tabs ────────────────────────────────
     function getEditorType(path) {
@@ -2962,27 +3118,63 @@ build/**</textarea>
       `;
       document.body.appendChild(overlay);
 
-      // Initialize jQuery File Tree
-      $('#jqft-tree').fileTree({
-        root: (window._workspace || '/mnt/workspace').replace(/\/?$/, '/'),
-        script: '/api/jqueryfiletree',
-        folderEvent: 'click',
-        expandSpeed: 200,
-        collapseSpeed: 200,
-        multiFolder: false,
-        onlyFolders: true,
-      }, function(path) {
-        // Item selected — put path in input
+      // Fetch mounts and create a tree root per mount (same as file browser)
+      let mounts = [];
+      try {
+        const res = await fetch('/api/mounts');
+        mounts = await res.json();
+      } catch {}
+      if (mounts.length === 0) mounts = [{ path: window._workspace || '/home/blueprint/workspace' }];
+
+      const treeEl = document.getElementById('jqft-tree');
+      function selectPath(path) {
         document.getElementById('picker-path').value = path;
         document.getElementById('picker-name').value = path.replace(/\/$/, '').split('/').filter(Boolean).pop();
-      });
-      // Also capture directory clicks via event delegation
+      }
+
+      for (const mount of mounts) {
+        const section = document.createElement('div');
+        section.style.cssText = 'margin-bottom:4px';
+        const header = document.createElement('div');
+        header.style.cssText = 'font-size:12px;font-family:monospace;color:var(--text-secondary);padding:4px 6px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:4px';
+        header.innerHTML = '<span class="mount-arrow" style="font-size:10px;transition:transform 0.15s">&#9654;</span> ' + mount.path;
+        const treeContainer = document.createElement('div');
+        treeContainer.style.cssText = 'display:none;padding-left:4px';
+        section.appendChild(header);
+        section.appendChild(treeContainer);
+        treeEl.appendChild(section);
+
+        header.addEventListener('click', function() {
+          const arrow = header.querySelector('.mount-arrow');
+          if (treeContainer.style.display === 'none') {
+            treeContainer.style.display = '';
+            arrow.style.transform = 'rotate(90deg)';
+            if (!treeContainer.dataset.initialized) {
+              treeContainer.dataset.initialized = '1';
+              $(treeContainer).fileTree({
+                root: mount.path.replace(/\/?$/, '/'),
+                script: '/api/jqueryfiletree',
+                folderEvent: 'click',
+                expandSpeed: 200,
+                collapseSpeed: 200,
+                multiFolder: false,
+                onlyFolders: true,
+              }, function(path) { selectPath(path); });
+            }
+          } else {
+            treeContainer.style.display = 'none';
+            arrow.style.transform = '';
+          }
+        });
+
+        // Auto-expand first mount
+        if (mounts.indexOf(mount) === 0) header.click();
+      }
+
+      // Capture directory clicks via event delegation
       $('#jqft-tree').on('click', 'a', function() {
         const rel = $(this).attr('rel');
-        if (rel) {
-          document.getElementById('picker-path').value = rel;
-          document.getElementById('picker-name').value = rel.replace(/\/$/, '').split('/').filter(Boolean).pop();
-        }
+        if (rel) selectPath(rel);
       });
     }
 

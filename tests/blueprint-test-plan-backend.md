@@ -272,7 +272,7 @@ The following apply to all tests regardless of layer:
 | Data volumes | `joshua26_workspace`, `joshua26_storage` | `blueprint-test_workspace`, `blueprint-test_storage` |
 | Port binding | `7866:3000` | `7867:3000` |
 | Database | `/storage/blueprint.db` | Fresh DB per gating run |
-| Container name | `blueprint-blueprint-1` | `blueprint-test-blueprint-1` |
+| Container name | `blueprint-blueprint-1` | `blueprint-test` |
 | Environment | `BLUEPRINT_DATA=/storage` | `BLUEPRINT_DATA=/test-data` |
 | Outbound internet | Unrestricted | Blocked or routed to local stub server |
 | MAX_TMUX_SESSIONS | 5 (default) | 10 (explicit in compose) |
@@ -799,17 +799,17 @@ This is the highest-risk subsystem. It requires both granular stage tests and fu
 | TSK-06 | Task text validation (max 1000 chars) | Mock | NONE |
 | TSK-07 | Task created_by field | Mock | NONE |
 
-#### 4.1.17 Messaging System
+#### 4.1.17 Messaging System — REMOVED
 
 | ID | Capability | Layer | Status |
 |----|-----------|-------|--------|
-| MSG-01 | Send inter-session message | Live | NONE |
-| MSG-02 | Bridge file delivery to tmux session | Live | NONE |
-| MSG-03 | Get recent messages | Live | NONE |
-| MSG-04 | Message content validation (max 100KB) | Mock | NONE |
-| MSG-05 | Unread message retrieval | Mock | NONE |
-| MSG-06 | Mark message read | Mock | NONE |
-| MSG-07 | Bridge file cleanup (delivered: 5s, undelivered: 1hr) | Mock | NONE |
+| MSG-01 | ~~Send inter-session message~~ REMOVED | — | — |
+| MSG-02 | ~~Bridge file delivery to tmux session~~ REMOVED | — | — |
+| MSG-03 | ~~Get recent messages~~ REMOVED | — | — |
+| MSG-04 | ~~Message content validation (max 100KB)~~ REMOVED | — | — |
+| MSG-05 | ~~Unread message retrieval~~ REMOVED | — | — |
+| MSG-06 | ~~Mark message read~~ REMOVED | — | — |
+| MSG-07 | ~~Bridge file cleanup (delivered: 5s, undelivered: 1hr)~~ REMOVED | — | — |
 
 #### 4.1.18 Settings System
 
@@ -866,21 +866,21 @@ This is the highest-risk subsystem. It requires both granular stage tests and fu
 | MCP-09 | ~~`blueprint_smart_compaction`~~ REMOVED | — | — |
 | MCP-10 | ~~`blueprint_ask_quorum`~~ REMOVED | — | — |
 
-#### 4.1.21 MCP Tools (External/Admin -- `mcp-external.js`)
+#### 4.1.21 MCP Tools (External/Admin -- `mcp-external.js`) — REMOVED
 
 | ID | Capability | Layer | Status |
 |----|-----------|-------|--------|
-| MCX-01 | List external tools (internal + admin) | Live | NONE |
-| MCX-02 | Fallback to admin-only when internal fetch fails | Mock | NONE |
-| MCX-03 | External call proxies internal tools | Live | NONE |
-| MCX-04 | `blueprint_create_session` admin tool | Live | NONE |
-| MCX-05 | `blueprint_set_session_state` admin tool | Live | NONE |
-| MCX-06 | `blueprint_get_token_usage` admin tool | Live | NONE |
-| MCX-07 | `blueprint_set_project_notes` admin tool | Live | NONE |
-| MCX-08 | `blueprint_set_project_claude_md` admin tool | Live | NONE |
-| MCX-09 | `blueprint_list_projects` admin tool | Live | NONE |
-| MCX-10 | `blueprint_update_settings` admin tool (with key validation) | Live | NONE |
-| MCX-11 | Unknown tool name returns error | Mock | NONE |
+| MCX-01 | ~~List external tools (internal + admin)~~ REMOVED | — | — |
+| MCX-02 | ~~Fallback to admin-only when internal fetch fails~~ REMOVED | — | — |
+| MCX-03 | ~~External call proxies internal tools~~ REMOVED | — | — |
+| MCX-04 | ~~`blueprint_create_session` admin tool~~ REMOVED | — | — |
+| MCX-05 | ~~`blueprint_set_session_state` admin tool~~ REMOVED | — | — |
+| MCX-06 | ~~`blueprint_get_token_usage` admin tool~~ REMOVED | — | — |
+| MCX-07 | ~~`blueprint_set_project_notes` admin tool~~ REMOVED | — | — |
+| MCX-08 | ~~`blueprint_set_project_claude_md` admin tool~~ REMOVED | — | — |
+| MCX-09 | ~~`blueprint_list_projects` admin tool~~ REMOVED | — | — |
+| MCX-10 | ~~`blueprint_update_settings` admin tool (with key validation)~~ REMOVED | — | — |
+| MCX-11 | ~~Unknown tool name returns error~~ REMOVED | — | — |
 
 #### 4.1.22 MCP Servers API
 
@@ -1046,9 +1046,9 @@ Previously in this section:
 | UI-21 | Panel toggle (show/hide) | Browser | NONE |
 | UI-22 | Files tab: jQuery File Tree browsing | Browser | NONE |
 | UI-23 | Files tab: open file shows content | Browser | NONE |
-| UI-24 | Notes tab: auto-save textarea | Browser | NONE |
+| UI-24 | ~~Notes tab: auto-save textarea~~ REMOVED | — | — |
 | UI-25 | Tasks tab: add/complete/reopen/delete tasks | Browser | NONE |
-| UI-26 | Messages tab: view and send inter-session messages | Browser | NONE |
+| UI-26 | ~~Messages tab: view and send inter-session messages~~ REMOVED | — | — |
 | UI-27 | Panel data loads for active session's project | Browser | NONE |
 
 #### 4.1.33 UI -- Status Bar
@@ -1072,7 +1072,7 @@ Previously in this section:
 | UI-37 | Default model configuration | Browser | NONE |
 | UI-38 | Thinking level configuration | Browser | NONE |
 | UI-39 | Keepalive mode configuration | Browser | NONE |
-| UI-40 | Quorum configuration (lead, fixed junior, additional juniors) | Browser | NONE |
+| UI-40 | ~~Quorum configuration (lead, fixed junior, additional juniors)~~ REMOVED | — | — |
 | UI-41 | MCP server management (add/remove) | Browser | NONE |
 | UI-42 | Settings persist after modal close and page reload | Browser | NONE |
 
@@ -1363,23 +1363,23 @@ This section defines specific scenarios, inputs, expected outcomes, and gray-box
 - Input: Create session, connect WS to `/ws/:tmuxSession`
 - Expected: PTY spawned attached to tmux session, bidirectional data flows
 - Layer: Live
-- Gray-box: `docker exec blueprint-test-blueprint-1 tmux list-sessions` shows session; container logs show PTY spawn entry
+- Gray-box: `docker exec blueprint-test tmux list-sessions` shows session; container logs show PTY spawn entry
 
 **WS-03: Bidirectional data flow**
 - Input: Connect WS, send keystrokes, read output
 - Expected: Input appears in tmux capture-pane; command output received on WS
 - Layer: Live
-- Gray-box: `docker exec blueprint-test-blueprint-1 tmux capture-pane -t <session> -p` shows typed input
+- Gray-box: `docker exec blueprint-test tmux capture-pane -t <session> -p` shows typed input
 
 **WS-04: Terminal resize handling**
 - Input: Send resize message `{type: "resize", cols: 120, rows: 40}` over WS
 - Expected: PTY dimensions updated, subsequent output wraps at new width
-- Layer: Mock — inject mock PTY, verify `pty.resize(cols, rows)` called with correct values. Live — send resize, verify `docker exec blueprint-test-blueprint-1 tmux display -t <session> -p '#{pane_width} #{pane_height}'` reflects new dimensions
+- Layer: Mock — inject mock PTY, verify `pty.resize(cols, rows)` called with correct values. Live — send resize, verify `docker exec blueprint-test tmux display -t <session> -p '#{pane_width} #{pane_height}'` reflects new dimensions
 
 **WS-07: Cleanup on disconnect**
 - Input: Connect WS, then close connection
 - Expected: Three side effects occur: (1) PTY process killed, (2) browser count decremented in sharedState, (3) cleanup timer scheduled for tmux session
-- Layer: Mock — inject mock PTY (verify `.kill()` called), mock sharedState (verify `browserCount` decremented), mock timer (verify `setTimeout` scheduled with cleanup delay). Live — disconnect WS, verify: `docker exec blueprint-test-blueprint-1 tmux list-sessions` still shows session (cleanup is delayed, not immediate), container logs show disconnect cleanup entry
+- Layer: Mock — inject mock PTY (verify `.kill()` called), mock sharedState (verify `browserCount` decremented), mock timer (verify `setTimeout` scheduled with cleanup delay). Live — disconnect WS, verify: `docker exec blueprint-test tmux list-sessions` still shows session (cleanup is delayed, not immediate), container logs show disconnect cleanup entry
 - Gray-box: Container logs for PTY kill, tmux ls for session presence, internal state for browser count. This scenario tests three independent side effects; each must be verified separately
 
 **WS-08: Token usage forwarded via WS**
@@ -1588,17 +1588,17 @@ See §3.6 for methodology. Mock tests import functions; live tests use `child_pr
 | TSK-06 | Text > 1000 chars | 400 | Mock | |
 | TSK-07 | created_by field | Persisted | Mock | DB |
 
-### 5.22 Messaging System
+### 5.22 Messaging System — REMOVED
 
 | ID | Input | Expected | Layer | Gray-box |
 |----|-------|----------|-------|----------|
-| MSG-01 | POST message | 200, stored + bridge file | Live | DB + bridge exists |
-| MSG-02 | Message to active session | Bridge delivered via tmux | Live | `tmux capture-pane` |
-| MSG-03 | GET recent | Ordered by created_at desc | Live | |
-| MSG-04 | Content > 100KB | 400 | Mock | |
-| MSG-05 | GET unread | Only unread for session | Mock | |
-| MSG-06 | PUT mark read | read_at populated | Mock | DB |
-| MSG-07 | Cleanup timers | 5s delivered, 1hr undelivered (fake timers) | Mock | Bridge absent |
+| MSG-01 | ~~POST message~~ REMOVED | — | — | — |
+| MSG-02 | ~~Message to active session~~ REMOVED | — | — | — |
+| MSG-03 | ~~GET recent~~ REMOVED | — | — | — |
+| MSG-04 | ~~Content > 100KB~~ REMOVED | — | — | — |
+| MSG-05 | ~~GET unread~~ REMOVED | — | — | — |
+| MSG-06 | ~~PUT mark read~~ REMOVED | — | — | — |
+| MSG-07 | ~~Cleanup timers~~ REMOVED | — | — | — |
 
 ### 5.23 Settings System
 
@@ -1629,8 +1629,8 @@ See §3.6 for methodology. Mock tests import functions; live tests use `child_pr
 | ID | Input | Expected | Layer |
 |----|-------|----------|-------|
 | HLT-01 | All healthy | 200 | Live |
-| HLT-02a | DB file removed: `docker exec blueprint-test-blueprint-1 rm /storage/blueprint.db` | 503, health response body shows db status unhealthy | Live |
-| HLT-02b | DB file unreadable: `docker exec blueprint-test-blueprint-1 chmod 000 /storage/blueprint.db` (restore with `chmod 644` after test) | 503, health response body shows db status unhealthy | Live |
+| HLT-02a | DB file removed: `docker exec blueprint-test rm /storage/blueprint.db` | 503, health response body shows db status unhealthy | Live |
+| HLT-02b | DB file unreadable: `docker exec blueprint-test chmod 000 /storage/blueprint.db` (restore with `chmod 644` after test) | 503, health response body shows db status unhealthy | Live |
 | HLT-03 | Any state | db, workspace, auth fields present | Live |
 | HLT-04 | Invalid credentials | 200, auth degraded | Live |
 | HLT-05 | DB down, workspace up | 503, workspace healthy | Live |
@@ -1654,7 +1654,7 @@ See §3.6 for methodology. Mock tests import functions; live tests use `child_pr
 | ENT-11 | Root-only socket GID | Warning logged | Live | Container logs |
 | ENT-12 | `tmux` hidden via PATH override | Server starts degraded, session creation → clear error | Live | API error response |
 
-**ENT-12 execution method:** Run ENT-12 at the END of the fresh-container suite. Override PATH to hide tmux: `docker exec blueprint-test-blueprint-1 env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin node -e "..."` (omit the directory containing tmux from PATH), or use a compose override that mounts a no-op stub at the tmux path. Do NOT rename or move the real tmux binary — if the test harness crashes mid-test, the container must remain usable. If ENT-12 fails or the harness crashes, the container must be torn down and rebuilt before any subsequent test run.
+**ENT-12 execution method:** Run ENT-12 at the END of the fresh-container suite. Override PATH to hide tmux: `docker exec blueprint-test env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin node -e "..."` (omit the directory containing tmux from PATH), or use a compose override that mounts a no-op stub at the tmux path. Do NOT rename or move the real tmux binary — if the test harness crashes mid-test, the container must remain usable. If ENT-12 fails or the harness crashes, the container must be torn down and rebuilt before any subsequent test run.
 
 ### 5.27 Auth Modal (Browser)
 
@@ -1865,7 +1865,7 @@ Count-before/count-after pattern for every side-effecting tool:
 
 ### 9.1 Database Queries
 
-**Access:** `docker exec blueprint-test-blueprint-1 sqlite3 /storage/blueprint.db "..."`.
+**Access:** `docker exec blueprint-test sqlite3 /storage/blueprint.db "..."`.
 
 | Verification | Table | Query |
 |-------------|-------|-------|
@@ -1880,7 +1880,7 @@ Count-before/count-after pattern for every side-effecting tool:
 
 ### 9.2 Container Log Inspection
 
-**Access:** `docker logs blueprint-test-blueprint-1 --since <timestamp>`.
+**Access:** `docker logs blueprint-test --since <timestamp>`.
 
 | Pattern | Meaning | When |
 |---------|---------|------|
@@ -1903,9 +1903,9 @@ Count-before/count-after pattern for every side-effecting tool:
 
 | Check | Command |
 |-------|---------|
-| Session exists | `docker exec blueprint-test-blueprint-1 tmux list-sessions` |
-| Pane content | `docker exec blueprint-test-blueprint-1 tmux capture-pane -t <session> -p` |
-| Session count | `docker exec blueprint-test-blueprint-1 tmux list-sessions \| wc -l` |
+| Session exists | `docker exec blueprint-test tmux list-sessions` |
+| Pane content | `docker exec blueprint-test tmux capture-pane -t <session> -p` |
+| Session count | `docker exec blueprint-test tmux list-sessions \| wc -l` |
 
 ### 9.5 WebSocket Inspection
 
@@ -1918,9 +1918,9 @@ Every browser mutation test must verify actual state:
 | Browser Scenario | Mutation | Gray-Box Check |
 |-----------------|----------|---------------|
 | BRW-02 | Session created | DB: new session row |
-| BRW-10 | Notes saved | DB: notes match |
+| BRW-10 | ~~Notes saved~~ REMOVED | ~~DB: notes match~~ |
 | BRW-11 | Tasks CRUD | DB: task state after each op |
-| BRW-12 | Message sent | DB: message row |
+| BRW-12 | ~~Message sent~~ REMOVED | ~~DB: message row~~ |
 | BRW-13 | Theme changed | DB: theme setting |
 | BRW-14 | Font changed | DB: setting + tmux pane dimensions |
 | BRW-15 | Settings persist | DB: value after reload |
@@ -1928,7 +1928,7 @@ Every browser mutation test must verify actual state:
 | BRW-18 | Project added | DB: project row |
 | BRW-29 | Drag-and-drop | Tmux: capture-pane shows path |
 | BRW-30 | Double-click | DB: exactly one session row created |
-| BRW-31 | Compaction workflow | DB: token usage reduced post-compaction |
+| BRW-31 | ~~Compaction workflow~~ REMOVED | ~~DB: token usage reduced post-compaction~~ |
 
 ### 9.7 Negative Gray-Box for Error Paths
 
@@ -2037,9 +2037,9 @@ All tests use Playwright with Chromium at `http://localhost:7867/`.
 | BRW-07 | Session sort | By messages → reordered | — |
 | BRW-08 | Session search | Term → matches shown | — |
 | BRW-09 | Files panel | Expand → click → content | — |
-| BRW-10 | Notes autosave | Type → persisted | DB notes |
+| BRW-10 | ~~Notes autosave~~ REMOVED | ~~Type → persisted~~ | ~~DB notes~~ |
 | BRW-11 | Tasks CRUD | Add/complete/reopen/delete | DB state |
-| BRW-12 | Messages | Send → in list | DB row |
+| BRW-12 | ~~Messages~~ REMOVED | ~~Send → in list~~ | ~~DB row~~ |
 | BRW-13 | Theme change | Change → CSS updates | DB setting |
 | BRW-14 | Font change | Size → terminal updates | DB + tmux dims |
 | BRW-15 | Settings persist | Change → reload → still applied | DB value |
@@ -2063,14 +2063,14 @@ All tests use Playwright with Chromium at `http://localhost:7867/`.
 | BRW-28 | Auth modal | See §5.27 |
 | BRW-29 | Drag-and-drop | Path typed into terminal |
 | BRW-30 | Double-click prevention | Rapid "+"/Ctrl+Enter → one session, no dup modals. Gray-box: DB has exactly one new session row, `tmux ls` count incremented by exactly one |
-| BRW-31 | Compaction user workflow | Terminal visible, context bar shows high usage, compaction triggers (via stub), session resumes to usable state, terminal remains interactive, session identity coherent in sidebar | Gray-box: token usage decreased post-compaction |
+| BRW-31 | ~~Compaction user workflow~~ REMOVED | ~~Terminal visible, context bar shows high usage, compaction triggers (via stub), session resumes to usable state, terminal remains interactive, session identity coherent in sidebar~~ | ~~Gray-box: token usage decreased post-compaction~~ |
 
 ### 12.4 Real-World Usability Tests
 
 | ID | Task | Success Criteria |
 |----|------|-----------------|
 | USR-01 | Add project → create session → list files → archive | All through UI |
-| USR-02 | Two sessions, send message between them | Bridge delivered |
+| USR-02 | Two sessions, switch between them, verify sidebar state | Both sessions visible in sidebar |
 | USR-03 | Change theme + font, verify persistence | Survives reload |
 | USR-04 | Search across sessions | Results returned, click opens |
 | USR-05 | Tasks CRUD, verify persistence | Survives reload |
@@ -2532,17 +2532,17 @@ Single source of truth. Updated on every write/run. One row per scenario.
 | TSK-06 | Mock | tests/mock/routes.test.js | Not started | - | Not run | |
 | TSK-07 | Mock | tests/mock/routes.test.js | Not started | - | Not run | |
 
-### 15.18 Messaging System
+### 15.18 Messaging System — REMOVED
 
 | ID | Layer | Test File | Status | Last Run | Result | Notes |
 |----|-------|-----------|--------|----------|--------|-------|
-| MSG-01 | Live | tests/live/routes-messages.test.js | Not started | - | Not run | |
-| MSG-02 | Live | tests/live/routes-messages.test.js | Not started | - | Not run | |
-| MSG-03 | Live | tests/live/routes-messages.test.js | Not started | - | Not run | |
-| MSG-04 | Mock | tests/mock/routes.test.js | Not started | - | Not run | |
-| MSG-05 | Mock | tests/mock/routes.test.js | Not started | - | Not run | |
-| MSG-06 | Mock | tests/mock/routes.test.js | Not started | - | Not run | |
-| MSG-07 | Mock | tests/mock/routes.test.js | Not started | - | Not run | |
+| MSG-01 | Live | tests/live/routes-messages.test.js | REMOVED | - | - | Messages system deleted |
+| MSG-02 | Live | tests/live/routes-messages.test.js | REMOVED | - | - | Messages system deleted |
+| MSG-03 | Live | tests/live/routes-messages.test.js | REMOVED | - | - | Messages system deleted |
+| MSG-04 | Mock | tests/mock/routes.test.js | REMOVED | - | - | Messages system deleted |
+| MSG-05 | Mock | tests/mock/routes.test.js | REMOVED | - | - | Messages system deleted |
+| MSG-06 | Mock | tests/mock/routes.test.js | REMOVED | - | - | Messages system deleted |
+| MSG-07 | Mock | tests/mock/routes.test.js | REMOVED | - | - | Messages system deleted |
 
 ### 15.19 Settings System
 
@@ -2599,21 +2599,21 @@ Single source of truth. Updated on every write/run. One row per scenario.
 | MCP-09 | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
 | MCP-10 | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
 
-### 15.22 MCP Tools (External/Admin)
+### 15.22 MCP Tools (External/Admin) — REMOVED
 
 | ID | Layer | Test File | Status | Last Run | Result | Notes |
 |----|-------|-----------|--------|----------|--------|-------|
-| MCX-01 | Live | tests/live/mcp-external.test.js | Not started | - | Not run | |
-| MCX-02 | Mock | tests/mock/mcp-external.test.js | Not started | - | Not run | |
-| MCX-03 | Live | tests/live/mcp-external.test.js | Not started | - | Not run | |
-| MCX-04 | Live | tests/live/mcp-external.test.js | Not started | - | Not run | |
-| MCX-05 | Live | tests/live/mcp-external.test.js | Not started | - | Not run | |
-| MCX-06 | Live | tests/live/mcp-external.test.js | Not started | - | Not run | |
-| MCX-07 | Live | tests/live/mcp-external.test.js | Not started | - | Not run | |
-| MCX-08 | Live | tests/live/mcp-external.test.js | Not started | - | Not run | |
-| MCX-09 | Live | tests/live/mcp-external.test.js | Not started | - | Not run | |
-| MCX-10 | Live | tests/live/mcp-external.test.js | Not started | - | Not run | |
-| MCX-11 | Mock | tests/mock/mcp-external.test.js | Not started | - | Not run | |
+| MCX-01 | Live | tests/live/mcp-external.test.js | REMOVED | - | - | mcp-external.js deleted |
+| MCX-02 | Mock | tests/mock/mcp-external.test.js | REMOVED | - | - | mcp-external.js deleted |
+| MCX-03 | Live | tests/live/mcp-external.test.js | REMOVED | - | - | mcp-external.js deleted |
+| MCX-04 | Live | tests/live/mcp-external.test.js | REMOVED | - | - | mcp-external.js deleted |
+| MCX-05 | Live | tests/live/mcp-external.test.js | REMOVED | - | - | mcp-external.js deleted |
+| MCX-06 | Live | tests/live/mcp-external.test.js | REMOVED | - | - | mcp-external.js deleted |
+| MCX-07 | Live | tests/live/mcp-external.test.js | REMOVED | - | - | mcp-external.js deleted |
+| MCX-08 | Live | tests/live/mcp-external.test.js | REMOVED | - | - | mcp-external.js deleted |
+| MCX-09 | Live | tests/live/mcp-external.test.js | REMOVED | - | - | mcp-external.js deleted |
+| MCX-10 | Live | tests/live/mcp-external.test.js | REMOVED | - | - | mcp-external.js deleted |
+| MCX-11 | Mock | tests/mock/mcp-external.test.js | REMOVED | - | - | mcp-external.js deleted |
 
 ### 15.23 MCP Servers API
 
@@ -2736,9 +2736,9 @@ QRM-01..15: REMOVED — quorum.js deleted.
 | UI-21 | Browser | tests/browser/right-panel.spec.js | Not started | - | Not run | |
 | UI-22 | Browser | tests/browser/file-browser.spec.js | Not started | - | Not run | via BRW-09 |
 | UI-23 | Browser | tests/browser/file-browser.spec.js | Not started | - | Not run | via BRW-09 |
-| UI-24 | Browser | tests/browser/right-panel.spec.js | Not started | - | Not run | via BRW-10 |
+| UI-24 | Browser | tests/browser/right-panel.spec.js | REMOVED | - | - | Notes tab removed |
 | UI-25 | Browser | tests/browser/right-panel.spec.js | Not started | - | Not run | via BRW-11 |
-| UI-26 | Browser | tests/browser/right-panel.spec.js | Not started | - | Not run | via BRW-12 |
+| UI-26 | Browser | tests/browser/right-panel.spec.js | REMOVED | - | - | Messages tab removed |
 | UI-27 | Browser | tests/browser/right-panel.spec.js | Not started | - | Not run | |
 | UI-28 | Browser | tests/browser/status-bar.spec.js | Not started | - | Not run | via BRW-19 |
 | UI-29 | Browser | tests/browser/status-bar.spec.js | Not started | - | Not run | |
@@ -2752,7 +2752,7 @@ QRM-01..15: REMOVED — quorum.js deleted.
 | UI-37 | Browser | tests/browser/settings.spec.js | Not started | - | Not run | |
 | UI-38 | Browser | tests/browser/settings.spec.js | Not started | - | Not run | |
 | UI-39 | Browser | tests/browser/settings.spec.js | Not started | - | Not run | |
-| UI-40 | Browser | tests/browser/settings.spec.js | Not started | - | Not run | |
+| UI-40 | Browser | tests/browser/settings.spec.js | REMOVED | - | - | Quorum removed |
 | UI-41 | Browser | tests/browser/settings.spec.js | Not started | - | Not run | |
 | UI-42 | Browser | tests/browser/settings.spec.js | Not started | - | Not run | via BRW-15 |
 | UI-43 | Browser | tests/browser/auth-modal.spec.js | Not started | - | Not run | via BRW-27 |
@@ -2783,9 +2783,9 @@ QRM-01..15: REMOVED — quorum.js deleted.
 | BRW-07 | Browser | tests/browser/sidebar-and-tabs.spec.js | Not started | - | Not run | |
 | BRW-08 | Browser | tests/browser/sidebar-and-tabs.spec.js | Not started | - | Not run | |
 | BRW-09 | Browser | tests/browser/file-browser.spec.js | Not started | - | Not run | |
-| BRW-10 | Browser | tests/browser/right-panel.spec.js | Not started | - | Not run | |
+| BRW-10 | Browser | tests/browser/right-panel.spec.js | REMOVED | - | - | Notes autosave removed |
 | BRW-11 | Browser | tests/browser/right-panel.spec.js | Not started | - | Not run | |
-| BRW-12 | Browser | tests/browser/right-panel.spec.js | Not started | - | Not run | |
+| BRW-12 | Browser | tests/browser/right-panel.spec.js | REMOVED | - | - | Messages removed |
 | BRW-13 | Browser | tests/browser/settings.spec.js | Not started | - | Not run | |
 | BRW-14 | Browser | tests/browser/settings.spec.js | Not started | - | Not run | |
 | BRW-15 | Browser | tests/browser/settings.spec.js | Not started | - | Not run | |
@@ -2804,7 +2804,7 @@ QRM-01..15: REMOVED — quorum.js deleted.
 | BRW-28 | Browser | tests/browser/auth-modal.spec.js | Not started | - | Not run | |
 | BRW-29 | Browser | tests/browser/session-workflows.spec.js | Not started | - | Not run | |
 | BRW-30 | Browser | tests/browser/session-workflows.spec.js | Not started | - | Not run | |
-| BRW-31 | Browser | tests/browser/session-workflows.spec.js | Not started | - | Not run | Compaction UX |
+| BRW-31 | Browser | tests/browser/session-workflows.spec.js | REMOVED | - | - | Compaction UX removed |
 
 ### 15.33 Usability Tests
 

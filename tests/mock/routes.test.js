@@ -466,37 +466,37 @@ test('task CRUD success paths with DB verification', async () => {
   await withFullServer(async ({ port, db, firedEvents }) => {
     // Create
     const cr = await (
-      await req(port, 'POST', '/api/projects/test-project/tasks', { text: 'My task' })
+      await req(port, 'POST', '/api/tasks', { folder_path: '/', title: 'My task' })
     ).json();
     assert.equal(cr.status, 'todo');
-    assert.equal(cr.text, 'My task');
+    assert.equal(cr.title, 'My task');
     assert.ok(firedEvents.some((e) => e.event === 'task_added'));
     // Gray-box: verify DB has the task
-    const dbTasks = db.getTasks(db.getProject('test-project').id);
+    const dbTasks = db.getAllTasks();
     assert.ok(
-      dbTasks.some((t) => t.text === 'My task'),
+      dbTasks.some((t) => t.title === 'My task'),
       'Task must exist in DB after creation',
     );
     // List
-    const lr = await (await req(port, 'GET', '/api/projects/test-project/tasks')).json();
-    assert.ok(lr.tasks.some((t) => t.text === 'My task'));
+    const lr = await (await req(port, 'GET', '/api/tasks/tree')).json();
+    assert.ok(lr.tree !== undefined);
     // Complete
-    const complR = await req(port, 'PUT', `/api/tasks/${cr.id}/complete`);
+    const complR = await req(port, 'PUT', `/api/tasks/${cr.id}`, { status: 'done' });
     assert.equal(complR.status, 200);
     // Gray-box: verify task status changed in DB
-    const completedTask = db.getTasks(db.getProject('test-project').id).find((t) => t.id === cr.id);
+    const completedTask = db.getAllTasks().find((t) => t.id === cr.id);
     assert.equal(completedTask.status, 'done', 'Task status must be done after completion');
     assert.ok(completedTask.completed_at, 'completed_at must be set');
     // Reopen
-    const reopenR = await req(port, 'PUT', `/api/tasks/${cr.id}/reopen`);
+    const reopenR = await req(port, 'PUT', `/api/tasks/${cr.id}`, { status: 'todo' });
     assert.equal(reopenR.status, 200);
-    const reopenedTask = db.getTasks(db.getProject('test-project').id).find((t) => t.id === cr.id);
+    const reopenedTask = db.getAllTasks().find((t) => t.id === cr.id);
     assert.equal(reopenedTask.status, 'todo', 'Task status must be todo after reopen');
     assert.equal(reopenedTask.completed_at, null, 'completed_at must be cleared after reopen');
     // Delete
-    const taskCountBefore = db.getTasks(db.getProject('test-project').id).length;
+    const taskCountBefore = db.getAllTasks().length;
     await req(port, 'DELETE', `/api/tasks/${cr.id}`);
-    const taskCountAfter = db.getTasks(db.getProject('test-project').id).length;
+    const taskCountAfter = db.getAllTasks().length;
     assert.equal(taskCountAfter, taskCountBefore - 1, 'Task count must decrease by 1 after delete');
   });
 });
@@ -658,14 +658,15 @@ test('validation failure does not create partial DB state', async () => {
       'Failed project creation must not leave partial state in DB',
     );
 
-    const p = db.ensureProject('neg_proj', '/workspace/neg_proj');
-    const taskCountBefore = db.getTasks(p.id).length;
-    // Try to create task with overlong text
-    await req(port, 'POST', '/api/projects/neg_proj/tasks', {
-      text: fixtures.routes.overlongTaskText,
+    db.ensureProject('neg_proj', '/workspace/neg_proj');
+    const taskCountBefore = db.getAllTasks().length;
+    // Try to create task with overlong title
+    await req(port, 'POST', '/api/tasks', {
+      folder_path: '/',
+      title: fixtures.routes.overlongTaskText,
     });
     assert.equal(
-      db.getTasks(p.id).length,
+      db.getAllTasks().length,
       taskCountBefore,
       'Failed task creation must not leave partial state in DB',
     );
@@ -1451,28 +1452,32 @@ test('SES-CFG-03: GET /api/sessions/:id/config returns 404 when session not foun
   });
 });
 
-// -- tasks: project not found --
+// -- tasks: validation and tree --
 
-test('TSK-08: GET /api/projects/:name/tasks returns 404 when project not found', async () => {
+test('TSK-08: GET /api/tasks/tree returns tree object', async () => {
   await withFullServer(async ({ port }) => {
-    const r = await req(port, 'GET', '/api/projects/no-such-proj/tasks');
-    assert.equal(r.status, 404);
+    const r = await req(port, 'GET', '/api/tasks/tree');
+    assert.equal(r.status, 200);
+    const body = await r.json();
+    assert.ok(body.tree !== undefined);
   });
 });
 
-test('TSK-09: POST /api/projects/:name/tasks returns 404 when project not found', async () => {
+test('TSK-09: GET /api/tasks/tree accepts filter query param', async () => {
   await withFullServer(async ({ port }) => {
-    const r = await req(port, 'POST', '/api/projects/no-such-proj/tasks', { text: 'task' });
-    assert.equal(r.status, 404);
+    const r = await req(port, 'GET', '/api/tasks/tree?filter=all');
+    assert.equal(r.status, 200);
+    const body = await r.json();
+    assert.ok(body.tree !== undefined);
   });
 });
 
-test('TSK-10: POST /api/projects/:name/tasks rejects missing text', async () => {
+test('TSK-10: POST /api/tasks rejects missing title', async () => {
   await withFullServer(async ({ port }) => {
-    const r = await req(port, 'POST', '/api/projects/test-project/tasks', {});
+    const r = await req(port, 'POST', '/api/tasks', { folder_path: '/' });
     assert.equal(r.status, 400);
     const body = await r.json();
-    assert.ok(body.error.includes('text'));
+    assert.ok(body.error.includes('title'));
   });
 });
 

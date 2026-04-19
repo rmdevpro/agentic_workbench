@@ -8,9 +8,9 @@ const { queryCount } = require('../helpers/db-query');
 
 test('PRJ-01: add project by path with DB verification', async () => {
   await resetBaseline();
-  dockerExec('mkdir -p /workspace/test_live_project');
+  dockerExec('mkdir -p /home/blueprint/workspace/test_live_project');
   const r = await post('/api/projects', {
-    path: '/workspace/test_live_project',
+    path: '/home/blueprint/workspace/test_live_project',
     name: 'test_live_project',
   });
   assert.equal(r.status, 200);

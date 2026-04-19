@@ -38,11 +38,13 @@ function makeLifecycle(overrides = {}) {
   return { lifecycle: lc, killed, existing, onKilled };
 }
 
-test('TMX-01: tmuxName uses bp_ prefix and truncates to 12 chars of ID', () => {
+test('TMX-01: tmuxName uses bp_ prefix with random suffix for uniqueness', () => {
   const { lifecycle } = makeLifecycle();
   const name = lifecycle.tmuxName('abcdefghijklmnop');
-  assert.match(name, /^bp_/);
-  assert.equal(name, 'bp_abcdefghijkl');
+  assert.match(name, /^bp_abcdefghijkl_[a-z0-9]{4}$/);
+  // Two calls with the same ID produce different names (random suffix)
+  const name2 = lifecycle.tmuxName('abcdefghijklmnop');
+  assert.notEqual(name, name2);
 });
 
 test('TMX-02: tmuxExists delegates to safe', async () => {
@@ -51,26 +53,35 @@ test('TMX-02: tmuxExists delegates to safe', async () => {
   assert.equal(await lifecycle.tmuxExists('bp_missing'), false);
 });
 
-test('TMX-06: scheduleTmuxCleanup kills idle session after delay', async () => {
-  const { lifecycle, killed, onKilled } = makeLifecycle({ existing: ['bp_dead'], delay: 5 });
+test('TMX-06: scheduleTmuxCleanup removes session from activeTabs (no immediate kill)', async () => {
+  const { lifecycle, killed } = makeLifecycle({ existing: ['bp_dead'], delay: 5 });
+  // First mark the tab open so it is tracked
+  lifecycle.markTabOpen('bp_dead');
+  // scheduleTmuxCleanup is now a legacy wrapper for markTabClosed — removes from activeTabs
   lifecycle.scheduleTmuxCleanup('bp_dead');
-  await new Promise((r) => setTimeout(r, 30));
-  assert.deepEqual(killed, ['bp_dead']);
-  assert.deepEqual(onKilled, ['bp_dead']);
-});
-
-test('TMX-07: cancelTmuxCleanup prevents kill', async () => {
-  const { lifecycle, killed } = makeLifecycle({ existing: ['bp_alive'], delay: 20 });
-  lifecycle.scheduleTmuxCleanup('bp_alive');
-  lifecycle.cancelTmuxCleanup('bp_alive');
-  await new Promise((r) => setTimeout(r, 50));
+  // No kill should have occurred; cleanup is deferred to the periodic scan
   assert.deepEqual(killed, []);
 });
 
-test('TMX-08: enforceTmuxLimit kills oldest bp_ sessions over limit', async () => {
+test('TMX-07: cancelTmuxCleanup re-adds session to activeTabs', async () => {
+  const { lifecycle, killed } = makeLifecycle({ existing: ['bp_alive'], delay: 20 });
+  // Mark closed then re-open — net result is session stays tracked as active
+  lifecycle.scheduleTmuxCleanup('bp_alive');
+  lifecycle.cancelTmuxCleanup('bp_alive');
+  // No kill should occur; periodic scan will see the tab as active
+  assert.deepEqual(killed, []);
+});
+
+test('TMX-08: enforceTmuxLimit kills oldest sessions over limit (all prefixes)', async () => {
+  // Use recent timestamps so idle-timeout does not fire; limit=1 means two oldest are killed
+  const recentBase = Math.floor(Date.now() / 1000);
+  const t1 = recentBase - 10;
+  const t2 = recentBase - 5;
+  const t3 = recentBase - 1;
   const { lifecycle, killed } = makeLifecycle({
     max: 1,
-    tmuxExecAsync: async () => 'bp_a 10\nbp_b 20\nbp_c 30\n',
+    existing: ['bp_a', 'bp_b', 'regular_c'],
+    tmuxExecAsync: async () => `bp_a ${t1}\nbp_b ${t2}\nregular_c ${t3}\n`,
   });
   await lifecycle.enforceTmuxLimit();
   assert.deepEqual(killed, ['bp_a', 'bp_b']);
@@ -87,12 +98,14 @@ test('TMX-08: enforceTmuxLimit handles no-server-running gracefully', async () =
   assert.deepEqual(killed, []);
 });
 
-test('TMX-09: cleanOrphanedTmuxSessions kills all bp_ sessions', async () => {
+test('TMX-09: cleanOrphanedTmuxSessions kills ALL idle sessions (not just bp_)', async () => {
+  // lastActivity=0 makes all sessions ancient; idle-timeout path kills everything
   const { lifecycle, killed } = makeLifecycle({
-    tmuxExecAsync: async () => 'bp_one\nbp_two\nregular\n',
+    existing: ['bp_one', 'bp_two', 'regular'],
+    tmuxExecAsync: async () => 'bp_one 0\nbp_two 0\nregular 0\n',
   });
   await lifecycle.cleanOrphanedTmuxSessions();
-  assert.deepEqual(killed, ['bp_one', 'bp_two']);
+  assert.deepEqual(killed, ['bp_one', 'bp_two', 'regular']);
 });
 
 

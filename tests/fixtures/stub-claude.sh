@@ -16,6 +16,7 @@ PROMPT=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    mcp) echo '{}'; exit 0 ;;
     --print|-p) PRINT_MODE=true; shift ;;
     --resume|-r) SESSION_ID="$2"; shift 2 ;;
     --model) MODEL="$2"; shift 2 ;;

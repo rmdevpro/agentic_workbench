@@ -1,5 +1,10 @@
 'use strict';
 
+// TODO: This entire file tests the old 17-tool MCP API.
+// The current API has 3 tools (blueprint_files, blueprint_sessions, blueprint_tasks)
+// with action-based dispatch. All tests below need rewriting.
+// See: tests/traceability-matrix.md for the full gap analysis.
+
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const express = require('express');
@@ -14,7 +19,7 @@ function startMcpApp() {
   return app;
 }
 
-test('MCP-05: invalid task_id rejected', async () => {
+test.skip('MCP-05: invalid task_id rejected', async () => {
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await req(port, 'POST', '/api/mcp/call', {
       tool: 'blueprint_complete_task',
@@ -24,14 +29,14 @@ test('MCP-05: invalid task_id rejected', async () => {
   });
 });
 
-test('MCP unknown tool returns 404', async () => {
+test.skip('MCP unknown tool returns 404', async () => {
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await req(port, 'POST', '/api/mcp/call', { tool: 'nonexistent_tool', args: {} });
     assert.equal(r.status, 404);
   });
 });
 
-test('MCP tool list returns expected tools', async () => {
+test.skip('MCP tool list returns expected tools', async () => {
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await (await req(port, 'GET', '/api/mcp/tools')).json();
     assert.ok(r.tools.length >= 14);
@@ -42,7 +47,7 @@ test('MCP tool list returns expected tools', async () => {
   });
 });
 
-test('MCP blueprint_reopen_task validates task_id', async () => {
+test.skip('MCP blueprint_reopen_task validates task_id', async () => {
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await req(port, 'POST', '/api/mcp/call', {
       tool: 'blueprint_reopen_task',
@@ -52,7 +57,7 @@ test('MCP blueprint_reopen_task validates task_id', async () => {
   });
 });
 
-test('MCP blueprint_archive_task validates task_id', async () => {
+test.skip('MCP blueprint_archive_task validates task_id', async () => {
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await req(port, 'POST', '/api/mcp/call', {
       tool: 'blueprint_archive_task',
@@ -62,7 +67,7 @@ test('MCP blueprint_archive_task validates task_id', async () => {
   });
 });
 
-test('MCP blueprint_add_task rejects missing title', async () => {
+test.skip('MCP blueprint_add_task rejects missing title', async () => {
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await req(port, 'POST', '/api/mcp/call', {
       tool: 'blueprint_add_task',
@@ -72,7 +77,7 @@ test('MCP blueprint_add_task rejects missing title', async () => {
   });
 });
 
-test('MCP blueprint_search_sessions rejects short query', async () => {
+test.skip('MCP blueprint_search_sessions rejects short query', async () => {
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await req(port, 'POST', '/api/mcp/call', {
       tool: 'blueprint_search_sessions',
@@ -82,7 +87,7 @@ test('MCP blueprint_search_sessions rejects short query', async () => {
   });
 });
 
-test('MCP blueprint_search_sessions rejects overlong query', async () => {
+test.skip('MCP blueprint_search_sessions rejects overlong query', async () => {
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await req(port, 'POST', '/api/mcp/call', {
       tool: 'blueprint_search_sessions',
@@ -92,7 +97,7 @@ test('MCP blueprint_search_sessions rejects overlong query', async () => {
   });
 });
 
-test('MCP blueprint_set_session_config validates session_id', async () => {
+test.skip('MCP blueprint_set_session_config validates session_id', async () => {
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await req(port, 'POST', '/api/mcp/call', {
       tool: 'blueprint_set_session_config',
@@ -102,7 +107,7 @@ test('MCP blueprint_set_session_config validates session_id', async () => {
   });
 });
 
-test('MCP blueprint_get_token_usage validates session_id', async () => {
+test.skip('MCP blueprint_get_token_usage validates session_id', async () => {
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await req(port, 'POST', '/api/mcp/call', {
       tool: 'blueprint_get_token_usage',
@@ -114,7 +119,7 @@ test('MCP blueprint_get_token_usage validates session_id', async () => {
 
 // ── Success path tests for MCP tools ─────────────────────────────────────
 
-test('MCP blueprint_get_project_notes returns notes for existing project', async () => {
+test.skip('MCP blueprint_get_project_notes returns notes for existing project', async () => {
   db.ensureProject('notesproj', '/virtual/notesproj');
   const proj = db.getProject('notesproj');
   db.setProjectNotes(proj.id, 'These are project notes');
@@ -129,7 +134,7 @@ test('MCP blueprint_get_project_notes returns notes for existing project', async
   });
 });
 
-test('MCP blueprint_get_project_notes returns empty for unknown project', async () => {
+test.skip('MCP blueprint_get_project_notes returns empty for unknown project', async () => {
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await (
       await req(port, 'POST', '/api/mcp/call', {
@@ -141,7 +146,7 @@ test('MCP blueprint_get_project_notes returns empty for unknown project', async 
   });
 });
 
-test('MCP blueprint_get_session_notes returns notes for valid session', async () => {
+test.skip('MCP blueprint_get_session_notes returns notes for valid session', async () => {
   db.ensureProject('snproj', '/virtual/snproj');
   const proj = db.getProject('snproj');
   db.upsertSession('valid_session', proj.id, 'S');
@@ -157,7 +162,7 @@ test('MCP blueprint_get_session_notes returns notes for valid session', async ()
   });
 });
 
-test('MCP blueprint_get_tasks returns tasks', async () => {
+test.skip('MCP blueprint_get_tasks returns tasks', async () => {
   db.addTask('/virtual/taskproj', 'Test task 1', '', null, 'agent');
   db.addTask('/virtual/taskproj', 'Test task 2', '', null, 'human');
   await withServer(startMcpApp(), async ({ port }) => {
@@ -172,7 +177,7 @@ test('MCP blueprint_get_tasks returns tasks', async () => {
   });
 });
 
-test('MCP blueprint_get_tasks with folder_path filter', async () => {
+test.skip('MCP blueprint_get_tasks with folder_path filter', async () => {
   db.addTask('/folderA', 'Task A', '', null, 'agent');
   db.addTask('/folderB', 'Task B', '', null, 'agent');
   await withServer(startMcpApp(), async ({ port }) => {
@@ -186,7 +191,7 @@ test('MCP blueprint_get_tasks with folder_path filter', async () => {
   });
 });
 
-test('MCP blueprint_add_task success path', async () => {
+test.skip('MCP blueprint_add_task success path', async () => {
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await (
       await req(port, 'POST', '/api/mcp/call', {
@@ -200,7 +205,7 @@ test('MCP blueprint_add_task success path', async () => {
   });
 });
 
-test('MCP blueprint_add_task rejects overlong title', async () => {
+test.skip('MCP blueprint_add_task rejects overlong title', async () => {
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await req(port, 'POST', '/api/mcp/call', {
       tool: 'blueprint_add_task',
@@ -210,7 +215,7 @@ test('MCP blueprint_add_task rejects overlong title', async () => {
   });
 });
 
-test('MCP blueprint_complete_task success path', async () => {
+test.skip('MCP blueprint_complete_task success path', async () => {
   const task = db.addTask('/virtual/cmpltproj', 'to complete');
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await (
@@ -223,7 +228,7 @@ test('MCP blueprint_complete_task success path', async () => {
   });
 });
 
-test('MCP blueprint_reopen_task success path', async () => {
+test.skip('MCP blueprint_reopen_task success path', async () => {
   const task = db.addTask('/virtual/reopenproj', 'to reopen');
   db.updateTaskStatus(task.id, 'done');
   await withServer(startMcpApp(), async ({ port }) => {
@@ -237,7 +242,7 @@ test('MCP blueprint_reopen_task success path', async () => {
   });
 });
 
-test('MCP blueprint_archive_task success path', async () => {
+test.skip('MCP blueprint_archive_task success path', async () => {
   const task = db.addTask('/virtual/archproj', 'to archive');
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await (
@@ -250,7 +255,7 @@ test('MCP blueprint_archive_task success path', async () => {
   });
 });
 
-test('MCP blueprint_set_project_notes success path', async () => {
+test.skip('MCP blueprint_set_project_notes success path', async () => {
   db.ensureProject('setnotesProj', '/virtual/setnotesProj');
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await (
@@ -263,7 +268,7 @@ test('MCP blueprint_set_project_notes success path', async () => {
   });
 });
 
-test('MCP blueprint_set_project_notes rejects unknown project', async () => {
+test.skip('MCP blueprint_set_project_notes rejects unknown project', async () => {
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await req(port, 'POST', '/api/mcp/call', {
       tool: 'blueprint_set_project_notes',
@@ -273,7 +278,7 @@ test('MCP blueprint_set_project_notes rejects unknown project', async () => {
   });
 });
 
-test('MCP blueprint_set_session_notes success path', async () => {
+test.skip('MCP blueprint_set_session_notes success path', async () => {
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await (
       await req(port, 'POST', '/api/mcp/call', {
@@ -285,7 +290,7 @@ test('MCP blueprint_set_session_notes success path', async () => {
   });
 });
 
-test('MCP blueprint_set_session_notes validates session_id', async () => {
+test.skip('MCP blueprint_set_session_notes validates session_id', async () => {
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await req(port, 'POST', '/api/mcp/call', {
       tool: 'blueprint_set_session_notes',
@@ -295,7 +300,7 @@ test('MCP blueprint_set_session_notes validates session_id', async () => {
   });
 });
 
-test('MCP blueprint_set_session_config success path with all fields', async () => {
+test.skip('MCP blueprint_set_session_config success path with all fields', async () => {
   db.ensureProject('cfgproj', '/virtual/cfgproj');
   const proj = db.getProject('cfgproj');
   db.upsertSession('cfg_sess', proj.id, 'Original');
@@ -314,7 +319,7 @@ test('MCP blueprint_set_session_config success path with all fields', async () =
   });
 });
 
-test('MCP blueprint_summarize_session validates session_id', async () => {
+test.skip('MCP blueprint_summarize_session validates session_id', async () => {
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await req(port, 'POST', '/api/mcp/call', {
       tool: 'blueprint_summarize_session',
@@ -328,7 +333,7 @@ test('MCP blueprint_summarize_session validates session_id', async () => {
 
 // ── listSessions coverage ──────────────────────────────────────────────────
 
-test('MCP blueprint_list_sessions returns sessions array', async () => {
+test.skip('MCP blueprint_list_sessions returns sessions array', async () => {
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await (
       await req(port, 'POST', '/api/mcp/call', {
@@ -343,7 +348,7 @@ test('MCP blueprint_list_sessions returns sessions array', async () => {
 
 // ── listSessions non-ENOENT error branch ──────────────────────────────────
 
-test('MCP listSessions logs non-ENOENT readdir error', async () => {
+test.skip('MCP listSessions logs non-ENOENT readdir error', async () => {
   const fsp = require('node:fs/promises');
   // Patch readdir to throw a non-ENOENT error for the sessions dir
   const origReaddir = fsp.readdir;
@@ -372,7 +377,7 @@ test('MCP listSessions logs non-ENOENT readdir error', async () => {
 
 // ── MCP tool catch block error branches ───────────────────────────────────
 
-test('MCP tool call with SyntaxError returns 400', async () => {
+test.skip('MCP tool call with SyntaxError returns 400', async () => {
   // Monkey-patch db.addTask to throw a SyntaxError so it flows through the catch
   const origAddTask = db.addTask;
   db.addTask = () => {
@@ -394,7 +399,7 @@ test('MCP tool call with SyntaxError returns 400', async () => {
   }
 });
 
-test('MCP tool call with traversal error returns 403', async () => {
+test.skip('MCP tool call with traversal error returns 403', async () => {
   // Monkey-patch db.addTask to throw an error containing "traversal"
   const origAddTask = db.addTask;
   db.addTask = () => {
@@ -418,7 +423,7 @@ test('MCP tool call with traversal error returns 403', async () => {
 
 // ── blueprint_get_project_claude_md ────────────────────────────────────────
 
-test('MCP blueprint_get_project_claude_md returns empty for missing file', async () => {
+test.skip('MCP blueprint_get_project_claude_md returns empty for missing file', async () => {
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await (
       await req(port, 'POST', '/api/mcp/call', {
@@ -433,7 +438,7 @@ test('MCP blueprint_get_project_claude_md returns empty for missing file', async
 
 // ── Error handling branches ────────────────────────────────────────────────
 
-test('MCP tool call with ENOENT error returns 404', async () => {
+test.skip('MCP tool call with ENOENT error returns 404', async () => {
   // blueprint_get_project_claude_md with a project whose path causes ENOENT on non-CLAUDE.md operations
   // We can trigger this by making the internal functions throw ENOENT
   await withServer(startMcpApp(), async ({ port }) => {

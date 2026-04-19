@@ -1,7 +1,7 @@
 FROM node:22-slim
 
 RUN apt-get update && apt-get install -y \
-    git curl ca-certificates python3 make g++ tmux ssh openssh-client gosu jq sudo \
+    git curl ca-certificates python3 make g++ tmux ssh openssh-client gosu jq sudo sqlite3 \
     libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
     libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 \
     libpango-1.0-0 libcairo2 libasound2 libxshmfence1 \
@@ -35,25 +35,26 @@ COPY . .
 
 # Create non-root user (Claude CLI refuses --dangerously-skip-permissions as root)
 RUN useradd -m -s /bin/bash blueprint && \
-    mkdir -p /home/blueprint/.claude /home/blueprint/.blueprint /home/blueprint/workspace && \
-    chown -R blueprint:blueprint /home/blueprint /app && \
+    mkdir -p /data/.claude /data/.blueprint /data/workspace && \
+    chown -R blueprint:blueprint /data /app && \
     echo 'blueprint ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/blueprint
 
 # Pre-create settings to skip bypass permissions prompt and onboarding
-RUN mkdir -p /home/blueprint/.claude && \
-    echo '{"skipDangerousModePermissionPrompt":true,"hasCompletedOnboarding":true,"theme":"dark","preferredTheme":"dark"}' > /home/blueprint/.claude/settings.json && \
-    echo '{"skipDangerousModePermissionPrompt":true,"hasCompletedOnboarding":true,"theme":"dark","hasPickedTheme":true,"preferredTheme":"dark"}' > /home/blueprint/.claude/settings.local.json && \
-    chown -R blueprint:blueprint /home/blueprint
+# These get created in /data at runtime by entrypoint if not already present
+RUN mkdir -p /data/.claude && \
+    echo '{"skipDangerousModePermissionPrompt":true,"hasCompletedOnboarding":true,"theme":"dark","preferredTheme":"dark"}' > /data/.claude/settings.json && \
+    echo '{"skipDangerousModePermissionPrompt":true,"hasCompletedOnboarding":true,"theme":"dark","hasPickedTheme":true,"preferredTheme":"dark"}' > /data/.claude/settings.local.json && \
+    chown -R blueprint:blueprint /data
 
 # Entrypoint ensures runtime directories exist after volume mounts
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-ENV HOME=/home/blueprint
-ENV BLUEPRINT_DATA=/home/blueprint/.blueprint
-ENV WORKSPACE=/home/blueprint/workspace
+ENV HOME=/data
+ENV BLUEPRINT_DATA=/data/.blueprint
+ENV WORKSPACE=/data/workspace
 
-WORKDIR /home/blueprint/workspace
+WORKDIR /data/workspace
 EXPOSE 3000
 
 # Entrypoint runs as root to handle docker socket permissions, then drops to blueprint via gosu

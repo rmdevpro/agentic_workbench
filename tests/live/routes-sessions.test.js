@@ -8,13 +8,14 @@ const { queryCount } = require('../helpers/db-query');
 
 test('SES-03: creates bash terminal with correct ID format and tmux session', async () => {
   await resetBaseline();
-  dockerExec('mkdir -p /workspace/sess_proj');
-  await post('/api/projects', { path: '/workspace/sess_proj', name: 'sess_proj' });
+  dockerExec('mkdir -p /home/blueprint/workspace/sess_proj');
+  await post('/api/projects', { path: '/home/blueprint/workspace/sess_proj', name: 'sess_proj' });
   const r = await post('/api/terminals', { project: 'sess_proj' });
   assert.equal(r.status, 200);
   assert.ok(r.data.id.startsWith('t_'), 'Terminal ID must start with t_');
   assert.ok(r.data.tmux, 'Response must include tmux session name');
   // Gray-box: verify the tmux session was actually spawned inside the container
+  await new Promise((resolve) => setTimeout(resolve, 1000));
   const tmuxList = dockerExec('tmux ls -F "#{session_name}" 2>/dev/null || echo ""');
   assert.ok(
     tmuxList.includes(r.data.tmux),
@@ -46,8 +47,8 @@ test('terminal creation requires project', async () => {
 
 test('SES-03a: session creation produces DB row and tmux session', async () => {
   await resetBaseline();
-  dockerExec('mkdir -p /workspace/ses_create_proj');
-  await post('/api/projects', { path: '/workspace/ses_create_proj', name: 'ses_create_proj' });
+  dockerExec('mkdir -p /home/blueprint/workspace/ses_create_proj');
+  await post('/api/projects', { path: '/home/blueprint/workspace/ses_create_proj', name: 'ses_create_proj' });
   // Count sessions before
   const countBefore = queryCount('sessions', "id LIKE 'new_%'");
   const r = await createSession('ses_create_proj', 'Test prompt');

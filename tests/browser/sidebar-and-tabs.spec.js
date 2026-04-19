@@ -66,23 +66,14 @@ describe('sidebar and tabs (browser)', () => {
     assert.equal(errors.length, 0, errors.join(', '));
   });
 
-  it('BRW-06: filter buttons switch active state and filter the session list', async () => {
-    await page.click('[data-filter="all"]');
-    assert.ok(
-      await page.locator('[data-filter="all"]').evaluate((el) => el.classList.contains('active')),
-    );
-    assert.ok(
-      !(await page
-        .locator('[data-filter="active"]')
-        .evaluate((el) => el.classList.contains('active'))),
-    );
+  it('BRW-06: filter dropdown switches value and filters the session list', async () => {
+    await page.selectOption('#session-filter', 'all');
+    const filterValueAll = await page.locator('#session-filter').inputValue();
+    assert.strictEqual(filterValueAll, 'all');
     const allCount = await page.locator('.session-item').count();
-    await page.click('[data-filter="active"]');
-    assert.ok(
-      await page
-        .locator('[data-filter="active"]')
-        .evaluate((el) => el.classList.contains('active')),
-    );
+    await page.selectOption('#session-filter', 'active');
+    const filterValueActive = await page.locator('#session-filter').inputValue();
+    assert.strictEqual(filterValueActive, 'active');
     const activeCount = await page.locator('.session-item').count();
     assert.ok(
       activeCount <= allCount,

@@ -20,16 +20,18 @@ fi
 
 # Everything below runs as blueprint user
 run_as_blueprint() {
-  CLAUDE="$HOME/.claude"
-  BP_DATA="${BLUEPRINT_DATA:-$HOME/.blueprint}"
-  WORK="${WORKSPACE:-$HOME/workspace}"
+  CLAUDE="/data/.claude"
+  BP_DATA="/data/.blueprint"
+  WORK="/data/workspace"
+
+  # Ensure /data structure exists (volume mount may be empty on first run)
+  mkdir -p "$BP_DATA" "$CLAUDE/projects" "$WORK"
 
   # Ensure .claude.json exists for workspace trust
-  test -f "$HOME/.claude.json" || echo '{}' > "$HOME/.claude.json"
+  test -f "/data/.claude.json" || echo '{}' > "/data/.claude.json"
   if [ ! -f "$CLAUDE/.claude.json" ]; then
     echo '{}' > "$CLAUDE/.claude.json"
   fi
-  mkdir -p "$BP_DATA" "$CLAUDE/projects" "$WORK"
 
   # Ensure docs library exists with standard structure
   mkdir -p "$WORK/docs/guides" "$WORK/docs/processes" "$WORK/docs/reference" "$WORK/docs/system-prompts"
@@ -76,7 +78,7 @@ run_as_blueprint() {
   CLI_VERSION="${CLI_VERSION:-99.99.99}"
   node -e "
     const fs = require('fs');
-    const f = (process.env.HOME + '/.claude') + '/.claude.json';
+    const f = '/data/.claude/.claude.json';
     let d = {};
     try { d = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
     const ver = process.argv[1] || '99.99.99';
@@ -94,10 +96,10 @@ run_as_blueprint() {
 }
 
 # Fix ownership for blueprint user
-chown -R blueprint:blueprint /home/blueprint/workspace 2>/dev/null || true
+chown -R blueprint:blueprint /data 2>/dev/null || true
 
 # Start Qdrant vector database in background
-QDRANT_STORAGE="${BLUEPRINT_DATA:-/home/blueprint/.blueprint}/qdrant"
+QDRANT_STORAGE="/data/.blueprint/qdrant"
 mkdir -p "$QDRANT_STORAGE" 2>/dev/null || true
 chown -R blueprint:blueprint "$QDRANT_STORAGE" 2>/dev/null || true
 if command -v qdrant &>/dev/null; then
