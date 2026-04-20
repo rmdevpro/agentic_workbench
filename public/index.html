@@ -1628,6 +1628,10 @@ build/**</textarea>
             <input id="proj-cfg-name" type="text" value="${escHtml(config.name || '')}" style="width:100%;padding:6px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box">
           </div>
           <div style="margin-bottom:12px">
+            <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Directory</label>
+            <input type="text" value="${escHtml(config.path || '')}" readonly style="width:100%;padding:6px 8px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:4px;color:var(--text-muted);font-size:12px;font-family:monospace;outline:none;box-sizing:border-box;cursor:default">
+          </div>
+          <div style="margin-bottom:12px">
             <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">State</label>
             <select id="proj-cfg-state" style="width:100%;padding:6px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:13px">
               <option value="active" ${config.state === 'active' ? 'selected' : ''}>Active</option>
