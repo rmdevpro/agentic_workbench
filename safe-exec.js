@@ -105,20 +105,14 @@ function tmuxCreateCLI(sessionName, cwd, cliType, args = []) {
       envParts.push(`export CLAUDE_HOME=${shellEscape(CLAUDE_HOME)}`);
       envParts.push(`export CLAUDE_CONFIG_DIR=${shellEscape(CLAUDE_HOME)}`);
       break;
-    case 'gemini': {
+    case 'gemini':
       binary = 'gemini';
-      const db = require('./db');
-      const gKey = JSON.parse(db.getSetting('gemini_api_key', '""') || '""') || process.env.GOOGLE_API_KEY || '';
-      if (gKey) envParts.push(`export GOOGLE_API_KEY=${shellEscape(gKey)}`);
+      // Gemini CLI manages its own credentials in ~/.gemini/gemini-credentials.json
       break;
-    }
-    case 'codex': {
+    case 'codex':
       binary = 'codex';
-      const db = require('./db');
-      const oKey = JSON.parse(db.getSetting('codex_api_key', '""') || '""') || process.env.OPENAI_API_KEY || '';
-      if (oKey) envParts.push(`export OPENAI_API_KEY=${shellEscape(oKey)}`);
+      // Codex CLI manages its own credentials in ~/.codex/auth.json
       break;
-    }
     case 'bash':
       binary = 'bash';
       envParts.push(`export CLAUDE_HOME=${shellEscape(CLAUDE_HOME)}`);
