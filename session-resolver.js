@@ -1,7 +1,8 @@
 'use strict';
 
 const fsp = require('fs/promises');
-const { basename } = require('path');
+const fs = require('fs');
+const { basename, join } = require('path');
 
 module.exports = function createSessionResolver({
   db,
@@ -19,8 +20,15 @@ module.exports = function createSessionResolver({
   async function resolveSessionId(tmpId, { tmux, sessionsDir, existingFiles, projectId, cliType }) {
     if (pendingResolutions.has(tmpId)) return;
 
-    // Non-Claude CLIs don't create JSONL files — nothing to resolve
-    if (cliType && cliType !== 'claude') return;
+    // Non-Claude CLIs don't create JSONL files — but we discover their CLI session IDs
+    if (cliType && cliType !== 'claude') {
+      discoverCliSessionId(tmpId, cliType).catch(err => {
+        logger.error('CLI session ID discovery failed', {
+          module: 'session-resolver', blueprintId: tmpId.substring(0, 12), err: err.message,
+        });
+      });
+      return;
+    }
 
     pendingResolutions.set(tmpId, true);
 
@@ -187,9 +195,133 @@ module.exports = function createSessionResolver({
     }
   }
 
+  /**
+   * Discover the CLI's internal session ID for a Gemini or Codex session.
+   * Polls for up to 60s looking for a new session file to appear after creation.
+   */
+  async function discoverCliSessionId(blueprintSessionId, cliType) {
+    if (pendingResolutions.has(blueprintSessionId)) return;
+    pendingResolutions.set(blueprintSessionId, true);
+
+    const home = safe.HOME;
+    const maxWait = 30; // 30 attempts × 2s = 60s
+
+    try {
+      // Snapshot existing session files before the CLI creates a new one
+      let existingFiles = new Set();
+
+      if (cliType === 'gemini') {
+        const geminiBase = join(home, '.gemini', 'tmp');
+        try {
+          const dirs = fs.readdirSync(geminiBase, { withFileTypes: true });
+          for (const d of dirs) {
+            if (!d.isDirectory()) continue;
+            const chatsDir = join(geminiBase, d.name, 'chats');
+            try {
+              const files = fs.readdirSync(chatsDir);
+              files.forEach(f => existingFiles.add(join(chatsDir, f)));
+            } catch { /* no chats dir */ }
+          }
+        } catch { /* no gemini dir */ }
+      }
+
+      if (cliType === 'codex') {
+        const sessBase = join(home, '.codex', 'sessions');
+        try {
+          const walk = (dir) => {
+            const entries = fs.readdirSync(dir, { withFileTypes: true });
+            for (const e of entries) {
+              const full = join(dir, e.name);
+              if (e.isDirectory()) walk(full);
+              else existingFiles.add(full);
+            }
+          };
+          if (fs.existsSync(sessBase)) walk(sessBase);
+        } catch { /* no codex sessions */ }
+      }
+
+      for (let i = 0; i < maxWait; i++) {
+        await sleep(sleepMs);
+
+        if (cliType === 'gemini') {
+          const geminiBase = join(home, '.gemini', 'tmp');
+          try {
+            const dirs = fs.readdirSync(geminiBase, { withFileTypes: true });
+            for (const d of dirs) {
+              if (!d.isDirectory()) continue;
+              const chatsDir = join(geminiBase, d.name, 'chats');
+              try {
+                const files = fs.readdirSync(chatsDir).filter(f => f.endsWith('.json'));
+                for (const f of files) {
+                  const fullPath = join(chatsDir, f);
+                  if (existingFiles.has(fullPath)) continue;
+                  // New file found — read its sessionId
+                  try {
+                    const data = JSON.parse(fs.readFileSync(fullPath, 'utf-8'));
+                    if (data.sessionId) {
+                      logger.info('Gemini CLI session ID discovered', {
+                        module: 'session-resolver',
+                        blueprintId: blueprintSessionId.substring(0, 12),
+                        cliSessionId: data.sessionId.substring(0, 12),
+                      });
+                      db.setCliSessionId(blueprintSessionId, data.sessionId);
+                      return;
+                    }
+                  } catch { /* parse error */ }
+                }
+              } catch { /* no chats dir */ }
+            }
+          } catch { /* no gemini dir */ }
+        }
+
+        if (cliType === 'codex') {
+          const sessBase = join(home, '.codex', 'sessions');
+          try {
+            if (fs.existsSync(sessBase)) {
+              const walk = (dir) => {
+                const entries = fs.readdirSync(dir, { withFileTypes: true });
+                for (const e of entries) {
+                  const full = join(dir, e.name);
+                  if (e.isDirectory()) {
+                    const found = walk(full);
+                    if (found) return found;
+                  } else if (e.name.endsWith('.jsonl') && !existingFiles.has(full)) {
+                    // New rollout file — use directory name as session ID
+                    const rolloutDir = basename(dir);
+                    return rolloutDir;
+                  }
+                }
+                return null;
+              };
+              const codexId = walk(sessBase);
+              if (codexId) {
+                logger.info('Codex CLI session ID discovered', {
+                  module: 'session-resolver',
+                  blueprintId: blueprintSessionId.substring(0, 12),
+                  cliSessionId: codexId.substring(0, 12),
+                });
+                db.setCliSessionId(blueprintSessionId, codexId);
+                return;
+              }
+            }
+          } catch { /* scan error */ }
+        }
+      }
+
+      logger.warn('CLI session ID discovery timed out', {
+        module: 'session-resolver',
+        blueprintId: blueprintSessionId.substring(0, 12),
+        cliType,
+      });
+    } finally {
+      pendingResolutions.delete(blueprintSessionId);
+    }
+  }
+
   return {
     resolveSessionId,
     resolveStaleNewSessions,
+    discoverCliSessionId,
     __getPendingResolutions: () => pendingResolutions,
   };
 };

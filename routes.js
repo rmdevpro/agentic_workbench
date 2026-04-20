@@ -213,85 +213,115 @@ function registerCoreRoutes(
     }
   }
 
-  // Cache to avoid re-reading session files on every /api/state call
-  const _modelCache = new Map();
+  // Caches to avoid re-reading session files on every /api/state call
+  let _geminiSessionsCache = null;
+  let _geminiCacheTime = 0;
+  let _codexSessionsCache = null;
+  let _codexCacheTime = 0;
+  const NONCLAUD_CACHE_TTL = 10000; // 10s
 
-  function _getNonClaudeModel(session) {
+  function _getGeminiSessions() {
+    const now = Date.now();
+    if (_geminiSessionsCache && (now - _geminiCacheTime) < NONCLAUD_CACHE_TTL) return _geminiSessionsCache;
+    _geminiSessionsCache = sessionUtils.discoverGeminiSessions();
+    _geminiCacheTime = now;
+    return _geminiSessionsCache;
+  }
+
+  function _getCodexSessions() {
+    const now = Date.now();
+    if (_codexSessionsCache && (now - _codexCacheTime) < NONCLAUD_CACHE_TTL) return _codexSessionsCache;
+    _codexSessionsCache = sessionUtils.discoverCodexSessions();
+    _codexCacheTime = now;
+    return _codexSessionsCache;
+  }
+
+  function _getNonClaudeMetadata(session) {
     const cliType = session.cli_type || 'claude';
-    if (cliType === 'claude') return '';
-    if (_modelCache.has(session.id)) return _modelCache.get(session.id);
-
-    const fs = require('fs');
-    const home = safe.HOME;
-    let model = '';
+    if (cliType === 'claude') return null;
 
     if (cliType === 'gemini') {
-      // Gemini stores model in response messages: .messages[].model
-      try {
-        const geminiBase = join(home, '.gemini', 'tmp');
-        const projectDirs = fs.readdirSync(geminiBase, { withFileTypes: true });
-        for (const pDir of projectDirs) {
-          if (!pDir.isDirectory()) continue;
-          const chatsDir = join(geminiBase, pDir.name, 'chats');
-          if (!fs.existsSync(chatsDir)) continue;
-          const files = fs.readdirSync(chatsDir).filter(f => f.endsWith('.json'));
-          for (const file of files) {
-            try {
-              const data = JSON.parse(fs.readFileSync(join(chatsDir, file), 'utf-8'));
-              const resp = (data.messages || []).find(m => m.type === 'gemini' && m.model);
-              if (resp?.model) { model = resp.model; break; }
-            } catch { /* skip */ }
+      const geminiSessions = _getGeminiSessions();
+      // If we have a cli_session_id, match by it
+      if (session.cli_session_id) {
+        const match = geminiSessions.find(g => g.sessionId === session.cli_session_id);
+        if (match) return match;
+      }
+      // Fallback: match by creation time proximity (within 30s)
+      if (session.created_at) {
+        const created = new Date(session.created_at).getTime();
+        const match = geminiSessions.find(g => {
+          if (!g.timestamp) return false;
+          const diff = Math.abs(new Date(g.timestamp).getTime() - created);
+          return diff < 30000;
+        });
+        if (match) {
+          // Store the discovered sessionId for future lookups
+          if (match.sessionId && !session.cli_session_id) {
+            try { db.setCliSessionId(session.id, match.sessionId); } catch { /* race ok */ }
           }
-          if (model) break;
+          return match;
         }
-      } catch { /* no gemini sessions */ }
+      }
+      return null; // No confident match — show 0 rather than wrong data
     }
 
     if (cliType === 'codex') {
-      // Codex stores model in turn_context entries in rollout JSONL
-      try {
-        const sessBase = join(home, '.codex', 'sessions');
-        const walkForModel = (dir) => {
-          const entries = fs.readdirSync(dir, { withFileTypes: true });
-          for (const e of entries) {
-            const full = join(dir, e.name);
-            if (e.isDirectory()) { const m = walkForModel(full); if (m) return m; }
-            else if (e.name.endsWith('.jsonl')) {
-              const content = fs.readFileSync(full, 'utf-8');
-              for (const line of content.split('\n')) {
-                if (!line.includes('turn_context')) continue;
-                try {
-                  const entry = JSON.parse(line);
-                  if (entry.type === 'turn_context' && entry.payload?.model) return entry.payload.model;
-                } catch { /* skip */ }
-              }
+      const codexSessions = _getCodexSessions();
+      // Match by cli_session_id if available
+      if (session.cli_session_id) {
+        const match = codexSessions.find(c => c.filePath.includes(session.cli_session_id));
+        if (match) return match;
+      }
+      // Fallback: match by creation time proximity
+      if (session.created_at) {
+        const created = new Date(session.created_at).getTime();
+        const match = codexSessions.find(c => {
+          if (!c.timestamp) return false;
+          const diff = Math.abs(new Date(c.timestamp).getTime() - created);
+          return diff < 30000;
+        });
+        if (match) {
+          // Store the rollout directory name as cli_session_id for future resume
+          if (!session.cli_session_id) {
+            const { basename, dirname } = require('path');
+            const rolloutId = basename(dirname(match.filePath));
+            if (rolloutId && rolloutId !== 'sessions') {
+              try { db.setCliSessionId(session.id, rolloutId); } catch { /* race ok */ }
             }
           }
-          return '';
-        };
-        if (fs.existsSync(sessBase)) model = walkForModel(sessBase);
-      } catch { /* no codex sessions */ }
+          return match;
+        }
+      }
+      return null; // No confident match — show 0 rather than wrong data
     }
 
-    if (model) _modelCache.set(session.id, model);
-    return model;
+    return null;
   }
 
   async function buildSessionList(dbSessions, sessDir) {
     const sessions = [];
     for (const s of dbSessions) {
-      const jsonlPath = join(sessDir, `${s.id}.jsonl`);
-      const fileMeta = await sessionUtils.parseSessionFile(jsonlPath);
+      const cliType = s.cli_type || 'claude';
+      let fileMeta = null;
+
+      if (cliType === 'claude') {
+        const jsonlPath = join(sessDir, `${s.id}.jsonl`);
+        fileMeta = await sessionUtils.parseSessionFile(jsonlPath);
+      } else {
+        fileMeta = _getNonClaudeMetadata(s);
+      }
+
       sessions.push({
         id: s.id,
         name: s.name || fileMeta?.name || 'Untitled Session',
         timestamp: fileMeta?.timestamp || s.updated_at,
         messageCount: fileMeta?.messageCount || 0,
-        model: s.model_override || fileMeta?.model || _getNonClaudeModel(s) || '',
+        model: s.model_override || fileMeta?.model || '',
         tmux: tmuxName(s.id),
         active: await safe.tmuxExists(tmuxName(s.id)),
         state: s.state || (s.archived ? 'archived' : 'active'),
-        cli_type: s.cli_type || 'claude',
+        cli_type: cliType,
         archived: !!s.archived,
       });
     }
@@ -791,13 +821,13 @@ function registerCoreRoutes(
         if (cliType === 'claude' && !sessionId.startsWith('new_')) {
           resumeArgs = ['--resume', sessionId];
         }
-        // TODO #124: Gemini/Codex need session ID mapping to resume by exact ID
-        // For now, resume most recent — needs proper fix with CLI session ID discovery
         if (cliType === 'gemini') {
-          resumeArgs = ['--resume'];
+          const cliSessId = session?.cli_session_id;
+          resumeArgs = cliSessId ? ['--resume', cliSessId] : ['--resume'];
         }
         if (cliType === 'codex') {
-          resumeArgs = ['resume', '--last'];
+          const cliSessId = session?.cli_session_id;
+          resumeArgs = cliSessId ? ['resume', cliSessId] : ['resume', '--last'];
         }
         safe.tmuxCreateCLI(tmux, projectPath, cliType, resumeArgs);
         // Wait for CLI to start — resume with JSONL loading takes longer than fresh start
@@ -1355,15 +1385,20 @@ function registerCoreRoutes(
       if (await tmuxExists(tmux)) {
         await safe.tmuxKill(tmux);
       }
-      const session = db.getSession(sessionId);
+      const session = db.getSessionFull(sessionId) || db.getSession(sessionId);
       if (!session) return res.status(404).json({ error: 'session not found' });
-      const dbProj = db.getProject(session.project_name);
-      const cwd = dbProj ? dbProj.path : WORKSPACE;
+      const cwd = session.project_path || WORKSPACE;
       const cliType = session.cli_type || 'claude';
       let restartArgs = [];
       if (cliType === 'claude' && !sessionId.startsWith('new_')) restartArgs = ['--resume', sessionId];
-      if (cliType === 'gemini') restartArgs = ['--resume'];
-      if (cliType === 'codex') restartArgs = ['resume', '--last'];
+      if (cliType === 'gemini') {
+        const cliSessId = session.cli_session_id;
+        restartArgs = cliSessId ? ['--resume', cliSessId] : ['--resume'];
+      }
+      if (cliType === 'codex') {
+        const cliSessId = session.cli_session_id;
+        restartArgs = cliSessId ? ['resume', cliSessId] : ['resume', '--last'];
+      }
       safe.tmuxCreateCLI(tmux, cwd, cliType, restartArgs);
       res.json({ ok: true, sessionId, tmux });
     } catch (err) {

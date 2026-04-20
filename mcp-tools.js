@@ -136,8 +136,14 @@ async function ensureSessionTmux(session, projectPath) {
     const cliType = session.cli_type || 'claude';
     let cliArgs = [];
     if (cliType === 'claude' && !session.id.startsWith('new_')) cliArgs = ['--resume', session.id];
-    if (cliType === 'gemini') cliArgs = ['--resume'];
-    if (cliType === 'codex') cliArgs = ['resume', '--last'];
+    if (cliType === 'gemini') {
+      const cliSessId = session.cli_session_id;
+      cliArgs = cliSessId ? ['--resume', cliSessId] : ['--resume'];
+    }
+    if (cliType === 'codex') {
+      const cliSessId = session.cli_session_id;
+      cliArgs = cliSessId ? ['resume', cliSessId] : ['resume', '--last'];
+    }
     safe.tmuxCreateCLI(tmux, projectPath, cliType, cliArgs);
     await new Promise(r => setTimeout(r, 1000));
   }

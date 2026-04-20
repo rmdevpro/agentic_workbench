@@ -61,6 +61,11 @@ try {
   /* column exists */
 }
 try {
+  db.exec("ALTER TABLE sessions ADD COLUMN cli_session_id TEXT DEFAULT NULL");
+} catch (_e) {
+  /* column exists */
+}
+try {
   db.exec("ALTER TABLE tasks ADD COLUMN folder_path TEXT NOT NULL DEFAULT '/'");
 } catch (_e) {
   /* column exists or table doesn't exist yet */
@@ -94,6 +99,7 @@ db.exec(`
     state TEXT DEFAULT 'active',
     model_override TEXT,
     cli_type TEXT DEFAULT 'claude',
+    cli_session_id TEXT DEFAULT NULL,
     user_renamed INTEGER DEFAULT 0,
     notes TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now')),
@@ -192,6 +198,7 @@ const stmts = {
   searchSessionsByName: db.prepare(
     'SELECT s.*, p.name as project_name, p.path as project_path FROM sessions s JOIN projects p ON s.project_id = p.id WHERE s.name LIKE ? ORDER BY s.updated_at DESC LIMIT 20',
   ),
+  setCliSessionId: db.prepare("UPDATE sessions SET cli_session_id = ?, updated_at = datetime('now') WHERE id = ?"),
   deleteSession: db.prepare('DELETE FROM sessions WHERE id = ?'),
   getSessionNotes: db.prepare('SELECT notes FROM sessions WHERE id = ?'),
   setSessionNotes: db.prepare('UPDATE sessions SET notes = ? WHERE id = ?'),
@@ -285,6 +292,9 @@ module.exports = {
   archiveSession(id, archived) {
     const arch = archived ? 1 : 0;
     stmts.archiveSession.run(arch, arch, id);
+  },
+  setCliSessionId(id, cliSessionId) {
+    stmts.setCliSessionId.run(cliSessionId, id);
   },
   deleteSession(id) {
     stmts.deleteSession.run(id);

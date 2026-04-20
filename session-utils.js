@@ -340,9 +340,164 @@ async function getSessionSlug(sessionId, projectPath) {
   return null;
 }
 
+/**
+ * Parse a Gemini chat JSON file for session metadata.
+ * Returns { name, timestamp, messageCount, model, sessionId } or null.
+ */
+function parseGeminiChatFile(filePath) {
+  const fs = require('fs');
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const data = JSON.parse(content);
+    const messages = data.messages || [];
+    let name = null;
+    let timestamp = null;
+    let messageCount = 0;
+    let model = null;
+    const sessionId = data.sessionId || null;
+
+    for (const msg of messages) {
+      if (!name && msg.type === 'user') {
+        const text = typeof msg.content === 'string'
+          ? msg.content
+          : Array.isArray(msg.content)
+            ? msg.content.map(p => typeof p === 'string' ? p : p.text || '').join(' ')
+            : '';
+        if (text) {
+          name = text.substring(0, 80);
+          if (text.length > 80) name += '...';
+        }
+      }
+      if (msg.type === 'user' || msg.type === 'gemini') messageCount++;
+      if (msg.type === 'gemini' && msg.model) model = msg.model;
+      if (msg.timestamp) timestamp = msg.timestamp;
+    }
+
+    return {
+      name: name || 'Untitled Session',
+      timestamp: timestamp || null,
+      messageCount,
+      model: model || null,
+      sessionId,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parse a Codex rollout JSONL file for session metadata.
+ * Returns { name, timestamp, messageCount, model } or null.
+ */
+function parseCodexRolloutFile(filePath) {
+  const fs = require('fs');
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const lines = content.trim().split('\n');
+    let name = null;
+    let timestamp = null;
+    let messageCount = 0;
+    let model = null;
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const entry = JSON.parse(line);
+        if (entry.type === 'response_item' && entry.payload) {
+          const role = entry.payload.role || 'unknown';
+          if (role === 'user' || role === 'assistant') messageCount++;
+          if (!name && role === 'user') {
+            let text = '';
+            if (typeof entry.payload.content === 'string') {
+              text = entry.payload.content;
+            } else if (Array.isArray(entry.payload.content)) {
+              text = entry.payload.content
+                .filter(b => b.type === 'input_text' || b.type === 'text')
+                .map(b => b.text || '')
+                .join(' ');
+            }
+            if (text) {
+              name = text.substring(0, 80);
+              if (text.length > 80) name += '...';
+            }
+          }
+        }
+        if (entry.type === 'turn_context' && entry.payload?.model) {
+          model = entry.payload.model;
+        }
+        if (entry.timestamp) timestamp = entry.timestamp;
+      } catch { /* skip malformed lines */ }
+    }
+
+    return {
+      name: name || 'Untitled Session',
+      timestamp: timestamp || null,
+      messageCount,
+      model: model || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Find all Gemini chat files and return a map of sessionId → { filePath, meta }.
+ */
+function discoverGeminiSessions() {
+  const fs = require('fs');
+  const home = safe.HOME;
+  const results = [];
+  try {
+    const geminiBase = join(home, '.gemini', 'tmp');
+    const projectDirs = fs.readdirSync(geminiBase, { withFileTypes: true });
+    for (const pDir of projectDirs) {
+      if (!pDir.isDirectory()) continue;
+      const chatsDir = join(geminiBase, pDir.name, 'chats');
+      if (!fs.existsSync(chatsDir)) continue;
+      const files = fs.readdirSync(chatsDir).filter(f => f.endsWith('.json'));
+      for (const file of files) {
+        const filePath = join(chatsDir, file);
+        const meta = parseGeminiChatFile(filePath);
+        if (meta) results.push({ filePath, ...meta });
+      }
+    }
+  } catch { /* no gemini sessions */ }
+  return results;
+}
+
+/**
+ * Find all Codex rollout files and return a list of { filePath, meta }.
+ */
+function discoverCodexSessions() {
+  const fs = require('fs');
+  const home = safe.HOME;
+  const results = [];
+  try {
+    const sessBase = join(home, '.codex', 'sessions');
+    if (!fs.existsSync(sessBase)) return results;
+    const walk = (dir) => {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const e of entries) {
+        const full = join(dir, e.name);
+        if (e.isDirectory()) walk(full);
+        else if (e.name.endsWith('.jsonl')) {
+          const meta = parseCodexRolloutFile(full);
+          if (meta) results.push({ filePath: full, ...meta });
+        }
+      }
+    };
+    walk(sessBase);
+  } catch { /* no codex sessions */ }
+  return results;
+}
+
 module.exports = {
   sessionsDir,
   parseSessionFile,
+  parseGeminiChatFile,
+  parseCodexRolloutFile,
+  discoverGeminiSessions,
+  discoverCodexSessions,
   extractMessageText,
   searchSessions,
   summarizeSession,
