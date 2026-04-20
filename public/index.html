@@ -526,14 +526,14 @@
           <button class="filter-btn task-filter" data-task-filter="all" onclick="setTaskFilter('all')">All</button>
           <button class="filter-btn task-filter" data-task-filter="done" onclick="setTaskFilter('done')">Done</button>
           <button class="filter-btn task-filter" data-task-filter="archived" onclick="setTaskFilter('archived')">Archive</button>
-          <label id="task-auto-label"><input type="checkbox" id="task-auto-nav" onchange="taskAutoNav=this.checked;if(taskAutoNav)autoNavigateTaskTree()"> Auto</label>
+          <label id="task-auto-label"><input type="checkbox" id="task-auto-nav" onchange="taskAutoNav=this.checked;if(taskAutoNav)autoNavigateTaskTree()"> Auto Nav</label>
         </div>
         <div id="task-tree"></div>
       </div>
       <div id="panel-files" class="panel-section">
         <div style="display:flex;align-items:center;margin-bottom:4px">
           <input id="file-upload-input" type="file" multiple style="display:none" onchange="fileBrowserUpload(this.files)">
-          <label style="margin-left:auto;font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="file-auto-nav" onchange="fileAutoNav=this.checked;if(fileAutoNav)autoNavigateFileTree()"> Auto</label>
+          <label style="margin-left:auto;font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="file-auto-nav" onchange="fileAutoNav=this.checked;if(fileAutoNav)autoNavigateFileTree()"> Auto Nav</label>
         </div>
         <div id="file-browser-tree" style="overflow-y:auto;background:var(--bg-primary);border:1px solid var(--border);border-radius:6px;padding:4px;flex:1;min-height:0"></div>
       </div>
@@ -882,6 +882,7 @@ build/**</textarea>
     let sessionFilter = 'active';
     let sessionSortBy = 'date';
     const expandedProjects = new Set(JSON.parse(localStorage.getItem('expandedProjects') || '[]'));
+    let _lastClickedProjectPath = null;
     const HEARTBEAT_MS = 30000;
     const REFRESH_MS = 30000;
     const MAX_RECONNECT_DELAY = 30000;
@@ -1051,6 +1052,9 @@ build/**</textarea>
           localStorage.setItem('expandedProjects', JSON.stringify([...expandedProjects]));
           header.classList.toggle('collapsed');
           sessionList.classList.toggle('collapsed');
+          _lastClickedProjectPath = project.path;
+          if (taskAutoNav && activePanel === 'tasks') autoNavigateTaskTree();
+          if (fileAutoNav && activePanel === 'files') autoNavigateFileTree();
         });
         group.appendChild(header);
 
@@ -1114,6 +1118,7 @@ build/**</textarea>
               alert('Project directory not found — it may have been moved or deleted.');
               return;
             }
+            _lastClickedProjectPath = project.path;
             openSession(session, project.name);
           });
           item.querySelector('.rename').addEventListener('click', (e) => {
@@ -2165,15 +2170,25 @@ build/**</textarea>
       if (e.target.id === 'task-detail-modal') closeTaskDetail();
     });
 
+    function _getActiveProjectPath() {
+      // Try active tab first
+      if (activeTabId && tabs.has(activeTabId)) {
+        const project = tabs.get(activeTabId).project;
+        if (project) {
+          const projData = projectState.find(p => p.name === project);
+          if (projData?.path) return projData.path;
+        }
+      }
+      // Fall back to last clicked project
+      return _lastClickedProjectPath || null;
+    }
+
     function autoNavigateTaskTree() {
-      if (!taskAutoNav || !activeTabId || !tabs.has(activeTabId)) return;
-      const project = tabs.get(activeTabId).project;
-      if (!project) return;
-      const projData = projectState.find(p => p.name === project);
-      if (!projData) return;
-      const projPath = projData.path || '';
+      if (!taskAutoNav) return;
+      const projPath = _getActiveProjectPath();
       if (!projPath) return;
-      // Add all path segments to expandedTaskFolders so they auto-expand on reload
+      // Collapse everything, then expand only the path to this project
+      expandedTaskFolders.clear();
       const parts = projPath.split('/').filter(Boolean);
       let current = '';
       for (const part of parts) {
@@ -2400,40 +2415,56 @@ build/**</textarea>
     let fileAutoNav = false;
 
     function autoNavigateFileTree() {
-      if (!fileAutoNav || !activeTabId || !tabs.has(activeTabId)) return;
-      const project = tabs.get(activeTabId).project;
-      if (!project) return;
-      const projData = projectState.find(p => p.name === project);
-      if (!projData || !projData.path) return;
-      // jQueryFileTree uses <a rel="path"> — find and click each path segment
+      if (!fileAutoNav) return;
+      const projPath = _getActiveProjectPath();
+      if (!projPath) return;
       const treeEl = document.getElementById('file-browser-tree');
-      const target = projData.path.replace(/\/?$/, '/');
-      // Expand mount first
+      const target = projPath.replace(/\/?$/, '/');
+
+      // Collapse all currently expanded directories
+      $(treeEl).find('li.expanded > a').each(function() { $(this).click(); });
+
+      // Expand mount that contains the target
       const mountHeaders = treeEl.querySelectorAll('[style*="cursor:pointer"]');
       for (const h of mountHeaders) {
-        if (target.startsWith(h.textContent.replace(/[▶▼]/g, '').trim())) {
-          const arrow = h.querySelector('.mount-arrow');
+        const mountPath = h.textContent.replace(/[▶▼]/g, '').trim();
+        if (!target.startsWith(mountPath)) {
+          // Collapse this mount if expanded
           const container = h.nextElementSibling;
-          if (container && container.style.display === 'none') h.click();
-          // Wait for jQueryFileTree to load, then expand path
-          setTimeout(() => {
-            const links = treeEl.querySelectorAll('a[rel]');
-            for (const a of links) {
-              if (target.startsWith(a.getAttribute('rel'))) {
-                const li = a.closest('li');
-                if (li && li.classList.contains('directory') && !li.classList.contains('expanded')) {
-                  $(a).click();
-                }
+          if (container && container.style.display !== 'none') h.click();
+          continue;
+        }
+        // Expand this mount
+        const container = h.nextElementSibling;
+        if (container && container.style.display === 'none') h.click();
+
+        // Sequentially expand path segments with delays for jQueryFileTree loading
+        const expandNext = () => {
+          const links = treeEl.querySelectorAll('a[rel]');
+          let expanded = false;
+          for (const a of links) {
+            const rel = a.getAttribute('rel');
+            if (target.startsWith(rel)) {
+              const li = a.closest('li');
+              if (li && li.classList.contains('directory') && !li.classList.contains('expanded')) {
+                $(a).click();
+                expanded = true;
+                setTimeout(expandNext, 300);
+                return;
               }
             }
-            // Scroll to target
-            setTimeout(() => {
-              const targetLink = Array.from(treeEl.querySelectorAll('a[rel]')).find(a => a.getAttribute('rel') === target);
-              if (targetLink) targetLink.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            }, 500);
-          }, 300);
-          break;
-        }
+          }
+          // Done expanding — scroll to target
+          const targetLink = Array.from(treeEl.querySelectorAll('a[rel]')).find(a => a.getAttribute('rel') === target);
+          if (targetLink) {
+            // Select it
+            $(treeEl).find('li.selected').removeClass('selected');
+            $(targetLink).closest('li').addClass('selected');
+            targetLink.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        };
+        setTimeout(expandNext, 300);
+        break;
       }
     }
 
