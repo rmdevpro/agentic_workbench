@@ -213,6 +213,29 @@ function registerCoreRoutes(
     }
   }
 
+  function _getNonClaudeModel(session) {
+    const cliType = session.cli_type || 'claude';
+    if (cliType === 'claude') return '';
+    const fs = require('fs');
+    const home = safe.HOME;
+    if (cliType === 'gemini') {
+      try {
+        const settings = JSON.parse(fs.readFileSync(join(home, '.gemini', 'settings.json'), 'utf-8'));
+        return settings.model?.name || process.env.GEMINI_MODEL || '';
+      } catch { return process.env.GEMINI_MODEL || ''; }
+    }
+    if (cliType === 'codex') {
+      try {
+        const Database = require('better-sqlite3');
+        const stateDb = new Database(join(home, '.codex', 'state_5.sqlite'), { readonly: true });
+        const row = stateDb.prepare('SELECT model FROM threads WHERE id = ?').get(session.id);
+        stateDb.close();
+        return row?.model || '';
+      } catch { return ''; }
+    }
+    return '';
+  }
+
   async function buildSessionList(dbSessions, sessDir) {
     const sessions = [];
     for (const s of dbSessions) {
@@ -223,7 +246,7 @@ function registerCoreRoutes(
         name: s.name || fileMeta?.name || 'Untitled Session',
         timestamp: fileMeta?.timestamp || s.updated_at,
         messageCount: fileMeta?.messageCount || 0,
-        model: s.model_override || fileMeta?.model || '',
+        model: s.model_override || fileMeta?.model || _getNonClaudeModel(s) || '',
         tmux: tmuxName(s.id),
         active: await safe.tmuxExists(tmuxName(s.id)),
         state: s.state || (s.archived ? 'archived' : 'active'),
