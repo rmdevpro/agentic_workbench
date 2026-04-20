@@ -1161,7 +1161,7 @@ build/**</textarea>
       .then(r => r.json())
       .then(data => {
         if (data.error) { alert('Error: ' + data.error); return; }
-        createTab(tabId, data.tmux, session.name, projectName);
+        createTab(tabId, data.tmux, session.name, projectName, session.cli_type);
       })
       .catch(err => console.error('Failed to open session:', err));
     }
@@ -1216,7 +1216,7 @@ build/**</textarea>
           if (data.error) { alert('Error: ' + data.error); btn.textContent = 'Start Session'; btn.disabled = false; return; }
 
           overlay.remove();
-          createTab(data.id, data.tmux, data.name, projectName);
+          createTab(data.id, data.tmux, data.name, projectName, cliType);
 
           // Refresh sidebar immediately, then poll for session ID resolution
           await loadState();
@@ -1246,13 +1246,13 @@ build/**</textarea>
         });
         const data = await res.json();
         if (data.error) { alert('Error: ' + data.error); return; }
-        createTab(data.id, data.tmux, data.name, projectName);
+        createTab(data.id, data.tmux, data.name, projectName, 'bash');
       } catch (err) {
         console.error('Failed to create terminal:', err);
       }
     }
 
-    function createTab(tabId, tmuxSession, name, project) {
+    function createTab(tabId, tmuxSession, name, project, cliType) {
       // Remove empty state
       const emptyState = document.getElementById('empty-state');
       if (emptyState) emptyState.remove();
@@ -1289,7 +1289,7 @@ build/**</textarea>
       term.open(paneEl);
 
       const tab = {
-        id: tabId, tmux: tmuxSession, name, project,
+        id: tabId, tmux: tmuxSession, name, project, cli_type: cliType || 'claude',
         term, fitAddon, ws: null, status: 'disconnected',
         paneEl, reconnectTimer: null, reconnectDelay: 1000, heartbeat: null,
         dataDisposable: null, resizeDisposable: null,
@@ -1380,9 +1380,16 @@ build/**</textarea>
         const el = document.createElement('div');
         el.className = 'tab' + (id === activeTabId ? ' active' : '') + (tab.dirty ? ' tab-dirty' : '');
         el.dataset.tabId = id;
-        const icon = tab.type === 'file'
-          ? '<span class="file-tab-icon">&#128196;</span>'
-          : `<span class="tab-status ${tab.status}"></span>`;
+        const icon = (() => {
+          if (tab.type === 'file') return '<span class="file-tab-icon">&#128196;</span>';
+          // CLI session tabs: show CLI logo
+          const cli = tab.cli_type || 'claude';
+          if (cli === 'bash') return '<span style="color:var(--success);font-weight:bold;font-size:12px">&gt;</span>';
+          const c = { claude: '#e8a55d', gemini: '#4285f4', codex: '#10a37f' }[cli] || '#8b949e';
+          if (cli === 'codex') return `<svg width="10" height="10" viewBox="0 0 10 10" style="vertical-align:middle"><rect x="0" y="0" width="10" height="10" rx="2.5" fill="${c}"/><circle cx="5" cy="5" r="2.5" fill="var(--bg-secondary)"/></svg>`;
+          const icons = { claude: '✳', gemini: '◆' };
+          return `<span style="font-size:10px;color:${c};line-height:1">${icons[cli] || '?'}</span>`;
+        })();
         const saveBtn = tab.type === 'file'
           ? `<button class="tab-save" title="Save (Ctrl+S)" style="background:none;border:none;color:${tab.dirty ? 'var(--accent)' : 'var(--text-muted)'};cursor:pointer;font-size:12px;padding:2px 4px;border-radius:3px;margin-right:2px${tab.dirty ? ';font-weight:bold' : ''}">&#128190;</button>`
           : '';
