@@ -1115,7 +1115,8 @@ build/**</textarea>
           });
           item.querySelector('.restart').addEventListener('click', async (e) => {
             e.stopPropagation();
-            if (!confirm('Restart the tmux session? The Claude session will be preserved.')) return;
+            const cliLabel = { claude: 'Claude', gemini: 'Gemini', codex: 'Codex' }[session.cli_type] || 'CLI';
+            if (!confirm(`Restart the tmux session? The ${cliLabel} session will be preserved.`)) return;
             try {
               await fetch(`/api/sessions/${session.id}/restart`, { method: 'POST' });
               loadState();
