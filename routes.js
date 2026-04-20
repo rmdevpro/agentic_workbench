@@ -787,8 +787,18 @@ function registerCoreRoutes(
         await ensureSettings();
         const session = db.getSession(sessionId);
         const cliType = session?.cli_type || 'claude';
-        const resumeArgs = (cliType === 'claude' && !sessionId.startsWith('new_'))
-          ? ['--resume', sessionId] : [];
+        let resumeArgs = [];
+        if (cliType === 'claude' && !sessionId.startsWith('new_')) {
+          resumeArgs = ['--resume', sessionId];
+        }
+        // TODO #124: Gemini/Codex need session ID mapping to resume by exact ID
+        // For now, resume most recent — needs proper fix with CLI session ID discovery
+        if (cliType === 'gemini') {
+          resumeArgs = ['--resume'];
+        }
+        if (cliType === 'codex') {
+          resumeArgs = ['resume', '--last'];
+        }
         safe.tmuxCreateCLI(tmux, projectPath, cliType, resumeArgs);
         await sleep(1000);
       }
@@ -1345,8 +1355,10 @@ function registerCoreRoutes(
       const dbProj = db.getProject(session.project_name);
       const cwd = dbProj ? dbProj.path : WORKSPACE;
       const cliType = session.cli_type || 'claude';
-      const restartArgs = (cliType === 'claude' && !sessionId.startsWith('new_'))
-        ? ['--resume', sessionId] : [];
+      let restartArgs = [];
+      if (cliType === 'claude' && !sessionId.startsWith('new_')) restartArgs = ['--resume', sessionId];
+      if (cliType === 'gemini') restartArgs = ['--resume'];
+      if (cliType === 'codex') restartArgs = ['resume', '--last'];
       safe.tmuxCreateCLI(tmux, cwd, cliType, restartArgs);
       res.json({ ok: true, sessionId, tmux });
     } catch (err) {
