@@ -62,16 +62,26 @@ function getAdditionalPaths() {
   return _parseSetting('vector_additional_paths', []);
 }
 
+function _readCodexKey() {
+  try {
+    const authFile = join(process.env.HOME || '/data', '.codex', 'auth.json');
+    const data = JSON.parse(readFileSync(authFile, 'utf-8'));
+    return (data.OPENAI_API_KEY || '').replace(/^"|"$/g, '');
+  } catch { return ''; }
+}
+
 function getEmbeddingConfig() {
   const provider = _parseSetting('vector_embedding_provider', 'huggingface');
 
   switch (provider) {
     case 'gemini': {
+      // Try DB setting (legacy), then env var (set by entrypoint or externally)
       let key = _parseSetting('gemini_api_key', '') || process.env.GOOGLE_API_KEY || '';
       return { url: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-embedding-001', key };
     }
     case 'openai': {
-      let key = _parseSetting('codex_api_key', '') || process.env.OPENAI_API_KEY || '';
+      // Try Codex CLI auth file first, then DB setting (legacy), then env var
+      let key = _readCodexKey() || _parseSetting('codex_api_key', '') || process.env.OPENAI_API_KEY || '';
       return { url: 'https://api.openai.com/v1', model: 'text-embedding-3-small', key };
     }
     case 'custom': {

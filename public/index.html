@@ -583,23 +583,9 @@
       </div>
 
       <div class="settings-group">
-        <h3>API Keys</h3>
-        <p style="font-size:11px;color:var(--text-muted);margin:0 0 8px">Keys for external services. CLI keys enable quorum participation. Deepgram enables voice input.</p>
-        <div class="setting-row">
-          <label>Gemini API Key</label>
-          <input id="setting-gemini-key" type="password" placeholder="Enter key..." style="flex:1;padding:4px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;font-family:monospace"
-            onchange="saveSetting('gemini_api_key', this.value)">
-        </div>
-        <div class="setting-row">
-          <label>OpenAI / Codex API Key</label>
-          <input id="setting-codex-key" type="password" placeholder="Enter key..." style="flex:1;padding:4px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;font-family:monospace"
-            onchange="saveSetting('codex_api_key', this.value)">
-        </div>
-        <div class="setting-row">
-          <label>Deepgram API Key</label>
-          <input id="setting-deepgram-key" type="password" placeholder="Enter key..." style="flex:1;padding:4px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;font-family:monospace"
-            onchange="saveSetting('deepgram_api_key', this.value)">
-        </div>
+        <h3>CLI Authentication</h3>
+        <p style="font-size:11px;color:var(--text-muted);margin:0 0 4px">Each CLI manages its own credentials. Create a session and authenticate in the terminal — credentials persist on the /data volume.</p>
+        <p style="font-size:11px;color:var(--text-muted);margin:0">Claude: <code>/login</code> &nbsp; Gemini: API key prompt on first use &nbsp; Codex: API key prompt on first use</p>
       </div>
 
       <div class="settings-group">
@@ -3447,9 +3433,7 @@ build/**</textarea>
         if (s.theme) document.getElementById('setting-theme').value = s.theme;
         if (s.font_size) document.getElementById('setting-font-size').value = s.font_size;
         if (s.font_family) document.getElementById('setting-font-family').value = s.font_family;
-        if (s.gemini_api_key) document.getElementById('setting-gemini-key').value = s.gemini_api_key;
-        if (s.codex_api_key) document.getElementById('setting-codex-key').value = s.codex_api_key;
-        if (s.deepgram_api_key) document.getElementById('setting-deepgram-key').value = s.deepgram_api_key;
+        // API key fields removed — CLIs manage their own credentials
       } catch {}
       // Global CLAUDE.md now viewed via file tab (read-only) — no textarea to load
       loadMcpServers();
@@ -3479,11 +3463,21 @@ build/**</textarea>
         const provider = s.vector_embedding_provider || 'huggingface';
         const providerEl = document.getElementById('setting-vector-provider');
         providerEl.value = provider;
-        // Gray out options without keys
-        const geminiOpt = providerEl.querySelector('option[value="gemini"]');
-        const openaiOpt = providerEl.querySelector('option[value="openai"]');
-        if (geminiOpt) geminiOpt.disabled = !s.gemini_api_key;
-        if (openaiOpt) openaiOpt.disabled = !s.codex_api_key;
+        // Check CLI credentials for embedding providers
+        try {
+          const credRes = await fetch('/api/cli-credentials');
+          const creds = await credRes.json();
+          const geminiOpt = providerEl.querySelector('option[value="gemini"]');
+          const openaiOpt = providerEl.querySelector('option[value="openai"]');
+          if (geminiOpt) {
+            geminiOpt.disabled = !creds.gemini;
+            if (!creds.gemini) geminiOpt.textContent = 'Gemini (no credentials — authenticate in a Gemini session first)';
+          }
+          if (openaiOpt) {
+            openaiOpt.disabled = !creds.openai;
+            if (!creds.openai) openaiOpt.textContent = 'OpenAI (no credentials — authenticate in a Codex session first)';
+          }
+        } catch {}
         document.getElementById('vector-custom-fields').style.display = provider === 'custom' ? '' : 'none';
         if (s.vector_custom_url) document.getElementById('setting-vector-custom-url').value = s.vector_custom_url;
         if (s.vector_custom_key) document.getElementById('setting-vector-custom-key').value = s.vector_custom_key;

@@ -38,13 +38,10 @@ if [ ! -f "$CLAUDE/.claude.json" ]; then
   echo '{}' > "$CLAUDE/.claude.json"
 fi
 
-# Export API keys from Blueprint DB for CLI use
-if [ -f "$BP_DATA/blueprint.db" ]; then
-  GEMINI_KEY=$(node -e "try{const d=require('/app/db.js');console.log(d.getSetting('gemini_api_key',''))}catch{}" 2>/dev/null)
-  CODEX_KEY=$(node -e "try{const d=require('/app/db.js');console.log(d.getSetting('codex_api_key',''))}catch{}" 2>/dev/null)
-  [ -n "$GEMINI_KEY" ] && export GOOGLE_API_KEY="$GEMINI_KEY" && echo "[entrypoint] Exported GOOGLE_API_KEY from settings"
-  [ -n "$CODEX_KEY" ] && export OPENAI_API_KEY="$CODEX_KEY" && echo "[entrypoint] Exported OPENAI_API_KEY from settings"
-fi
+# CLIs manage their own credentials:
+# - Claude: OAuth via /login (stored in ~/.claude/)
+# - Gemini: API key prompt on first use (stored in ~/.gemini/)
+# - Codex: API key prompt on first use (stored in ~/.codex/)
 
 # Use ANTHROPIC_API_KEY from environment (HF Space secrets) if available
 if [ -n "$ANTHROPIC_API_KEY" ]; then

@@ -1024,6 +1024,31 @@ function registerCoreRoutes(
     res.json({ saved: true });
   });
 
+  // ── CLI Credentials Check ─────────────────────────────────────────────────
+
+  app.get('/api/cli-credentials', (req, res) => {
+    const fs = require('fs');
+    const { join } = require('path');
+    const home = safe.HOME;
+
+    // Gemini: check for credentials file OR GOOGLE_API_KEY in env OR key in DB settings
+    const geminiCredFile = join(home, '.gemini', 'gemini-credentials.json');
+    const hasGemini = fs.existsSync(geminiCredFile) ||
+      !!process.env.GOOGLE_API_KEY ||
+      !!db.getSetting('gemini_api_key', '');
+
+    // Codex: check auth.json for OPENAI_API_KEY
+    let hasOpenai = !!process.env.OPENAI_API_KEY || !!db.getSetting('codex_api_key', '');
+    if (!hasOpenai) {
+      try {
+        const codexAuth = JSON.parse(fs.readFileSync(join(home, '.codex', 'auth.json'), 'utf-8'));
+        hasOpenai = !!codexAuth.OPENAI_API_KEY;
+      } catch { /* no auth file */ }
+    }
+
+    res.json({ gemini: hasGemini, openai: hasOpenai });
+  });
+
   // ── Qdrant / Vector Search ────────────────────────────────────────────────
 
   app.get('/api/qdrant/status', async (req, res) => {
