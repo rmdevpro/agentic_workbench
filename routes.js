@@ -643,10 +643,11 @@ function registerCoreRoutes(
           : 'New Session';
       db.upsertSession(tmpId, proj.id, sessionName, cliType);
 
-      if (prompt) {
-        // Gemini/Codex CLIs take longer to start than Claude
-        const defaultDelay = cliType === 'claude' ? 2000 : 5000;
-        const promptDelayMs = config.get('session.promptInjectionDelayMs', defaultDelay);
+      if (prompt && cliType === 'claude') {
+        // Only inject prompt for Claude — it triggers JSONL creation for session resolution.
+        // Gemini/Codex have startup dialogs (trust, auth) that would consume the prompt.
+        // They get permanent UUIDs at creation, so no JSONL resolution needed.
+        const promptDelayMs = config.get('session.promptInjectionDelayMs', 2000);
         setTimeout(async () => {
           try {
             if (!(await tmuxExists(tmux))) {
