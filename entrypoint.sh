@@ -88,6 +88,14 @@ node -e "
   }
 " "$CLI_VERSION" || echo "[entrypoint] WARNING: Failed to set onboarding state"
 
+# Persistent user-installed packages at /data/.local (survives container rebuilds)
+mkdir -p /data/.local/bin /data/.local/lib 2>/dev/null || true
+export PATH="/data/.local/bin:$PATH"
+export NODE_PATH="/data/.local/lib/node_modules:${NODE_PATH:-}"
+if [ -d /data/.local/lib/node_modules ]; then
+  echo "[entrypoint] Persistent packages: $(ls /data/.local/lib/node_modules 2>/dev/null | wc -w) installed"
+fi
+
 # Start Qdrant vector database in background
 QDRANT_STORAGE="$BP_DATA/qdrant"
 mkdir -p "$QDRANT_STORAGE" 2>/dev/null || true

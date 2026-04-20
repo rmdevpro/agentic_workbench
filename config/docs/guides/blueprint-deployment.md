@@ -61,11 +61,39 @@ The entrypoint sets up the following structure under `/data`:
 
 ```
 /data/
-  blueprint.db          — SQLite database (projects, sessions, tasks, settings)
+  .blueprint/           — SQLite database, Qdrant vector data
   .claude/              — Claude CLI config, session JSONLs, MCP registrations
-  workspace/            — Project directories
-  qdrant/               — Vector search data
+  .local/               — Persistent user-installed packages (see below)
+  .ssh/                 — SSH keys and config for remote host access
+  workspace/            — Project directories (docs, repos, etc.)
 ```
+
+## Installing Persistent Add-ons
+
+Blueprint supports installing additional tools that survive container rebuilds. Anything installed to `/data/.local/` persists on the volume. The entrypoint adds `/data/.local/bin` to PATH and `/data/.local/lib/node_modules` to NODE_PATH automatically.
+
+### npm packages (e.g. Playwright MCP)
+
+```bash
+npm install --prefix /data/.local @playwright/mcp
+npx playwright install chrome
+```
+
+The npm package installs to `/data/.local/lib/node_modules/` and Chrome installs to `/data/.cache/ms-playwright/` — both on the persistent volume. After a container rebuild, they're still there.
+
+### System packages (apt)
+
+System packages installed via `apt-get` do NOT persist — they live in the container filesystem. For system-level tools you always need, add them to the Dockerfile or a compose override.
+
+### Registering MCP servers
+
+After installing an MCP package, register it with Claude:
+
+```bash
+claude mcp add-json --scope user playwright '{"command":"npx","args":["-y","@playwright/mcp","--headless"]}'
+```
+
+This registration persists in `/data/.claude/` — no re-registration needed after rebuild.
 
 ## Authentication
 
