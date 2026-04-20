@@ -1028,17 +1028,21 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 3. `browser_wait` 2000
 4. `browser_evaluate`: Check for new file tab: `document.querySelector('.tab .file-tab-icon') !== null`
 5. `browser_evaluate`: Check for editor: `document.querySelector('.cm-editor') !== null || document.querySelector('.toastui-editor-defaultUI') !== null`
-6. `browser_evaluate`: Check save button exists: `document.querySelector('.tab-save') !== null`
-7. `browser_screenshot`
+6. `browser_evaluate`: Check editor toolbar: `document.querySelector('.editor-toolbar') !== null`
+7. `browser_evaluate`: Save button: `document.querySelector('.editor-save-btn') !== null`
+8. `browser_evaluate`: Save As button: `document.querySelector('.editor-saveas-btn') !== null`
+9. `browser_screenshot`
 
 **Expected:**
 - Double-clicking a file opens a new tab with a file icon (📄)
 - CodeMirror editor (`.cm-editor`) visible for code files, Toast UI (`.toastui-editor-defaultUI`) for .md files
-- Save button (💾) visible on the tab, highlighted when content is modified
+- Editor toolbar with file path, Save button (disabled when clean), and Save As button
+- Save button turns green briefly with "Saved" text on successful save
+- Tab shows italic name + ● dot + yellow top border when dirty
 - Ctrl+S saves the file
 
 **Verify:**
-- File tab with editor and save button visible
+- File tab with editor toolbar, Save, and Save As visible
 
 ---
 

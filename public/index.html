@@ -196,40 +196,42 @@
     }
     #notes-editor:focus { border-color: var(--accent); }
 
-    /* ── Task tree ── */
+    /* ── Task tree — matches jQueryFileTree styling ── */
     #task-filter-bar { display:flex; gap:4px; margin-bottom:8px; align-items:center; }
     #task-filter-bar .task-filter { font-size:11px; padding:2px 8px; }
     #task-auto-label { margin-left:auto; font-size:11px; color:var(--text-muted); display:flex; align-items:center; gap:4px; cursor:pointer; }
 
     #task-tree { overflow-y:auto; background:var(--bg-primary); border:1px solid var(--border); border-radius:6px; padding:4px; flex:1; min-height:0; }
-    #task-tree ul { list-style:none; padding-left:16px; margin:0; }
-    #task-tree > ul { padding-left:0; }
+    #task-tree ul { list-style:none; padding-left:20px; margin:0; }
+    #task-tree > div > div > ul { padding-left:0; }
     .task-folder-label {
-      display:flex; align-items:center; gap:4px; padding:3px 6px; cursor:pointer;
-      font-size:12px; color:var(--text-secondary); user-select:none; border-radius:4px;
+      display:inline-flex; align-items:center; gap:4px; padding:0 2px; cursor:pointer;
+      font-size:11px; line-height:18px; color:var(--text-primary); user-select:none;
+      text-decoration:none;
     }
-    .task-folder-label:hover { color:var(--text-primary); background:var(--bg-tertiary); }
-    .task-folder-label .folder-arrow { font-size:10px; transition:transform 0.15s; display:inline-block; }
+    .task-folder-label:hover { color:var(--accent); background:var(--bg-tertiary); }
+    .task-folder-label .folder-arrow { font-size:8px; transition:transform 0.15s; display:inline-block; width:10px; text-align:center; }
     .task-folder.collapsed .folder-arrow { transform:rotate(-90deg); }
-    .task-folder.collapsed > ul { display:none; }
-    .task-folder-label .folder-icon { margin-right:2px; }
-    .task-folder-label .folder-count { font-size:10px; color:var(--text-muted); margin-left:auto; }
-    .task-folder.selected > .task-folder-label { color:var(--accent); }
+    .task-folder.collapsed > div { display:none; }
+    .task-folder-label .folder-icon { margin-right:2px; font-size:11px; }
+    .task-folder-label .folder-count { font-size:10px; color:var(--text-muted); margin-left:4px; }
+    .task-folder.selected > .task-folder-label { color:var(--accent); font-weight:bold; }
 
     .task-node {
-      display:flex; align-items:center; gap:6px; padding:3px 6px; font-size:13px; cursor:grab; border-radius:4px;
+      display:flex; align-items:center; gap:4px; padding:0 2px; font-size:11px; line-height:18px; cursor:grab;
     }
     .task-node:hover { background:var(--bg-hover); }
     .task-node.done .task-label { text-decoration:line-through; color:var(--text-muted); }
     .task-node.archived .task-label { color:var(--text-muted); font-style:italic; }
-    .task-node .task-index { color:var(--text-muted); font-size:11px; min-width:16px; text-align:right; }
+    .task-node .task-index { color:var(--text-muted); font-size:10px; min-width:14px; text-align:right; }
     .task-node .task-label { flex:1; cursor:default; }
-    .task-node .task-delete { visibility:hidden; background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:11px; }
+    .task-node .task-delete { visibility:hidden; background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:10px; padding:0 2px; }
     .task-node:hover .task-delete { visibility:visible; }
     .task-node .task-delete:hover { color:var(--danger); }
     .task-node.drag-over-above { border-top:2px solid var(--accent); }
     .task-node.drag-over-below { border-bottom:2px solid var(--accent); }
     .task-folder.drag-over > .task-folder-label { background:var(--accent); color:var(--bg-primary); }
+    .task-node input[type=checkbox] { margin:0; width:12px; height:12px; }
 
 
     /* ── File editor panes ── */
@@ -241,6 +243,8 @@
     .pdf-viewer { width:100%; height:100%; border:none; }
     .file-tab-icon { font-size:11px; margin-right:2px; }
     .tab-dirty .tab-name::after { content:' ●'; color:var(--warning); }
+    .tab-dirty .tab-name { font-style:italic; }
+    .tab-dirty { border-top:2px solid var(--warning); }
     .toastui-editor-defaultUI { height:100% !important; }
 
     /* ── Context menu ── */
@@ -527,7 +531,10 @@
         <div id="task-tree"></div>
       </div>
       <div id="panel-files" class="panel-section">
-        <input id="file-upload-input" type="file" multiple style="display:none" onchange="fileBrowserUpload(this.files)">
+        <div style="display:flex;align-items:center;margin-bottom:4px">
+          <input id="file-upload-input" type="file" multiple style="display:none" onchange="fileBrowserUpload(this.files)">
+          <label style="margin-left:auto;font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="file-auto-nav" onchange="fileAutoNav=this.checked;if(fileAutoNav)autoNavigateFileTree()"> Auto</label>
+        </div>
         <div id="file-browser-tree" style="overflow-y:auto;background:var(--bg-primary);border:1px solid var(--border);border-radius:6px;padding:4px;flex:1;min-height:0"></div>
       </div>
     </div>
@@ -808,21 +815,18 @@ build/**</textarea>
       </div>
 
       <div id="settings-prompts" style="display:none">
-        <div style="display:flex;gap:16px;height:calc(80vh - 140px)">
-          <div style="flex:1;display:flex;flex-direction:column">
-            <h3 style="font-size:12px;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.5px;margin-bottom:4px">Global CLAUDE.md</h3>
-            <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Applies to all sessions. ~/.claude/CLAUDE.md</p>
-            <textarea id="setting-global-claude-md" style="flex:1;width:100%;background:var(--bg-primary);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:8px;font-size:12px;font-family:monospace;resize:none;outline:none" placeholder="Global instructions for Claude..."></textarea>
-            <button onclick="saveGlobalClaudeMd()" style="margin-top:6px;padding:4px 12px;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;cursor:pointer;font-size:12px;align-self:flex-start">Save</button>
-          </div>
-          <div style="width:1px;background:var(--border)"></div>
-          <div style="flex:1;display:flex;flex-direction:column">
-            <h3 style="font-size:12px;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.5px;margin-bottom:4px">Default Project Template</h3>
-            <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Applied to new projects without a CLAUDE.md</p>
-            <textarea id="setting-project-template" style="flex:1;width:100%;background:var(--bg-primary);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:8px;font-size:12px;font-family:monospace;resize:none;outline:none" placeholder="Default project instructions..."></textarea>
-            <button onclick="saveProjectTemplate()" style="margin-top:6px;padding:4px 12px;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;cursor:pointer;font-size:12px;align-self:flex-start">Save</button>
-          </div>
+        <h3 style="font-size:12px;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.5px;margin-bottom:8px">Global System Prompts (read-only templates)</h3>
+        <p style="font-size:11px;color:var(--text-muted);margin-bottom:12px">These are seeded at container startup. Edit project-level prompts via Project Config instead.</p>
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          <button onclick="openFileTab('/data/.claude/CLAUDE.md')" style="padding:6px 14px;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:12px"><span style="color:#e8a55d;font-weight:bold">C</span> Claude</button>
+          <button onclick="openFileTab('/data/.claude/GEMINI.md')" style="padding:6px 14px;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:12px"><span style="color:#4285f4;font-weight:bold">G</span> Gemini</button>
+          <button onclick="openFileTab('/data/.claude/AGENTS.md')" style="padding:6px 14px;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:12px"><span style="color:#10a37f;font-weight:bold">X</span> Codex</button>
         </div>
+        <div style="width:100%;height:1px;background:var(--border);margin-bottom:16px"></div>
+        <h3 style="font-size:12px;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.5px;margin-bottom:4px">Default Project Template</h3>
+        <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Applied to new projects without a CLAUDE.md</p>
+        <textarea id="setting-project-template" style="width:100%;height:200px;background:var(--bg-primary);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:8px;font-size:12px;font-family:monospace;resize:vertical;outline:none;box-sizing:border-box" placeholder="Default project instructions..."></textarea>
+        <button onclick="saveProjectTemplate()" style="margin-top:6px;padding:4px 12px;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;cursor:pointer;font-size:12px">Save Template</button>
       </div>
     </div>
   </div>
@@ -1326,6 +1330,7 @@ build/**</textarea>
       renderTabs();
       renderSidebar();
       if (taskAutoNav && activePanel === 'tasks') autoNavigateTaskTree();
+      if (fileAutoNav && activePanel === 'files') autoNavigateFileTree();
     }
 
     function closeTab(tabId) {
@@ -1635,13 +1640,38 @@ build/**</textarea>
             <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Project Notes</label>
             <textarea id="proj-cfg-notes" style="width:100%;min-height:80px;padding:6px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;font-family:inherit;resize:vertical;outline:none;box-sizing:border-box" placeholder="Notes about this project...">${escHtml(config.notes || '')}</textarea>
           </div>
+          <div style="margin-bottom:16px">
+            <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Project System Prompts</label>
+            <div style="display:flex;gap:6px">
+              <button onclick="document.getElementById('${overlayId}').remove();openProjectPrompt('${escHtml(config.path || '')}','CLAUDE.md')" style="padding:4px 12px;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:12px"><span style="color:#e8a55d;font-weight:bold">C</span> Claude</button>
+              <button onclick="document.getElementById('${overlayId}').remove();openProjectPrompt('${escHtml(config.path || '')}','GEMINI.md')" style="padding:4px 12px;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:12px"><span style="color:#4285f4;font-weight:bold">G</span> Gemini</button>
+              <button onclick="document.getElementById('${overlayId}').remove();openProjectPrompt('${escHtml(config.path || '')}','AGENTS.md')" style="padding:4px 12px;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:12px"><span style="color:#10a37f;font-weight:bold">X</span> Codex</button>
+            </div>
+          </div>
           <div style="display:flex;gap:8px">
             <button onclick="saveProjectConfig('${escHtml(projectName)}', '${overlayId}')" style="padding:6px 16px;background:var(--accent);color:#0d1117;border:none;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600">Save</button>
-            <button onclick="document.getElementById('${overlayId}').remove();openFileTab('${escHtml(config.path || '')}/CLAUDE.md')" style="padding:6px 16px;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:13px">Edit CLAUDE.md</button>
           </div>
         </div>
       `;
       document.body.appendChild(overlay);
+    }
+
+    async function openProjectPrompt(projectPath, filename) {
+      const filePath = projectPath.replace(/\/?$/, '/') + filename;
+      // Check if file exists, if not create from global template
+      try {
+        const check = await fetch('/api/file?path=' + encodeURIComponent(filePath));
+        if (!check.ok) {
+          // Copy from global template
+          const globalPath = '/data/.claude/' + filename;
+          const tmpl = await fetch('/api/file?path=' + encodeURIComponent(globalPath));
+          const content = tmpl.ok ? await tmpl.text() : '# ' + filename + '\n\nProject-specific instructions for this CLI.\n';
+          await fetch('/api/file?path=' + encodeURIComponent(filePath), {
+            method: 'PUT', headers: { 'Content-Type': 'text/plain' }, body: content,
+          });
+        }
+      } catch {}
+      openFileTab(filePath);
     }
 
     async function saveProjectConfig(projectName, overlayId) {
@@ -1873,9 +1903,8 @@ build/**</textarea>
           li.className = 'task-folder' + (selectedTaskFolder === childPath ? ' selected' : '');
           const taskCount = _countTasksUnderPath(childPath);
           li.innerHTML = `<span class="task-folder-label">
-            <span class="folder-arrow">&#9654;</span>
-            <span class="folder-icon">&#128193;</span>
-            <span>${escHtml(dir.name)}</span>
+            <span class="folder-arrow">&#9656;</span>
+            ${escHtml(dir.name)}
             ${taskCount ? '<span class="folder-count">' + taskCount + '</span>' : ''}
           </span>`;
           const childContainer = document.createElement('div');
@@ -2352,6 +2381,15 @@ build/**</textarea>
         tab.dirty = false;
         renderTabs();
         if (tab._updateSaveBtn) tab._updateSaveBtn();
+        // Brief save confirmation — flash the Save button green
+        const pane = document.getElementById(`pane-${tabId}`);
+        const saveBtn = pane?.querySelector('.editor-save-btn');
+        if (saveBtn) {
+          const origText = saveBtn.textContent;
+          saveBtn.textContent = 'Saved';
+          saveBtn.style.background = '#238636';
+          setTimeout(() => { saveBtn.textContent = origText; saveBtn.style.background = ''; }, 1500);
+        }
       } catch (err) {
         alert('Save failed: ' + err.message);
       }
@@ -2359,6 +2397,45 @@ build/**</textarea>
 
     // File Browser
     let fileBrowserInitialized = false;
+    let fileAutoNav = false;
+
+    function autoNavigateFileTree() {
+      if (!fileAutoNav || !activeTabId || !tabs.has(activeTabId)) return;
+      const project = tabs.get(activeTabId).project;
+      if (!project) return;
+      const projData = projectState.find(p => p.name === project);
+      if (!projData || !projData.path) return;
+      // jQueryFileTree uses <a rel="path"> — find and click each path segment
+      const treeEl = document.getElementById('file-browser-tree');
+      const target = projData.path.replace(/\/?$/, '/');
+      // Expand mount first
+      const mountHeaders = treeEl.querySelectorAll('[style*="cursor:pointer"]');
+      for (const h of mountHeaders) {
+        if (target.startsWith(h.textContent.replace(/[▶▼]/g, '').trim())) {
+          const arrow = h.querySelector('.mount-arrow');
+          const container = h.nextElementSibling;
+          if (container && container.style.display === 'none') h.click();
+          // Wait for jQueryFileTree to load, then expand path
+          setTimeout(() => {
+            const links = treeEl.querySelectorAll('a[rel]');
+            for (const a of links) {
+              if (target.startsWith(a.getAttribute('rel'))) {
+                const li = a.closest('li');
+                if (li && li.classList.contains('directory') && !li.classList.contains('expanded')) {
+                  $(a).click();
+                }
+              }
+            }
+            // Scroll to target
+            setTimeout(() => {
+              const targetLink = Array.from(treeEl.querySelectorAll('a[rel]')).find(a => a.getAttribute('rel') === target);
+              if (targetLink) targetLink.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 500);
+          }, 300);
+          break;
+        }
+      }
+    }
 
     async function loadFiles() {
       if (fileBrowserInitialized) return;
@@ -2957,14 +3034,6 @@ build/**</textarea>
       }
     }
 
-    async function saveGlobalClaudeMd() {
-      await fetch('/api/claude-md/global', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: document.getElementById('setting-global-claude-md').value }),
-      });
-    }
-
     async function saveProjectTemplate() {
       await saveSetting('default_project_claude_md', document.getElementById('setting-project-template').value);
     }
@@ -3348,12 +3417,7 @@ build/**</textarea>
         if (s.codex_api_key) document.getElementById('setting-codex-key').value = s.codex_api_key;
         if (s.deepgram_api_key) document.getElementById('setting-deepgram-key').value = s.deepgram_api_key;
       } catch {}
-      // Load global CLAUDE.md
-      try {
-        const gres = await fetch('/api/claude-md/global');
-        const gdata = await gres.json();
-        document.getElementById('setting-global-claude-md').value = gdata.content || '';
-      } catch {}
+      // Global CLAUDE.md now viewed via file tab (read-only) — no textarea to load
       loadMcpServers();
     }
 
