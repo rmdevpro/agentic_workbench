@@ -129,7 +129,9 @@ async function handleFiles(args, res) {
 // ── blueprint_sessions ───────────────────────────────────────────────────────
 
 async function ensureSessionTmux(session, projectPath) {
-  const tmux = `bp_${safe.sanitizeTmuxName(session.id.substring(0, 12))}`;
+  const crypto = require('crypto');
+  const hash = crypto.createHash('md5').update(session.id).digest('hex').substring(0, 4);
+  const tmux = safe.sanitizeTmuxName(`bp_${session.id.substring(0, 12)}_${hash}`);
   if (!(await safe.tmuxExists(tmux))) {
     const cliType = session.cli_type || 'claude';
     const cliArgs = (cliType === 'claude' && !session.id.startsWith('new_'))

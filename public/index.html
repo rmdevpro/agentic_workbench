@@ -2213,8 +2213,13 @@ build/**</textarea>
 
           // Wire Save As button
           saveAsBtn.addEventListener('click', async () => {
-            const newPath = prompt('Save as:', tab.filePath);
+            const newPath = window.prompt('Save as:', tab.filePath);
             if (!newPath || !newPath.trim()) return;
+            const cleanPath = newPath.trim();
+            if (cleanPath.includes('..') || !cleanPath.startsWith('/data/workspace')) {
+              alert('Save As path must be within /data/workspace');
+              return;
+            }
             let content;
             if (tab.editorType === 'markdown' && tab.editor && tab.editor.getMarkdown) {
               content = tab.editor.getMarkdown();
@@ -2222,16 +2227,16 @@ build/**</textarea>
               content = tab.editor.state.doc.toString();
             } else return;
             try {
-              await fetch('/api/file?path=' + encodeURIComponent(newPath.trim()), {
+              await fetch('/api/file?path=' + encodeURIComponent(cleanPath), {
                 method: 'PUT',
                 headers: { 'Content-Type': 'text/plain' },
                 body: content,
               });
-              tab.filePath = newPath.trim();
-              tab.name = newPath.trim().split('/').pop();
+              tab.filePath = cleanPath;
+              tab.name = cleanPath.split('/').pop();
               tab.dirty = false;
-              toolbar.querySelector('span').textContent = newPath.trim();
-              toolbar.querySelector('span').title = newPath.trim();
+              toolbar.querySelector('span').textContent = cleanPath;
+              toolbar.querySelector('span').title = cleanPath;
               renderTabs();
             } catch (err) {
               alert('Save As failed: ' + err.message);

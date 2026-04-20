@@ -143,6 +143,15 @@ module.exports = function createSessionResolver({
       const unresolvedJsonls = jsonlFiles.filter((f) => !dbSessionIds.has(basename(f, '.jsonl')));
 
       for (const stale of staleSessions) {
+        // Non-Claude CLIs don't create JSONL files — don't match them to orphans
+        if (stale.cli_type && stale.cli_type !== 'claude') {
+          logger.info('Startup: keeping non-Claude temp session', {
+            module: 'session-resolver',
+            staleId: stale.id.substring(0, 15),
+            cli: stale.cli_type,
+          });
+          continue;
+        }
         if (unresolvedJsonls.length > 0) {
           const jsonlFile = unresolvedJsonls.shift();
           const realId = basename(jsonlFile, '.jsonl');
@@ -162,7 +171,7 @@ module.exports = function createSessionResolver({
             from: stale.id.substring(0, 15),
             to: realId.substring(0, 8),
           });
-          db.upsertSession(realId, dbProj.id, stale.name || null);
+          db.upsertSession(realId, dbProj.id, stale.name || null, stale.cli_type || 'claude');
           if (stale.user_renamed) db.renameSession(realId, stale.name);
           if (stale.notes) db.setSessionNotes(realId, stale.notes);
           if (stale.state && stale.state !== 'active') db.setSessionState(realId, stale.state);

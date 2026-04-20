@@ -2,6 +2,7 @@
 
 const { readdir, stat, unlink } = require('fs/promises');
 const { join } = require('path');
+const crypto = require('crypto');
 
 module.exports = function createTmuxLifecycle({
   safe,
@@ -20,7 +21,6 @@ module.exports = function createTmuxLifecycle({
 
   function tmuxName(sessionId) {
     // Deterministic suffix from session ID to prevent collisions while remaining predictable
-    const crypto = require('crypto');
     const hash = crypto.createHash('md5').update(sessionId).digest('hex').substring(0, 4);
     return safe.sanitizeTmuxName(`bp_${sessionId.substring(0, 12)}_${hash}`);
   }
