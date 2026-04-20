@@ -1865,8 +1865,14 @@ build/**</textarea>
             loadTaskTree();
           });
 
-          // Auto-expand first mount
-          if (mounts.indexOf(mount) === 0) header.click();
+          // Auto-expand first mount only on initial load (when nothing is in expandedTaskFolders)
+          if (mounts.indexOf(mount) === 0 && expandedTaskFolders.size === 0) {
+            expandedTaskFolders.add(mount.path);
+            treeContainer.style.display = '';
+            header.querySelector('.mount-arrow').style.transform = 'rotate(90deg)';
+            treeContainer.dataset.loaded = '1';
+            _loadTaskFolder(mount.path, treeContainer);
+          }
         }
       } catch (err) {
         console.error('loadTaskTree error', err);
