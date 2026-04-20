@@ -1089,7 +1089,10 @@ build/**</textarea>
               ${(() => {
                 const cli = session.cli_type || 'claude';
                 const color = session.active ? ({ claude: '#e8a55d', gemini: '#4285f4', codex: '#10a37f' }[cli] || '#8b949e') : '#484f58';
-                const icons = { claude: '✳', gemini: '◆', codex: '●' };
+                const icons = { claude: '✳', gemini: '◆' };
+                if (cli === 'codex') {
+                  return `<svg width="10" height="10" viewBox="0 0 10 10" title="codex" style="vertical-align:middle"><rect x="0" y="0" width="10" height="10" rx="2.5" fill="${color}"/><circle cx="5" cy="5" r="2.5" fill="var(--bg-primary)"/></svg>`;
+                }
                 return `<span style="font-size:10px;color:${color};line-height:1" title="${cli}">${icons[cli] || '?'}</span>`;
               })()}
               <span>${timeAgo(session.timestamp)}</span>
