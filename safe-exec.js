@@ -107,9 +107,11 @@ function tmuxCreateCLI(sessionName, cwd, cliType, args = []) {
       break;
     case 'gemini':
       binary = 'gemini';
+      if (process.env.GOOGLE_API_KEY) envParts.push(`export GOOGLE_API_KEY=${shellEscape(process.env.GOOGLE_API_KEY)}`);
       break;
     case 'codex':
       binary = 'codex';
+      if (process.env.OPENAI_API_KEY) envParts.push(`export OPENAI_API_KEY=${shellEscape(process.env.OPENAI_API_KEY)}`);
       break;
     case 'bash':
       binary = 'bash';
