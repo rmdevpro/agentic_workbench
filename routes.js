@@ -1004,6 +1004,21 @@ function registerCoreRoutes(
         }
       }
     }
+    if (key === 'vector_embedding_provider') {
+      // Provider changed — old embeddings are incompatible. Clear sync state and re-index.
+      try {
+        db.db.prepare('DELETE FROM qdrant_sync').run();
+        const qdrant = require('./qdrant-sync');
+        for (const col of ['documents', 'code', 'claude', 'gemini', 'codex']) {
+          qdrant.reindexCollection(col).catch(err =>
+            logger.error('Re-index after provider change failed', { module: 'routes', collection: col, err: err.message })
+          );
+        }
+        logger.info('Embedding provider changed — clearing sync state and re-indexing all collections', { module: 'routes', provider: value });
+      } catch (err) {
+        logger.error('Failed to trigger re-index on provider change', { module: 'routes', err: err.message });
+      }
+    }
     res.json({ saved: true });
   });
 

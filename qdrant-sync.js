@@ -488,12 +488,13 @@ async function syncSessionFile(filePath, collection, parser, dims) {
 
   const texts = chunks.map(c => c.text);
 
-  // Batch embeddings in groups of 20 to avoid API limits
+  // Batch embeddings in groups of 20 with delay to avoid burst rate limits
   const allEmbeddings = [];
   for (let i = 0; i < texts.length; i += 20) {
     const batch = texts.slice(i, i + 20);
     const batchEmbeddings = await embed(batch, dims);
     allEmbeddings.push(...batchEmbeddings);
+    if (i + 20 < texts.length) await new Promise(r => setTimeout(r, 200));
   }
 
   const points = chunks.map((chunk, i) => ({
