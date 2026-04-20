@@ -5,7 +5,9 @@ services:
       dockerfile: Dockerfile
     container_name: blueprint
     ports:
-      - "6342:3000"
+      - "7860:7860"
     volumes:
-      - /mnt/workspace/blueprint:/data
+      - /path/to/your/data:/data
+      # Optional: mount shared storage for the file browser
+      # - /path/to/shared/storage:/mnt/storage
     restart: unless-stopped

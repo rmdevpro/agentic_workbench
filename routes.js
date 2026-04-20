@@ -236,64 +236,89 @@ function registerCoreRoutes(
     return _codexSessionsCache;
   }
 
+  // Track which disk sessions have been claimed so we don't double-assign
+  const _claimedGemini = new Set();
+  const _claimedCodex = new Set();
+  let _claimResetTime = 0;
+
+  function _resetClaims() {
+    const now = Date.now();
+    if (now - _claimResetTime > NONCLAUD_CACHE_TTL) {
+      _claimedGemini.clear();
+      _claimedCodex.clear();
+      _claimResetTime = now;
+    }
+  }
+
+  function _matchFromList(diskSessions, claimed, session, getIdFn, storeIdFn) {
+    // 1. Match by cli_session_id
+    if (session.cli_session_id) {
+      const match = diskSessions.find(d => !claimed.has(d.filePath) && getIdFn(d) === session.cli_session_id);
+      if (match) { claimed.add(match.filePath); return match; }
+    }
+    // 2. Match by creation time proximity (within 60s)
+    if (session.created_at) {
+      const created = new Date(session.created_at).getTime();
+      const match = diskSessions.find(d => {
+        if (claimed.has(d.filePath) || !d.timestamp) return false;
+        return Math.abs(new Date(d.timestamp).getTime() - created) < 60000;
+      });
+      if (match) {
+        claimed.add(match.filePath);
+        if (!session.cli_session_id) storeIdFn(session, match);
+        return match;
+      }
+    }
+    // 3. Order-based: take the first unclaimed disk session
+    const unclaimed = diskSessions.find(d => !claimed.has(d.filePath));
+    if (unclaimed) {
+      claimed.add(unclaimed.filePath);
+      if (!session.cli_session_id) storeIdFn(session, unclaimed);
+      return unclaimed;
+    }
+    return null;
+  }
+
   function _getNonClaudeMetadata(session) {
     const cliType = session.cli_type || 'claude';
     if (cliType === 'claude') return null;
+    _resetClaims();
 
     if (cliType === 'gemini') {
-      const geminiSessions = _getGeminiSessions();
-      // If we have a cli_session_id, match by it
-      if (session.cli_session_id) {
-        const match = geminiSessions.find(g => g.sessionId === session.cli_session_id);
-        if (match) return match;
-      }
-      // Fallback: match by creation time proximity (within 30s)
-      if (session.created_at) {
-        const created = new Date(session.created_at).getTime();
-        const match = geminiSessions.find(g => {
-          if (!g.timestamp) return false;
-          const diff = Math.abs(new Date(g.timestamp).getTime() - created);
-          return diff < 30000;
-        });
-        if (match) {
-          // Store the discovered sessionId for future lookups
-          if (match.sessionId && !session.cli_session_id) {
-            try { db.setCliSessionId(session.id, match.sessionId); } catch { /* race ok */ }
+      const sorted = _getGeminiSessions().sort((a, b) => {
+        const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return ta - tb;
+      });
+      return _matchFromList(sorted, _claimedGemini, session,
+        (d) => d.sessionId,
+        (sess, match) => {
+          if (match.sessionId) {
+            try { db.setCliSessionId(sess.id, match.sessionId); } catch { /* race ok */ }
           }
-          return match;
         }
-      }
-      return null; // No confident match — show 0 rather than wrong data
+      );
     }
 
     if (cliType === 'codex') {
-      const codexSessions = _getCodexSessions();
-      // Match by cli_session_id if available
-      if (session.cli_session_id) {
-        const match = codexSessions.find(c => c.filePath.includes(session.cli_session_id));
-        if (match) return match;
-      }
-      // Fallback: match by creation time proximity
-      if (session.created_at) {
-        const created = new Date(session.created_at).getTime();
-        const match = codexSessions.find(c => {
-          if (!c.timestamp) return false;
-          const diff = Math.abs(new Date(c.timestamp).getTime() - created);
-          return diff < 30000;
-        });
-        if (match) {
-          // Store the rollout directory name as cli_session_id for future resume
-          if (!session.cli_session_id) {
-            const { basename, dirname } = require('path');
-            const rolloutId = basename(dirname(match.filePath));
-            if (rolloutId && rolloutId !== 'sessions') {
-              try { db.setCliSessionId(session.id, rolloutId); } catch { /* race ok */ }
-            }
+      const sorted = _getCodexSessions().sort((a, b) => {
+        const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return ta - tb;
+      });
+      return _matchFromList(sorted, _claimedCodex, session,
+        (d) => {
+          const { basename: bn, dirname: dn } = require('path');
+          return bn(dn(d.filePath));
+        },
+        (sess, match) => {
+          const { basename: bn, dirname: dn } = require('path');
+          const rolloutId = bn(dn(match.filePath));
+          if (rolloutId && rolloutId !== 'sessions') {
+            try { db.setCliSessionId(sess.id, rolloutId); } catch { /* race ok */ }
           }
-          return match;
         }
-      }
-      return null; // No confident match — show 0 rather than wrong data
+      );
     }
 
     return null;
