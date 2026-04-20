@@ -16,8 +16,12 @@ module.exports = function createSessionResolver({
   const maxAttempts = config ? config.get('resolver.maxAttempts', 30) : 30;
   const sleepMs = config ? config.get('resolver.sleepMs', 2000) : 2000;
 
-  async function resolveSessionId(tmpId, { tmux, sessionsDir, existingFiles, projectId }) {
+  async function resolveSessionId(tmpId, { tmux, sessionsDir, existingFiles, projectId, cliType }) {
     if (pendingResolutions.has(tmpId)) return;
+
+    // Non-Claude CLIs don't create JSONL files — nothing to resolve
+    if (cliType && cliType !== 'claude') return;
+
     pendingResolutions.set(tmpId, true);
 
     try {
@@ -37,7 +41,7 @@ module.exports = function createSessionResolver({
             });
 
             const tmpSession = db.getSession(tmpId);
-            db.upsertSession(realId, projectId, tmpSession?.name || null);
+            db.upsertSession(realId, projectId, tmpSession?.name || null, tmpSession?.cli_type || 'claude');
             if (tmpSession?.user_renamed) db.renameSession(realId, tmpSession.name);
             if (tmpSession?.notes) db.setSessionNotes(realId, tmpSession.notes);
             if (tmpSession?.state && tmpSession.state !== 'active')

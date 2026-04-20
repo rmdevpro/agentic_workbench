@@ -167,10 +167,18 @@ function registerCoreRoutes(
         (f) => f.endsWith('.jsonl') && !dbIds.has(basename(f, '.jsonl')),
       );
       for (const tmp of staleTmps) {
+        // Non-Claude CLIs don't create JSONL files — keep the new_* ID
+        const cliType = tmp.cli_type || 'claude';
+        if (cliType !== 'claude') {
+          if (!(await safe.tmuxExists(tmuxName(tmp.id)))) {
+            db.deleteSession(tmp.id);
+          }
+          continue;
+        }
         if (unmatched.length > 0) {
           const realFile = unmatched.shift();
           const realId = basename(realFile, '.jsonl');
-          db.upsertSession(realId, projectId, tmp.name || null);
+          db.upsertSession(realId, projectId, tmp.name || null, cliType);
           if (tmp.user_renamed) db.renameSession(realId, tmp.name);
           if (tmp.notes) db.setSessionNotes(realId, tmp.notes);
           if (tmp.state && tmp.state !== 'active') db.setSessionState(realId, tmp.state);
@@ -602,31 +610,21 @@ function registerCoreRoutes(
       await enforceTmuxLimit();
 
       // Launch the appropriate CLI
-      switch (cliType) {
-        case 'gemini':
-          safe.tmuxCreateGemini(tmux, projectPath);
-          break;
-        case 'codex':
-          safe.tmuxCreateCodex(tmux, projectPath);
-          break;
-        case 'claude':
-        default: {
-          const model = db.getSetting('default_model', '"claude-sonnet-4-6"');
-          const claudeArgs = [];
-          try {
-            const m = JSON.parse(model);
-            if (m) claudeArgs.push('--model', m);
-          } catch (parseErr) {
-            if (parseErr instanceof SyntaxError) {
-              logger.debug('Invalid default_model JSON in settings', { module: 'routes' });
-            } else {
-              throw parseErr;
-            }
+      const cliArgs = [];
+      if (cliType === 'claude') {
+        const model = db.getSetting('default_model', '"claude-sonnet-4-6"');
+        try {
+          const m = JSON.parse(model);
+          if (m) cliArgs.push('--model', m);
+        } catch (parseErr) {
+          if (parseErr instanceof SyntaxError) {
+            logger.debug('Invalid default_model JSON in settings', { module: 'routes' });
+          } else {
+            throw parseErr;
           }
-          safe.tmuxCreateClaude(tmux, projectPath, claudeArgs);
-          break;
         }
       }
+      safe.tmuxCreateCLI(tmux, projectPath, cliType, cliArgs);
 
       const proj = db.ensureProject(project, projectPath);
       const nameMaxLen = config.get('session.nameMaxLength', 60);
@@ -637,7 +635,9 @@ function registerCoreRoutes(
       db.upsertSession(tmpId, proj.id, sessionName, cliType);
 
       if (prompt) {
-        const promptDelayMs = config.get('session.promptInjectionDelayMs', 2000);
+        // Gemini/Codex CLIs take longer to start than Claude
+        const defaultDelay = cliType === 'claude' ? 2000 : 5000;
+        const promptDelayMs = config.get('session.promptInjectionDelayMs', defaultDelay);
         setTimeout(async () => {
           try {
             await safe.tmuxSendKeysAsync(tmux, prompt);
@@ -647,7 +647,7 @@ function registerCoreRoutes(
         }, promptDelayMs);
       }
 
-      resolveSessionId(tmpId, { tmux, sessionsDir: sessDir, existingFiles, projectId: proj.id });
+      resolveSessionId(tmpId, { tmux, sessionsDir: sessDir, existingFiles, projectId: proj.id, cliType });
       fireEvent('session_created', { session_id: tmpId, project });
       res.json({ id: tmpId, tmux, project, name: sessionName });
     } catch (err) {
@@ -678,7 +678,7 @@ function registerCoreRoutes(
       const termId = `t_${Date.now()}`;
       const tmux = tmuxName(termId);
       await enforceTmuxLimit();
-      safe.tmuxCreateBash(tmux, projectPath);
+      safe.tmuxCreateCLI(tmux, projectPath, 'bash');
       res.json({ id: termId, tmux, project, name: 'Terminal' });
     } catch (err) {
       logger.error('Error creating terminal', { module: 'routes', err: err.message });
@@ -709,20 +709,9 @@ function registerCoreRoutes(
         await ensureSettings();
         const session = db.getSession(sessionId);
         const cliType = session?.cli_type || 'claude';
-        switch (cliType) {
-          case 'gemini':
-            safe.tmuxCreateGemini(tmux, projectPath);
-            break;
-          case 'codex':
-            safe.tmuxCreateCodex(tmux, projectPath);
-            break;
-          case 'claude':
-          default: {
-            const claudeArgs = sessionId.startsWith('new_') ? [] : ['--resume', sessionId];
-            safe.tmuxCreateClaude(tmux, projectPath, claudeArgs);
-            break;
-          }
-        }
+        const resumeArgs = (cliType === 'claude' && !sessionId.startsWith('new_'))
+          ? ['--resume', sessionId] : [];
+        safe.tmuxCreateCLI(tmux, projectPath, cliType, resumeArgs);
         await sleep(1000);
       }
       res.json({ id: sessionId, tmux, project });
@@ -1237,7 +1226,10 @@ function registerCoreRoutes(
       if (!session) return res.status(404).json({ error: 'session not found' });
       const dbProj = db.getProject(session.project_name);
       const cwd = dbProj ? dbProj.path : WORKSPACE;
-      safe.tmuxCreateClaude(tmux, cwd);
+      const cliType = session.cli_type || 'claude';
+      const restartArgs = (cliType === 'claude' && !sessionId.startsWith('new_'))
+        ? ['--resume', sessionId] : [];
+      safe.tmuxCreateCLI(tmux, cwd, cliType, restartArgs);
       res.json({ ok: true, sessionId, tmux });
     } catch (err) {
       res.status(500).json({ error: err.message });

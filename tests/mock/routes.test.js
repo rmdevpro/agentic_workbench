@@ -166,6 +166,7 @@ function makeApp(overrides = {}) {
     safe: {
       resolveProjectPath: (n) => path.join(WORKSPACE, n),
       findSessionsDir: () => path.join(WORKSPACE, '.sessions'),
+      tmuxCreateCLI() {},
       tmuxCreateClaude() {},
       tmuxCreateBash() {},
       tmuxExists: existsFn,
@@ -1335,6 +1336,7 @@ test('SRCH-02: GET /api/search returns 500 when searchSessions throws', async ()
     safe: {
       resolveProjectPath: (n) => path.join(WORKSPACE2, n),
       findSessionsDir: () => path.join(WORKSPACE2, '.sessions'),
+      tmuxCreateCLI() {},
       tmuxCreateClaude() {},
       tmuxCreateBash() {},
       tmuxExists: async () => false,

@@ -132,20 +132,9 @@ async function ensureSessionTmux(session, projectPath) {
   const tmux = `bp_${safe.sanitizeTmuxName(session.id.substring(0, 12))}`;
   if (!(await safe.tmuxExists(tmux))) {
     const cliType = session.cli_type || 'claude';
-    switch (cliType) {
-      case 'gemini':
-        safe.tmuxCreateGemini(tmux, projectPath);
-        break;
-      case 'codex':
-        safe.tmuxCreateCodex(tmux, projectPath);
-        break;
-      case 'claude':
-      default: {
-        const claudeArgs = session.id.startsWith('new_') ? [] : ['--resume', session.id];
-        safe.tmuxCreateClaude(tmux, projectPath, claudeArgs);
-        break;
-      }
-    }
+    const cliArgs = (cliType === 'claude' && !session.id.startsWith('new_'))
+      ? ['--resume', session.id] : [];
+    safe.tmuxCreateCLI(tmux, projectPath, cliType, cliArgs);
     await new Promise(r => setTimeout(r, 1000));
   }
   return tmux;
@@ -164,11 +153,7 @@ async function handleSessions(args, res) {
       const projectPath = proj.path;
       const tmpId = `new_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
       const tmux = `bp_${safe.sanitizeTmuxName(tmpId.substring(0, 16))}`;
-      switch (cliType) {
-        case 'gemini': safe.tmuxCreateGemini(tmux, projectPath); break;
-        case 'codex': safe.tmuxCreateCodex(tmux, projectPath); break;
-        default: safe.tmuxCreateClaude(tmux, projectPath); break;
-      }
+      safe.tmuxCreateCLI(tmux, projectPath, cliType);
       db.upsertSession(tmpId, proj.id, args.prompt || 'New Session', cliType);
       return { session_id: tmpId, tmux, project: args.project, cli: cliType };
     }

@@ -1221,7 +1221,8 @@ build/**</textarea>
           overlay.remove();
           createTab(data.id, data.tmux, data.name, projectName);
 
-          // Poll for JSONL to appear
+          // Refresh sidebar immediately, then poll for session ID resolution
+          await loadState();
           const poll = setInterval(() => loadState(), 3000);
           setTimeout(() => clearInterval(poll), 30000);
         } catch (err) {
@@ -2192,7 +2193,59 @@ build/**</textarea>
           paneEl.innerHTML = `<div class="image-viewer"><img src="/api/file-raw?path=${encodeURIComponent(filePath)}"></div>`;
         } else if (editorType === 'pdf') {
           paneEl.innerHTML = `<iframe class="pdf-viewer" src="/api/file-raw?path=${encodeURIComponent(filePath)}"></iframe>`;
-        } else if (editorType === 'markdown' && typeof toastui !== 'undefined') {
+        } else {
+          // Add editor toolbar with Save / Save As buttons
+          const toolbar = document.createElement('div');
+          toolbar.className = 'editor-toolbar';
+          toolbar.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 8px;background:var(--bg-secondary);border-bottom:1px solid var(--border);flex-shrink:0';
+          toolbar.innerHTML = `
+            <span style="font-size:12px;color:var(--text-muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(filePath)}">${escHtml(filePath)}</span>
+            <button class="editor-save-btn" style="padding:4px 12px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;opacity:0.5" disabled>Save</button>
+            <button class="editor-saveas-btn" style="padding:4px 12px;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:12px">Save As...</button>
+          `;
+          paneEl.appendChild(toolbar);
+
+          const saveBtn = toolbar.querySelector('.editor-save-btn');
+          const saveAsBtn = toolbar.querySelector('.editor-saveas-btn');
+
+          // Wire Save button
+          saveBtn.addEventListener('click', () => saveFileTab(tabId));
+
+          // Wire Save As button
+          saveAsBtn.addEventListener('click', async () => {
+            const newPath = prompt('Save as:', tab.filePath);
+            if (!newPath || !newPath.trim()) return;
+            let content;
+            if (tab.editorType === 'markdown' && tab.editor && tab.editor.getMarkdown) {
+              content = tab.editor.getMarkdown();
+            } else if (tab.editor && tab.editor.state) {
+              content = tab.editor.state.doc.toString();
+            } else return;
+            try {
+              await fetch('/api/file?path=' + encodeURIComponent(newPath.trim()), {
+                method: 'PUT',
+                headers: { 'Content-Type': 'text/plain' },
+                body: content,
+              });
+              tab.filePath = newPath.trim();
+              tab.name = newPath.trim().split('/').pop();
+              tab.dirty = false;
+              toolbar.querySelector('span').textContent = newPath.trim();
+              toolbar.querySelector('span').title = newPath.trim();
+              renderTabs();
+            } catch (err) {
+              alert('Save As failed: ' + err.message);
+            }
+          });
+
+          // Track dirty state to enable/disable Save button
+          const updateSaveBtn = () => {
+            saveBtn.disabled = !tab.dirty;
+            saveBtn.style.opacity = tab.dirty ? '1' : '0.5';
+          };
+          tab._updateSaveBtn = updateSaveBtn;
+
+        if (editorType === 'markdown' && typeof toastui !== 'undefined') {
           const res = await fetch('/api/file?path=' + encodeURIComponent(filePath));
           const content = await res.text();
           const editorDiv = document.createElement('div');
@@ -2208,7 +2261,7 @@ build/**</textarea>
           });
           tab.editor = editor;
           editor.on('change', () => {
-            if (!tab.dirty) { tab.dirty = true; renderTabs(); }
+            if (!tab.dirty) { tab.dirty = true; renderTabs(); if (tab._updateSaveBtn) tab._updateSaveBtn(); }
           });
           // Ctrl+S save
           editorDiv.addEventListener('keydown', (e) => {
@@ -2230,7 +2283,7 @@ build/**</textarea>
             CM.oneDark,
             CM.keymap.of([{ key: 'Mod-s', run: () => { saveFileTab(tabId); return true; } }]),
             CM.EditorView.updateListener.of(update => {
-              if (update.docChanged && !tab.dirty) { tab.dirty = true; renderTabs(); }
+              if (update.docChanged && !tab.dirty) { tab.dirty = true; renderTabs(); if (tab._updateSaveBtn) tab._updateSaveBtn(); }
             }),
           ];
           if (lang) extensions.push(lang);
@@ -2238,6 +2291,7 @@ build/**</textarea>
           const editor = new CM.EditorView({ state, parent: editorDiv });
           tab.editor = editor;
         }
+        } // end toolbar else block
       } catch (err) {
         paneEl.innerHTML = `<div style="padding:24px;color:var(--danger)">Error loading file: ${escHtml(err.message)}</div>`;
       }
@@ -2265,6 +2319,7 @@ build/**</textarea>
         });
         tab.dirty = false;
         renderTabs();
+        if (tab._updateSaveBtn) tab._updateSaveBtn();
       } catch (err) {
         alert('Save failed: ' + err.message);
       }
