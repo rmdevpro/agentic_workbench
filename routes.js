@@ -522,6 +522,10 @@ function registerCoreRoutes(
           for (const file of sessionFiles) {
             if (!file.endsWith('.jsonl')) continue;
             const sessionId = basename(file, '.jsonl');
+            // Skip JSONL files that belong to non-Claude sessions (Gemini/Codex UUIDs
+            // may end up here as empty files — don't overwrite their DB records)
+            const existing = db.getSession(sessionId);
+            if (existing && existing.cli_type && existing.cli_type !== 'claude') continue;
             const fileMeta = await sessionUtils.parseSessionFile(join(sessDir, file));
             if (fileMeta) db.upsertSession(sessionId, project.id, fileMeta.name);
           }

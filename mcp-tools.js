@@ -192,7 +192,8 @@ async function handleSessions(args, res) {
         return res.status(400).json({ error: 'session_id required' });
       const session = db.getSessionFull(args.session_id);
       if (!session) return { error: 'session not found' };
-      const tmux = `bp_${safe.sanitizeTmuxName(args.session_id.substring(0, 12))}`;
+      const killHash = crypto.createHash('md5').update(args.session_id).digest('hex').substring(0, 4);
+      const tmux = safe.sanitizeTmuxName(`bp_${args.session_id.substring(0, 12)}_${killHash}`);
       // Kill existing tmux session
       await safe.tmuxKill(tmux);
       // Recreate
