@@ -800,7 +800,12 @@ function registerCoreRoutes(
           resumeArgs = ['resume', '--last'];
         }
         safe.tmuxCreateCLI(tmux, projectPath, cliType, resumeArgs);
-        await sleep(1000);
+        // Wait for CLI to start — resume with JSONL loading takes longer than fresh start
+        await sleep(3000);
+        // Verify tmux actually started
+        if (!(await tmuxExists(tmux))) {
+          return res.status(503).json({ error: 'Session failed to start. The CLI may have exited.' });
+        }
       }
       res.json({ id: sessionId, tmux, project });
     } catch (err) {
