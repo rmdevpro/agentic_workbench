@@ -871,7 +871,7 @@ build/**</textarea>
     const expandedProjects = new Set(JSON.parse(localStorage.getItem('expandedProjects') || '[]'));
     let _lastClickedProjectPath = null;
     const HEARTBEAT_MS = 30000;
-    const REFRESH_MS = 30000;
+    const REFRESH_MS = 10000;
     const MAX_RECONNECT_DELAY = 30000;
     let _settingsCache = {};
     function db_getSetting(key) { return _settingsCache[key] || null; }
@@ -1488,6 +1488,9 @@ build/**</textarea>
               if (msg.type === 'token_update') {
                 tab._statusData = msg.data;
                 if (tabId === activeTabId) updateStatusBar();
+                // Debounced sidebar refresh on token updates (e.g. after compaction)
+                clearTimeout(window._tokenRefreshTimer);
+                window._tokenRefreshTimer = setTimeout(loadState, 2000);
                 return;
               }
               if (msg.type === 'settings_update') {
