@@ -19,8 +19,10 @@ module.exports = function createTmuxLifecycle({
   const SCAN_INTERVAL_MS = 60 * 1000;                // check every 60 seconds
 
   function tmuxName(sessionId) {
-    const rand = Math.random().toString(36).substring(2, 6);
-    return safe.sanitizeTmuxName(`bp_${sessionId.substring(0, 12)}_${rand}`);
+    // Deterministic suffix from session ID to prevent collisions while remaining predictable
+    const crypto = require('crypto');
+    const hash = crypto.createHash('md5').update(sessionId).digest('hex').substring(0, 4);
+    return safe.sanitizeTmuxName(`bp_${sessionId.substring(0, 12)}_${hash}`);
   }
 
   async function tmuxExists(name) {
