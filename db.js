@@ -56,6 +56,11 @@ try {
   /* column exists */
 }
 try {
+  db.exec("ALTER TABLE session_meta ADD COLUMN model TEXT DEFAULT ''");
+} catch (_e) {
+  /* column exists */
+}
+try {
   db.exec("ALTER TABLE tasks ADD COLUMN folder_path TEXT NOT NULL DEFAULT '/'");
 } catch (_e) {
   /* column exists or table doesn't exist yet */
@@ -215,14 +220,15 @@ const stmts = {
   getSessionMeta: db.prepare('SELECT * FROM session_meta WHERE session_id = ?'),
   getSessionMetaByPath: db.prepare('SELECT * FROM session_meta WHERE file_path = ?'),
   upsertSessionMeta: db.prepare(`
-    INSERT INTO session_meta (session_id, file_path, file_mtime, file_size, name, timestamp, message_count)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO session_meta (session_id, file_path, file_mtime, file_size, name, timestamp, message_count, model)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(session_id) DO UPDATE SET
       file_mtime = excluded.file_mtime,
       file_size = excluded.file_size,
       name = excluded.name,
       timestamp = excluded.timestamp,
-      message_count = excluded.message_count
+      message_count = excluded.message_count,
+      model = excluded.model
   `),
   deleteSessionMeta: db.prepare('DELETE FROM session_meta WHERE session_id = ?'),
 
@@ -392,8 +398,8 @@ module.exports = {
   getSessionMetaByPath(filePath) {
     return stmts.getSessionMetaByPath.get(filePath);
   },
-  upsertSessionMeta(sessionId, filePath, mtime, size, name, timestamp, messageCount) {
-    stmts.upsertSessionMeta.run(sessionId, filePath, mtime, size, name, timestamp, messageCount);
+  upsertSessionMeta(sessionId, filePath, mtime, size, name, timestamp, messageCount, model) {
+    stmts.upsertSessionMeta.run(sessionId, filePath, mtime, size, name, timestamp, messageCount, model || '');
   },
   deleteSessionMeta(sessionId) {
     stmts.deleteSessionMeta.run(sessionId);

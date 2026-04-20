@@ -27,6 +27,7 @@ async function parseSessionFile(filepath) {
         name: cached.name || 'Untitled Session',
         timestamp: cached.timestamp || new Date().toISOString(),
         messageCount: cached.message_count || 0,
+        model: cached.model || null,
       };
     }
 
@@ -35,6 +36,7 @@ async function parseSessionFile(filepath) {
     let name = null;
     let timestamp = null;
     let messageCount = 0;
+    let model = null;
 
     for (const line of lines) {
       try {
@@ -52,6 +54,9 @@ async function parseSessionFile(filepath) {
         }
         if (entry.type === 'user' || entry.type === 'assistant') {
           messageCount++;
+        }
+        if (entry.type === 'assistant' && entry.message?.model) {
+          model = entry.message.model;
         }
         if (entry.timestamp) {
           timestamp = entry.timestamp;
@@ -71,6 +76,7 @@ async function parseSessionFile(filepath) {
       name: name || 'Untitled Session',
       timestamp: timestamp || new Date().toISOString(),
       messageCount,
+      model: model || null,
     };
 
     db.upsertSessionMeta(
@@ -81,6 +87,7 @@ async function parseSessionFile(filepath) {
       result.name,
       result.timestamp,
       result.messageCount,
+      result.model || '',
     );
     return result;
   } catch (err) {
