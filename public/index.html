@@ -1108,16 +1108,7 @@ build/**</textarea>
               })()}
               <span>${timeAgo(session.timestamp)}</span>
               <span class="msg-count">${session.messageCount}</span>
-              <span style="font-size:9px;color:var(--text-muted);margin-left:2px">${escHtml((() => {
-                const m = session.model || '';
-                if (!m) return '';
-                if (m.includes('opus')) return 'opus';
-                if (m.includes('sonnet')) return 'sonnet';
-                if (m.includes('haiku')) return 'haiku';
-                if (m.includes('gemini')) return m.replace('models/', '').replace('gemini-', '');
-                if (m.includes('gpt')) return m;
-                return m.length > 15 ? m.substring(0, 15) : m;
-              })())}</span>
+              <span style="font-size:9px;color:var(--text-muted);margin-left:2px">${escHtml(session.model || '')}</span>
             </div>
           `;
           item.addEventListener('click', (e) => {
