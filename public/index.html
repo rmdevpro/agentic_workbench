@@ -2430,10 +2430,11 @@ build/**</textarea>
       // Collapse all currently expanded directories
       $(treeEl).find('li.expanded > a').each(function() { $(this).click(); });
 
-      // Expand mount that contains the target
-      const mountHeaders = treeEl.querySelectorAll('[style*="cursor:pointer"]');
-      for (const h of mountHeaders) {
-        const mountPath = h.textContent.replace(/[▶▼]/g, '').trim();
+      // Expand mount that contains the target — find headers by their mount-arrow child
+      const mountSections = treeEl.querySelectorAll('.mount-arrow');
+      for (const arrow of mountSections) {
+        const h = arrow.parentElement;
+        const mountPath = h.textContent.replace(/[▶▼▸▾]/g, '').trim();
         if (!target.startsWith(mountPath)) {
           // Collapse this mount if expanded
           const container = h.nextElementSibling;
