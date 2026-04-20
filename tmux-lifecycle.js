@@ -47,11 +47,20 @@ module.exports = function createTmuxLifecycle({
    */
   async function periodicScan() {
     try {
-      const stdout = await safe.tmuxExecAsync([
-        'list-sessions',
-        '-F',
-        '#{session_name} #{session_activity}',
-      ]);
+      let stdout;
+      try {
+        stdout = await safe.tmuxExecAsync([
+          'list-sessions',
+          '-F',
+          '#{session_name} #{session_activity}',
+        ]);
+      } catch (err) {
+        if (err.message && (err.message.includes('no server running') || err.message.includes('error connecting to'))) {
+          logger.warn('tmux server not running — no sessions to scan', { module: 'tmux-lifecycle' });
+          return;
+        }
+        throw err;
+      }
       const now = Math.floor(Date.now() / 1000);
       const sessions = stdout
         .trim()

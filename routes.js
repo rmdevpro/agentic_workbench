@@ -640,6 +640,10 @@ function registerCoreRoutes(
         const promptDelayMs = config.get('session.promptInjectionDelayMs', defaultDelay);
         setTimeout(async () => {
           try {
+            if (!(await tmuxExists(tmux))) {
+              logger.warn('Session died before prompt could be sent', { module: 'routes', tmux, tmpId: tmpId.substring(0, 15) });
+              return;
+            }
             await safe.tmuxSendKeysAsync(tmux, prompt);
           } catch (err) {
             logger.error('Failed to send initial prompt', { module: 'routes', err: err.message });
