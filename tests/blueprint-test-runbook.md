@@ -638,38 +638,37 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 
 ---
 
-#### FEAT-04: Panel - Tasks Tab
-**Source:** BRW-11 (task CRUD)
+#### FEAT-04: Panel - Tasks Tab (Filesystem Tree)
+**Source:** BRW-11, #88, #93
 **Priority:** P1
 
 **Steps:**
-1. `browser_click` on `[data-panel="tasks"]`
-2. `browser_evaluate`: `document.querySelector('#panel-tasks').style.display !== 'none'`
-3. `browser_type` into `#add-task-input`: `Test task from runbook`
-4. `browser_press_key` with key `Enter`
-5. `browser_wait` 500
-6. `browser_evaluate`: `document.querySelectorAll('.task-item').length`
-7. `browser_evaluate`: `document.querySelector('.task-item:last-child .task-text')?.textContent`
-8. Check the task checkbox: `browser_click` on `.task-item:last-child .task-checkbox`
-9. `browser_wait` 500
-10. `browser_evaluate`: `document.querySelector('.task-item:last-child').classList.contains('done')`
-11. Delete task: `browser_click` on `.task-item:last-child .task-delete`
-12. `browser_wait` 500
-13. Verify via API: `browser_evaluate`: `fetch('/api/projects/PROJECT_NAME/tasks').then(r=>r.json())`
+1. `browser_evaluate`: `switchPanel('tasks')`
+2. `browser_evaluate`: `document.querySelector('#task-tree').children.length > 0` — tree has mounts
+3. Expand workspace mount by clicking mount header arrow
+4. `browser_evaluate`: `document.querySelectorAll('.task-folder').length > 0` — folders visible
+5. Right-click a folder label → context menu shows "Add Task" and "New Folder"
+6. Add a task via API: `POST /api/mcp/call {tool:'blueprint_tasks', args:{action:'add', folder_path:'/data/workspace/...', title:'Runbook test'}}`
+7. Reload task tree, expand folder → task visible as `.task-node` with checkbox
+8. Click task checkbox → `browser_evaluate`: task status changes to 'done' in DB
+9. Click task ✕ button → task removed from tree and DB
+10. Switch to Files panel and back → expanded folders preserved
 
 **Expected:**
-- Task list shows added task
-- Checking checkbox marks task as done (`.done` class)
-- Delete button removes the task
-- API reflects task state
+- Task tree shows real filesystem folders from /api/mounts
+- Context menu on folder: Add Task, New Folder
+- Context menu on task: Edit, Complete, Archive, Delete
+- Checkbox completes task
+- Delete removes task
+- Expand state preserved across panel switches
 
 **Verify:**
-- Task text matches "Test task from runbook"
-- Done class applied after check
-- Task removed after delete
+- `.task-folder` elements exist with folder names
+- `.task-node` elements show task title and checkbox
+- API confirms task status changes
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
-**Notes:** Task add/check/delete all work. .done class applied on check. API confirmed empty task list after delete.
+**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Notes:**
 
 ---
 
@@ -2597,17 +2596,23 @@ Ask CLI, Quorum, Guides, Skills, and Prompts tests removed — features deleted 
 
 ## Phase 11: New Features v2 (NF-69 through NF-78)
 
-### NF-69: File Editor Save Button
-**Action:** Open a file in the file browser (double-click). Verify the tab has a save button (💾).
+### NF-69: File Editor Save and Save As Toolbar
+**Action:** Open a file in the file browser (double-click). Verify editor toolbar with Save and Save As buttons.
 **Steps:**
 1. Open right panel → Files tab
-2. Double-click any file to open it in a tab
-3. `browser_evaluate`: `document.querySelector('.tab-save') !== null`
-4. Make a change in the editor
-5. `browser_evaluate`: Check save button is highlighted: `document.querySelector('.tab-save').style.color` should contain accent color
-6. Click the save button
-7. `browser_evaluate`: After save, button should return to muted color
-**Verify:** Save button exists, highlights on dirty, saves on click.
+2. Double-click any text/code/markdown file to open it in a tab
+3. `browser_evaluate`: `document.querySelector('.editor-toolbar') !== null` — toolbar exists
+4. `browser_evaluate`: `document.querySelector('.editor-save-btn') !== null` — Save button exists
+5. `browser_evaluate`: `document.querySelector('.editor-saveas-btn') !== null` — Save As button exists
+6. `browser_evaluate`: Save button disabled when clean: `document.querySelector('.editor-save-btn').disabled === true`
+7. Make an edit in the editor
+8. `browser_evaluate`: Save button enabled: `document.querySelector('.editor-save-btn').disabled === false`
+9. `browser_evaluate`: Tab has dirty indicator: `document.querySelector('.tab-dirty') !== null`
+10. Click Save button
+11. `browser_evaluate`: Save button disabled again, dirty cleared
+12. Verify file content on disk matches edit
+13. Open an image file → `browser_evaluate`: No `.editor-toolbar` in the image pane
+**Verify:** Toolbar with Save/Save As for text editors. Save disabled when clean, enabled when dirty. Image files have no toolbar.
 
 ---
 
@@ -2711,6 +2716,140 @@ Ask CLI, Quorum, Guides, Skills, and Prompts tests removed — features deleted 
 3. Create a Terminal session → verify tab opens with bash
 4. `browser_evaluate`: Check CLI type indicators in sidebar: `document.querySelectorAll('.session-item').length`
 **Verify:** All 4 session types can be created. CLI type indicator (C/G/X) shows correctly.
+
+---
+
+## Phase 12: Comprehensive Feature Verification (32 blocks)
+
+Covers all fixes and features from issues #87, #93-#102. Automated tests in `tests/browser/multi-cli-and-editors.spec.js`.
+
+### SESS-01: CLI Type Dropdown
+**Action:** Click + on a project header.
+**Verify:** Dropdown shows C Claude, G Gemini, X Codex, Terminal.
+
+### SESS-02: Session Creation Modal
+**Action:** Select Claude from dropdown.
+**Verify:** Modal with prompt textarea and Start Session button.
+
+### SESS-03: Session Creation End-to-End
+**Action:** Type prompt, click Start Session.
+**Verify:** Tab opens, terminal connects, session appears in sidebar.
+
+### SESS-04: Gemini Session via API
+**Action:** `POST /api/sessions {project, prompt, cli_type:'gemini'}`
+**Verify:** Returns session with cli_type gemini. Appears in /api/state.
+
+### SESS-05: Gemini Session Persistence
+**Action:** Create Gemini session, wait 6 seconds.
+**Verify:** Session still in /api/state (not cleaned up by reconciler).
+
+### SESS-06: CLI Type Indicators
+**Action:** Create Claude and Gemini sessions.
+**Verify:** Sidebar shows C (claude) and G (gemini) indicators with correct titles.
+
+### SESS-07: Codex Session Creation
+**Action:** `POST /api/sessions {project, prompt, cli_type:'codex'}`
+**Verify:** Codex CLI launches in tmux. Session in state with cli_type codex.
+
+### SESS-08: Empty Prompt Rejected
+**Action:** Open new session modal, click Start Session without typing.
+**Verify:** Modal stays open, no session created, textarea focused.
+
+### SESS-09: Sidebar Click Opens Session
+**Action:** Click existing session in sidebar.
+**Verify:** Tab opens, terminal connects to tmux session.
+
+### EDIT-01: Editor Toolbar Present
+**Action:** Double-click a file to open.
+**Verify:** `.editor-toolbar` with Save and Save As buttons visible.
+
+### EDIT-02: Save Button Dirty Tracking
+**Action:** Open file, check Save disabled. Edit file, check Save enabled.
+**Verify:** Save disabled when clean, enabled when dirty.
+
+### EDIT-03: Save Persists File
+**Action:** Edit file, click Save, read file from disk.
+**Verify:** File content matches edit. Dirty reset to false.
+
+### EDIT-04: CodeMirror for Code Files
+**Action:** Open .js file.
+**Verify:** CodeMirror editor loads with `.cm-editor`, toolbar present.
+
+### EDIT-05: Toast UI for Markdown
+**Action:** Open .md file.
+**Verify:** Toast UI WYSIWYG editor loads, toolbar present.
+
+### EDIT-06: No Toolbar for Images
+**Action:** Open .png file.
+**Verify:** Image viewer renders, no `.editor-toolbar` in pane.
+
+### EDIT-07: Close Dirty Tab Confirm
+**Action:** Edit file, close tab.
+**Verify:** Confirm dialog appears. Cancel keeps tab open.
+
+### TASK-01: Filesystem Tree
+**Action:** Switch to Tasks panel.
+**Verify:** `#task-tree` shows workspace folders from /api/mounts.
+
+### TASK-02: Folder Context Menu
+**Action:** Right-click a folder in task tree.
+**Verify:** Context menu with "Add Task" and "New Folder".
+
+### TASK-03: Task Creation
+**Action:** Add task via context menu or API.
+**Verify:** Task appears in tree with checkbox and title.
+
+### TASK-04: Task Checkbox Complete
+**Action:** Click task checkbox.
+**Verify:** Task status changes to 'done' in DB.
+
+### TASK-05: Task Delete
+**Action:** Click task ✕ button.
+**Verify:** Task removed from tree and DB.
+
+### TASK-06: Expand State Preserved
+**Action:** Expand folder, switch to Files panel, switch back.
+**Verify:** Folder still expanded.
+
+### CONN-01: Connect by Name Query
+**Action:** `blueprint_sessions action=connect query="session name"`
+**Verify:** Returns session_id, tmux, cli.
+
+### CONN-02: Restart Session
+**Action:** `blueprint_sessions action=restart session_id=...`
+**Verify:** Returns restarted:true. New tmux session created.
+
+### MCP-01 through MCP-06: MCP Tool Actions
+**Action:** Test all 32 MCP actions across 3 tools.
+**Verify:** Each returns expected result. See `multi-cli-and-editors.spec.js`.
+
+### MCP-07: MCP Registry Lifecycle
+**Action:** Register → list → enable → list_enabled → disable → unregister.
+**Verify:** Full lifecycle works. Registry empty after unregister.
+
+### KEEP-01: Keepalive Running
+**Action:** Check server logs after startup.
+**Verify:** Token expiry detected, next check scheduled.
+
+### QDRANT-01: Semantic Search
+**Action:** `blueprint_files action=search_documents query="deployment"`
+**Verify:** Returns ranked results with scores when embeddings configured.
+
+### PROMPT-01: Claude System Prompt
+**Action:** Read `/data/.claude/CLAUDE.md`.
+**Verify:** Has Identity, Purpose, Resources sections. Identifies as Claude.
+
+### PROMPT-02: Gemini System Prompt
+**Action:** Read `/data/.claude/GEMINI.md`.
+**Verify:** Has Identity, Purpose, Resources sections. Identifies as Gemini.
+
+### PROMPT-03: Codex System Prompt
+**Action:** Read `/data/.claude/AGENTS.md`.
+**Verify:** Has Identity, Purpose, Resources sections. Identifies as Codex.
+
+### PROMPT-04: HHH Purpose Statement
+**Action:** Read all three system prompts.
+**Verify:** All contain: "You must be helpful, harmless, and honest towards the user."
 
 ---
 

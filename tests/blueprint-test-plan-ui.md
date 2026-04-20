@@ -768,16 +768,57 @@ Note: Functions from server-side files (`mcp-server.js`, `server.js`, `scripts/p
 
 Notes panel removed from right panel. Project notes are now in the project config modal. NTS-01..04 permanently removed.
 
-### 7.19 Tasks Panel (`tasks-panel.spec.js`)
+### 7.19 Tasks Panel — Filesystem Tree (`task-tree.spec.js`, `multi-cli-and-editors.spec.js`)
 
 | ID | Scenario | Layer | Input | Expected Outcome | Gray-Box |
 |----|----------|-------|-------|-------------------|----------|
-| TSK-01 | Task list loads from server | Live | Open panel, Tasks tab | `#task-list` contains `.task-item` elements | -- |
-| TSK-02 | Add task via Enter | Live | Type text, press Enter | POST; task appears; input cleared | DB has new row |
-| TSK-03 | Complete task | Live | Click checkbox on pending task | PUT to complete; `.done` class added; line-through | -- |
-| TSK-04 | Reopen task | Live | Uncheck completed task | PUT to reopen; `.done` removed | -- |
-| TSK-05 | Delete task | Live | Hover task, click delete | DELETE; task removed from list | -- |
-| TSK-06 | Empty input no-op | Live | Press Enter with empty input | No POST, no task added | -- |
+| TSK-01 | Task tree loads filesystem folders | Live | Open panel, Tasks tab | `#task-tree` shows folders from /api/mounts | -- |
+| TSK-02 | Expand folder shows subfolders | Live | Click folder arrow | Subfolders and tasks appear; arrow rotates 90deg | -- |
+| TSK-03 | Right-click folder shows context menu | Live | Right-click `.task-folder-label` | Menu with "Add Task" and "New Folder" | -- |
+| TSK-04 | Add task via context menu | Live | Add Task → enter title | Task created in DB, appears in tree as `.task-node` | DB has new row |
+| TSK-05 | Complete task via checkbox | Live | Click checkbox on `.task-node` | PUT to complete; status='done' in DB | -- |
+| TSK-06 | Delete task via ✕ button | Live | Click `.task-delete` | DELETE; task removed from tree and DB | -- |
+| TSK-07 | Right-click task shows context menu | Live | Right-click `.task-node` | Menu with Edit, Complete, Archive, Delete | -- |
+| TSK-08 | Task badge count on folders | Live | Add tasks to folder | Badge shows count next to folder name | -- |
+| TSK-09 | Expand state preserved on panel switch | Live | Expand folder, switch to Files, switch back | Folder still expanded | -- |
+
+### 7.19b File Editors — Save/Save As (`multi-cli-and-editors.spec.js`)
+
+| ID | Scenario | Layer | Input | Expected Outcome | Gray-Box |
+|----|----------|-------|-------|-------------------|----------|
+| EDT-01 | Editor toolbar present for text files | Live | Double-click .js/.md file | `.editor-toolbar` with Save and Save As buttons | -- |
+| EDT-02 | Save disabled when clean | Live | Open file, check button | `.editor-save-btn` disabled, opacity 0.5 | -- |
+| EDT-03 | Save enabled when dirty | Live | Edit file content | `.editor-save-btn` enabled, opacity 1 | -- |
+| EDT-04 | Save persists file to disk | Live | Edit, click Save | File content on disk matches edit; dirty reset | -- |
+| EDT-05 | Tab dirty indicator | Live | Edit file | `.tab-dirty` class on tab element | -- |
+| EDT-06 | Close dirty tab shows confirm | Live | Edit, close tab | `confirm()` dialog, cancel keeps tab | -- |
+| EDT-07 | No toolbar for images | Live | Open .png file | No `.editor-toolbar` in image pane | -- |
+| EDT-08 | CodeMirror for code files | Live | Open .js file | `.cm-editor` rendered | -- |
+| EDT-09 | Toast UI for markdown | Live | Open .md file | `.toastui-editor-defaultUI` rendered | -- |
+
+### 7.19c Multi-CLI Sessions (`multi-cli-and-editors.spec.js`)
+
+| ID | Scenario | Layer | Input | Expected Outcome | Gray-Box |
+|----|----------|-------|-------|-------------------|----------|
+| CLI-01 | + dropdown shows all CLI types | Live | Click + on project | C Claude, G Gemini, X Codex, Terminal | -- |
+| CLI-02 | Create Claude session | Live | + → Claude → prompt → Start | Tab opens, terminal connects, cli_type='claude' | -- |
+| CLI-03 | Create Gemini session | Live | POST /api/sessions cli_type=gemini | Session in state with cli_type='gemini', active | -- |
+| CLI-04 | Create Codex session | Live | POST /api/sessions cli_type=codex | Codex CLI launches, session in state | -- |
+| CLI-05 | Gemini session persists | Live | Create, wait 6s | Session not cleaned up by reconciler | -- |
+| CLI-06 | CLI type indicators in sidebar | Live | Create mixed sessions | C/G/X badges with correct titles | -- |
+| CLI-07 | Empty prompt rejected | Live | Submit with empty textarea | Modal stays, no session created | -- |
+| CLI-08 | Sidebar click opens session | Live | Click session in sidebar | Tab opens, terminal connects | -- |
+| CLI-09 | Connect by name query | Live | MCP connect action with query | Returns matching session | -- |
+| CLI-10 | Restart preserves CLI type | Live | MCP restart Codex session | Returns restarted:true, cli:'codex' | -- |
+
+### 7.19d System Prompts (`multi-cli-and-editors.spec.js`)
+
+| ID | Scenario | Layer | Input | Expected Outcome | Gray-Box |
+|----|----------|-------|-------|-------------------|----------|
+| PMP-01 | CLAUDE.md seeded | Live | Read /data/.claude/CLAUDE.md | Has Identity, Purpose, Resources sections | -- |
+| PMP-02 | GEMINI.md seeded | Live | Read /data/.claude/GEMINI.md | Has Identity, Purpose, Resources; identifies Gemini | -- |
+| PMP-03 | AGENTS.md seeded | Live | Read /data/.claude/AGENTS.md | Has Identity, Purpose, Resources; identifies Codex | -- |
+| PMP-04 | HHH purpose shared | Live | Read all three | All contain "helpful, harmless, and honest" | -- |
 
 ### 7.20 Messages Panel — REMOVED
 
