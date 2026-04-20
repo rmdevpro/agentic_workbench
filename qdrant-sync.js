@@ -677,6 +677,10 @@ function watchDir(dir, syncFn) {
   if (!existsSync(dir)) return;
   try {
     const watcher = watch(dir, { recursive: true }, () => scheduleSync(syncFn));
+    watcher.on('error', (err) => {
+      if (err.code === 'ENOENT') return; // subdirectory deleted — expected
+      logger.error(`Watcher error on ${dir}`, { module: 'qdrant-sync', err: err.message });
+    });
     _watchers.push(watcher);
     logger.info(`Watching ${dir} for Qdrant sync`, { module: 'qdrant-sync' });
   } catch (err) {

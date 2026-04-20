@@ -50,7 +50,7 @@ function registerCoreRoutes(
     fireEvent,
     logger,
     tmuxName,
-    tmuxExists: _tmuxExists,
+    tmuxExists,
     enforceTmuxLimit,
     resolveSessionId,
     getBrowserCount,
