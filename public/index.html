@@ -1741,6 +1741,7 @@ build/**</textarea>
     let selectedTaskFolder = '/';
     let editingTaskId = null;
     let taskTreeData = null;
+    const expandedTaskFolders = new Set();
 
     function setTaskFilter(filter) {
       taskFilter = filter;
@@ -1795,6 +1796,7 @@ build/**</textarea>
             if (treeContainer.style.display === 'none') {
               treeContainer.style.display = '';
               arrow.style.transform = 'rotate(90deg)';
+              expandedTaskFolders.add(mount.path);
               selectedTaskFolder = mount.path;
               if (!treeContainer.dataset.loaded) {
                 treeContainer.dataset.loaded = '1';
@@ -1803,8 +1805,17 @@ build/**</textarea>
             } else {
               treeContainer.style.display = 'none';
               arrow.style.transform = '';
+              expandedTaskFolders.delete(mount.path);
             }
           });
+
+          // Auto-expand if was previously expanded
+          if (expandedTaskFolders.has(mount.path)) {
+            treeContainer.style.display = '';
+            header.querySelector('.mount-arrow').style.transform = 'rotate(90deg)';
+            treeContainer.dataset.loaded = '1';
+            _loadTaskFolder(mount.path, treeContainer);
+          }
 
           // Drop on mount root
           header.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
@@ -1878,6 +1889,7 @@ build/**</textarea>
             if (childContainer.style.display === 'none') {
               childContainer.style.display = '';
               li.querySelector('.folder-arrow').style.transform = 'rotate(90deg)';
+              expandedTaskFolders.add(childPath);
               if (!childContainer.dataset.loaded) {
                 childContainer.dataset.loaded = '1';
                 await _loadTaskFolder(childPath, childContainer);
@@ -1885,8 +1897,17 @@ build/**</textarea>
             } else {
               childContainer.style.display = 'none';
               li.querySelector('.folder-arrow').style.transform = '';
+              expandedTaskFolders.delete(childPath);
             }
           });
+
+          // Auto-expand if was previously expanded
+          if (expandedTaskFolders.has(childPath)) {
+            childContainer.style.display = '';
+            li.querySelector('.folder-arrow').style.transform = 'rotate(90deg)';
+            childContainer.dataset.loaded = '1';
+            _loadTaskFolder(childPath, childContainer);
+          }
 
           // Context menu on folder
           li.querySelector('.task-folder-label').addEventListener('contextmenu', (e) => {
@@ -1937,16 +1958,18 @@ build/**</textarea>
         <button class="task-delete" title="Delete">&#10005;</button>
       `;
       li.querySelector('input[type=checkbox]').addEventListener('change', async (e) => {
+        const newStatus = e.target.checked ? 'done' : 'todo';
         await fetch(`/api/tasks/${task.id}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: e.target.checked ? 'done' : 'todo' }),
+          body: JSON.stringify({ status: newStatus }),
         });
-        loadTaskTree();
+        li.classList.toggle('done', newStatus === 'done');
+        task.status = newStatus;
       });
       li.querySelector('.task-delete').addEventListener('click', async (e) => {
         e.stopPropagation();
         await fetch(`/api/tasks/${task.id}`, { method: 'DELETE' });
-        loadTaskTree();
+        li.remove();
       });
       li.addEventListener('dblclick', () => openTaskDetail(task.id));
       // Context menu on task
@@ -2040,22 +2063,24 @@ build/**</textarea>
               method: 'PUT', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ status: 'done' }),
             });
-            loadTaskTree();
+            const node = document.querySelector(`.task-node[data-task-id="${task.id}"]`);
+            if (node) { node.classList.add('done'); node.querySelector('input[type=checkbox]').checked = true; }
           } else if (action === 'reopen') {
             await fetch(`/api/tasks/${task.id}`, {
               method: 'PUT', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ status: 'todo' }),
             });
-            loadTaskTree();
+            const node = document.querySelector(`.task-node[data-task-id="${task.id}"]`);
+            if (node) { node.classList.remove('done'); node.querySelector('input[type=checkbox]').checked = false; }
           } else if (action === 'archive') {
             await fetch(`/api/tasks/${task.id}`, {
               method: 'PUT', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ status: 'archived' }),
             });
-            loadTaskTree();
+            document.querySelector(`.task-node[data-task-id="${task.id}"]`)?.remove();
           } else if (action === 'delete') {
             await fetch(`/api/tasks/${task.id}`, { method: 'DELETE' });
-            loadTaskTree();
+            document.querySelector(`.task-node[data-task-id="${task.id}"]`)?.remove();
           }
         });
       });
@@ -2118,14 +2143,16 @@ build/**</textarea>
       const projData = projectState.find(p => p.name === project);
       if (!projData) return;
       const projPath = projData.path || '';
-      // Expand folders matching the project path
-      document.querySelectorAll('#task-tree .task-folder').forEach(f => {
-        const label = f.querySelector('.task-folder-label span:nth-child(3)');
-        if (label && projPath.includes(label.textContent)) {
-          f.classList.remove('collapsed');
-          f.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-      });
+      if (!projPath) return;
+      // Add all path segments to expandedTaskFolders so they auto-expand on reload
+      const parts = projPath.split('/').filter(Boolean);
+      let current = '';
+      for (const part of parts) {
+        current += '/' + part;
+        expandedTaskFolders.add(current);
+      }
+      selectedTaskFolder = projPath;
+      loadTaskTree();
     }
 
     // Add-task-input removed — tasks are now added via right-click context menu on folders
