@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const fs = require('fs');
 const { readFile, readdir } = require('fs/promises');
 const { join, basename, resolve, relative, sep } = require('path');
@@ -129,7 +130,6 @@ async function handleFiles(args, res) {
 // ── blueprint_sessions ───────────────────────────────────────────────────────
 
 async function ensureSessionTmux(session, projectPath) {
-  const crypto = require('crypto');
   const hash = crypto.createHash('md5').update(session.id).digest('hex').substring(0, 4);
   const tmux = safe.sanitizeTmuxName(`bp_${session.id.substring(0, 12)}_${hash}`);
   if (!(await safe.tmuxExists(tmux))) {
@@ -153,8 +153,11 @@ async function handleSessions(args, res) {
       const proj = db.getProject(args.project);
       if (!proj) return res.status(404).json({ error: 'project not found' });
       const projectPath = proj.path;
-      const tmpId = `new_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-      const tmux = `bp_${safe.sanitizeTmuxName(tmpId.substring(0, 16))}`;
+      const tmpId = cliType === 'claude'
+        ? `new_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`
+        : crypto.randomUUID();
+      const hash = crypto.createHash('md5').update(tmpId).digest('hex').substring(0, 4);
+      const tmux = safe.sanitizeTmuxName(`bp_${tmpId.substring(0, 12)}_${hash}`);
       safe.tmuxCreateCLI(tmux, projectPath, cliType);
       db.upsertSession(tmpId, proj.id, args.prompt || 'New Session', cliType);
       return { session_id: tmpId, tmux, project: args.project, cli: cliType };

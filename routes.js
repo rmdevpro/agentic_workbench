@@ -603,7 +603,11 @@ function registerCoreRoutes(
         }
       }
 
-      const tmpId = `new_${Date.now()}`;
+      // Claude sessions get a temp ID that resolves to a real UUID when the JSONL appears.
+      // Non-Claude CLIs don't create JSONLs, so give them a permanent UUID up front.
+      const tmpId = cliType === 'claude'
+        ? `new_${Date.now()}`
+        : require('crypto').randomUUID();
       const tmux = tmuxName(tmpId);
 
       await ensureSettings();
