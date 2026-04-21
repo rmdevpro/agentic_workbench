@@ -3654,6 +3654,66 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 
 ---
 
+### REG-META-01a: Status Bar Updates After Chat — Claude
+**Issue:** #156 — Status bar metadata consumer
+**Steps:** Click Claude session tab. Note status bar Model/Context. Send "what is 9 times 7". Wait for response. Check status bar within 10s. Model must show a Claude model name (not "unknown"). Context tokens must have increased.
+**Result:** ☐ PASS ☐ FAIL
+
+### REG-META-01b: Status Bar Updates After Chat — Gemini
+**Steps:** Same as 01a but with a Gemini session. Model must show a Gemini model name. Context must show /1000k.
+**Result:** ☐ PASS ☐ FAIL
+
+### REG-META-01c: Status Bar Updates After Chat — Codex
+**Steps:** Same as 01a but with a Codex session. Model must show a GPT model name. Context must show /200k.
+**Result:** ☐ PASS ☐ FAIL
+
+---
+
+### REG-META-02a: Sidebar Metadata Updates After Chat — Claude
+**Issue:** #156 — Sidebar metadata consumer
+**Steps:** Note Claude session's message count and timestamp in sidebar. Send a chat message. Wait for response. Wait up to 15s. Message count must increase. Timestamp must update. Model must appear.
+**Result:** ☐ PASS ☐ FAIL
+
+### REG-META-02b: Sidebar Metadata Updates After Chat — Gemini
+**Steps:** Same as 02a but with a Gemini session.
+**Result:** ☐ PASS ☐ FAIL
+
+### REG-META-02c: Sidebar Metadata Updates After Chat — Codex
+**Steps:** Same as 02a but with a Codex session.
+**Result:** ☐ PASS ☐ FAIL
+
+---
+
+### REG-META-03a: MCP Tokens Action — Claude
+**Issue:** #156 — MCP tokens consumer
+**Steps:** Call `POST /api/mcp/call` with `{tool:'blueprint_sessions', args:{action:'tokens', session_id:'<claude-id>', project:'<project>'}}`. Verify: `input_tokens` > 0, `model` contains "claude", `max_tokens` is 200000 or 1000000.
+**Result:** ☐ PASS ☐ FAIL
+
+### REG-META-03b: MCP Tokens Action — Gemini
+**Steps:** Same as 03a with a Gemini session. `model` must contain "gemini", `max_tokens` must be 1000000.
+**Result:** ☐ PASS ☐ FAIL
+
+### REG-META-03c: MCP Tokens Action — Codex
+**Steps:** Same as 03a with a Codex session. `model` must contain "gpt", `max_tokens` must be 200000.
+**Result:** ☐ PASS ☐ FAIL
+
+---
+
+### REG-META-04a: MCP Config Action — Claude
+**Issue:** #156 — MCP config consumer
+**Steps:** Call `POST /api/mcp/call` with `{tool:'blueprint_sessions', args:{action:'config', session_id:'<claude-id>'}}`. Verify response contains: `id`, `name`, `state`, `project`. No error.
+**Result:** ☐ PASS ☐ FAIL
+
+### REG-META-04b: MCP Config Action — Gemini
+**Steps:** Same as 04a with a Gemini session. Must return valid config, no error.
+**Result:** ☐ PASS ☐ FAIL
+
+### REG-META-04c: MCP Config Action — Codex
+**Steps:** Same as 04a with a Codex session. Must return valid config, no error.
+**Result:** ☐ PASS ☐ FAIL
+
+---
+
 ## Troubleshooting
 
 | Symptom | Likely Cause | Action |
