@@ -3211,7 +3211,14 @@ After all 5 rounds:
 - No infinite reconnect loops
 - All 3 WebSockets survive 5 rounds of switching
 
-**Failure Criteria:** Failure to repeatedly chat with any of the three different CLIs is considered a failure. Logins must be achieved, chat must occur. The test cannot pass without it.
+**Failure Criteria:** This test FAILS if ANY of the following occur for ANY of the 3 CLIs:
+- A CLI returns an error (401, 403, timeout, crash, or any non-successful response)
+- A CLI does not produce a visible chat response in the terminal buffer
+- A CLI's WebSocket is not in state 1 (OPEN) at any point during the 5 rounds
+- A CLI is not authenticated and ready to chat before the test begins
+- The terminal pane shows the wrong CLI's content after a tab switch
+
+All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 401, a blank response, a crash, or any inability to chat is a FAIL — not a "config issue", not a "but Blueprint worked". If you cannot chat with it, the test failed.
 
 **Result:** ☐ PASS ☐ FAIL ☐ SKIP
 **Notes:** Record which round and which CLI fails, if any.
