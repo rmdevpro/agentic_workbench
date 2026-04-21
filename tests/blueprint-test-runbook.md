@@ -3195,91 +3195,44 @@ Tests for all fixes applied in the huggingface-space branch. Every test uses Pla
 
 ---
 
-### REG-148-01: Tab Switching Between Claude and Gemini
-**Issue:** #148 — Tab switching blank screen
+### REG-148-01: Tab Switching With Chat — 5 Rounds All 3 CLIs
+**Issue:** #148 — Tab switching blank screen / terminal doesn't follow tab
+**Priority:** P0 — This is the definitive tab switching test. Clicking tabs is NOT enough. You must chat with each CLI and verify it responds.
 
-**Steps:**
-1. Open a Claude session tab from sidebar
-2. `browser_wait` 3000
-3. `browser_evaluate`: `activeTabId` — save as TAB1
-4. `browser_evaluate`: `tabs.get(activeTabId)?.ws?.readyState` — should be 1
-5. Open a Gemini session tab from sidebar
-6. `browser_wait` 3000
-7. `browser_evaluate`: `activeTabId` — save as TAB2 (should differ from TAB1)
-8. `browser_evaluate`: `tabs.get(activeTabId)?.ws?.readyState` — should be 1
-9. Click TAB1: `browser_click` on `.tab:first-child`
-10. `browser_wait` 1000
-11. `browser_evaluate`: `activeTabId` — should be TAB1
-12. `browser_evaluate`: `document.querySelector('.terminal-pane.active canvas') !== null` — terminal visible
-13. `browser_screenshot` — capture Claude tab active
-14. Click TAB2: `browser_click` on `.tab:nth-child(2)`
-15. `browser_wait` 1000
-16. `browser_evaluate`: `activeTabId` — should be TAB2
-17. `browser_evaluate`: `document.querySelector('.terminal-pane.active canvas') !== null` — terminal visible
-18. `browser_screenshot` — capture Gemini tab active
+**Setup:**
+1. Create one Claude, one Gemini, one Codex session in the same project
+2. Wait for all 3 CLIs to finish startup (Claude shows prompt, Gemini shows prompt, Codex shows prompt)
+3. Open all 3 as tabs by clicking each in the sidebar
+4. Wait 5s after each to ensure WebSocket connects
 
-**Expected:**
-- Switching between Claude and Gemini tabs works
-- Terminal pane shows content for each (not blank)
-- Canvas element is visible in the active pane
+**Steps — 5 rounds:**
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+For each round (1 through 5), do the following for EACH of the 3 tabs (Claude, Gemini, Codex):
 
----
+1. **Click the tab** via `browser_click`
+2. **Wait 2s** for terminal pane to switch
+3. **Screenshot** — verify the correct CLI's terminal is showing (not another CLI's content)
+4. **Send a unique message** via WebSocket: `tabs.get(activeTabId).ws.send('round N hello from CLI_TYPE\r')`
+5. **Wait 8s** for response
+6. **Read terminal buffer** — verify the response contains text from the CORRECT CLI (Claude says something, Gemini says something, Codex says something)
+7. **Screenshot** — capture the response
 
-### REG-148-02: Tab Switching Between Gemini and Codex
-**Issue:** #148
-
-**Steps:**
-1. Open a Gemini session tab
-2. `browser_wait` 3000
-3. Open a Codex session tab
-4. `browser_wait` 3000
-5. Rapidly switch between them 5 times:
-   ```
-   browser_click .tab:nth-child(1)
-   browser_wait 500
-   browser_click .tab:nth-child(2)
-   browser_wait 500
-   browser_click .tab:nth-child(1)
-   browser_wait 500
-   browser_click .tab:nth-child(2)
-   browser_wait 500
-   browser_click .tab:nth-child(1)
-   ```
-6. `browser_wait` 1000
-7. `browser_evaluate`: `document.querySelectorAll('.tab.active').length === 1` — exactly 1 active
-8. `browser_evaluate`: `document.querySelector('.terminal-pane.active canvas') !== null` — terminal visible
-9. `browser_screenshot`
+After all 5 rounds:
+- Verify all 3 WebSockets are still state 1 (OPEN)
+- Verify exactly 1 `.tab.active` exists
+- Verify the terminal pane content matches the active tab's CLI
 
 **Expected:**
-- Rapid switching between non-Claude tabs works without blank screens
-- Exactly 1 tab active at end
-- Terminal canvas visible
+- Each tab click shows the CORRECT CLI's terminal, not another CLI's content
+- Each CLI responds to messages after tab switch
+- No blank screens at any point
+- No infinite reconnect loops
+- All 3 WebSockets survive 5 rounds of switching
+
+**Failure Criteria:** Failure to repeatedly chat with any of the three different CLIs is considered a failure. Logins must be achieved, chat must occur. The test cannot pass without it.
 
 **Result:** ☐ PASS ☐ FAIL ☐ SKIP
-
----
-
-### REG-148-03: Tab Switching Three CLI Types
-**Issue:** #148
-
-**Steps:**
-1. Open one Claude, one Gemini, one Codex session tab (3 tabs total)
-2. `browser_wait` 3000
-3. `browser_evaluate`: `document.querySelectorAll('.tab').length >= 3`
-4. Click each tab in sequence: Claude → Gemini → Codex → Claude → Codex → Gemini
-5. After each click, wait 500ms then verify:
-   - `document.querySelectorAll('.tab.active').length === 1`
-   - `document.querySelector('.terminal-pane.active') !== null`
-6. `browser_screenshot` after final click
-
-**Expected:**
-- All three CLI types can be switched between freely
-- No blank screens, no errors
-- Terminal pane always shows content for active tab
-
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Notes:** Record which round and which CLI fails, if any.
 
 ---
 
