@@ -53,11 +53,15 @@ These changes affect many test steps. Read before executing.
 
 ## How to Use This Runbook
 
+**THE ONLY PASS IS A POSITIVE COMPLETE AFFIRMATION OF SUCCESS. ALL ELSE IS A FAIL.**
+
+A test result of "unknown", "empty", "0", "null", "not found", "expected behavior", "will populate later", or any non-positive outcome is a **FAIL**. If the user would see something broken, blank, missing, or wrong — it is a FAIL. There are no partial passes. There is no "works but shows wrong data." There is no "expected on first load." If it doesn't show the correct value, it failed.
+
 1. Execute tests in phase order. Phase 1 (Smoke) must fully pass before proceeding.
 2. For each test, follow the **Steps** exactly using Playwright MCP tools.
-3. After each verification step, mark the **Result** as PASS, FAIL, or SKIP.
+3. After each verification step, mark the **Result** as PASS or FAIL. Nothing else.
 4. On FAIL: capture a screenshot (`browser_screenshot`), note the failure details, and file a GitHub issue per the protocol below. Continue to the next test unless the failure blocks downstream tests.
-5. On SKIP: record the reason in **Notes** (e.g., "blocked by BRW-02 failure").
+5. On SKIP: only if physically impossible to run (e.g., blocked by prior failure). Record the reason.
 6. State reset: before each test (unless grouped), create fresh test sessions with unique names (e.g., prefixed with `test-YYYYMMDD-`). After tests complete, archive test sessions via `PUT /api/sessions/:id/config` with `{state:'archived'}`. Do NOT use `DELETE /api/sessions` (AD-004: deleteSession is permanently disabled). Tests should not depend on state from prior tests.
 7. Terminal I/O pattern (ALL terminal tests MUST use this):
    - **Send input** via WebSocket (reliable, does not need xterm focus):
