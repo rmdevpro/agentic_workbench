@@ -3602,6 +3602,58 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 
 ---
 
+### REG-FILTER-01: Project Filtering by State — Active/Archived/Hidden
+**Issue:** Project filter did not respect project-level state
+
+**Steps:**
+1. Note the list of projects visible in Active filter
+2. Archive a project via API: `PUT /api/projects/<name>/config` with `{state:'archived'}`
+3. Refresh sidebar
+4. Verify the archived project is NO LONGER visible in Active filter
+5. Switch filter to Archived
+6. Verify the archived project IS visible in Archived filter
+7. Switch filter back to Active
+8. Set project to Hidden: `PUT /api/projects/<name>/config` with `{state:'hidden'}`
+9. Refresh sidebar
+10. Verify the hidden project is NOT visible in Active filter
+11. Verify the hidden project is NOT visible in All filter
+12. Switch filter to Hidden
+13. Verify the hidden project IS visible in Hidden filter
+14. Restore project to active: `PUT /api/projects/<name>/config` with `{state:'active'}`
+
+**Expected (test ALL 3 states):**
+- Active filter: only shows projects with state 'active'
+- Archived filter: shows archived projects (and active projects that have archived sessions)
+- Hidden filter: shows hidden projects (and projects with hidden sessions)
+- All filter: shows everything except hidden projects
+- Changing a project's state immediately updates the sidebar
+
+**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+
+---
+
+### REG-FILTER-02: Session Filtering Within Projects
+**Issue:** Session filter within a project
+
+**Steps:**
+1. Open a project with multiple sessions
+2. Archive one session via config dialog or API
+3. Verify archived session disappears from Active filter
+4. Switch to Archived filter — verify it appears
+5. Hide a session via API: `PUT /api/sessions/<id>/config` with `{state:'hidden'}`
+6. Verify hidden session not in Active or All
+7. Switch to Hidden — verify it appears
+8. Restore both sessions
+
+**Expected:**
+- Session state changes immediately reflected in sidebar filters
+- Archived sessions only in Archived view
+- Hidden sessions only in Hidden view
+
+**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+
+---
+
 ## Troubleshooting
 
 | Symptom | Likely Cause | Action |
