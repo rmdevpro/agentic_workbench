@@ -3198,10 +3198,11 @@ For each round (1 through 5), do the following for EACH of the 3 tabs (Claude, G
 1. **Click the tab** via `browser_click`
 2. **Wait 2s** for terminal pane to switch
 3. **Screenshot** — verify the correct CLI's terminal is showing (not another CLI's content)
-4. **Send a unique message** via WebSocket: `tabs.get(activeTabId).ws.send('round N hello from CLI_TYPE\r')`
-5. **Wait 8s** for response
-6. **Read terminal buffer** — verify the response contains text from the CORRECT CLI (Claude says something, Gemini says something, Codex says something)
-7. **Screenshot** — capture the response
+4. **Send a testable message** — enter a math problem (e.g., "what is 7 times 8") or ask about the weather. Something with a verifiable correct answer.
+5. **Wait 10s** for response
+6. **Read terminal buffer** — verify the CLI produced a correct reply to your question. The reply must NOT be your own input text — it must be a response FROM the CLI. If the buffer only contains your input piled up in an editor field, the CLI did not respond — that is a FAIL.
+7. **Watch out for login issues** — if the CLI shows an API key prompt, OAuth screen, trust dialog, update prompt, or any other blocker instead of a chat response, that is a FAIL. Clear those blockers and retry, but note the failure.
+8. **Screenshot** — capture the response
 
 After all 5 rounds:
 - Verify all 3 WebSockets are still state 1 (OPEN)
@@ -3210,7 +3211,7 @@ After all 5 rounds:
 
 **Expected:**
 - Each tab click shows the CORRECT CLI's terminal, not another CLI's content
-- Each CLI responds to messages after tab switch
+- Each CLI responds with a correct answer to the question asked
 - No blank screens at any point
 - No infinite reconnect loops
 - All 3 WebSockets survive 5 rounds of switching
@@ -3218,11 +3219,14 @@ After all 5 rounds:
 **Failure Criteria:** This test FAILS if ANY of the following occur for ANY of the 3 CLIs:
 - A CLI returns an error (401, 403, timeout, crash, or any non-successful response)
 - A CLI does not produce a visible chat response in the terminal buffer
+- The terminal buffer only contains your input text (piled up in editor field) — the CLI did not respond
+- A CLI shows a login prompt, trust dialog, or update screen instead of chatting
 - A CLI's WebSocket is not in state 1 (OPEN) at any point during the 5 rounds
 - A CLI is not authenticated and ready to chat before the test begins
 - The terminal pane shows the wrong CLI's content after a tab switch
+- A response of "unknown", "error", or any non-answer is shown
 
-All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 401, a blank response, a crash, or any inability to chat is a FAIL — not a "config issue", not a "but Blueprint worked". If you cannot chat with it, the test failed.
+All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 401, a blank response, a crash, piled-up input, a login screen, or any inability to chat is a FAIL — not a "config issue", not a "but Blueprint worked", not "expected behavior". If you cannot chat with it and get a correct reply, the test failed.
 
 **Result:** ☐ PASS ☐ FAIL ☐ SKIP
 **Notes:** Record which round and which CLI fails, if any.
