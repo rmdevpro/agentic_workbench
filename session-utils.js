@@ -110,11 +110,106 @@ function extractMessageText(entry) {
   return content?.[0]?.text || '';
 }
 
+function _extractGeminiMessageText(msg) {
+  if (msg.type !== 'user' && msg.type !== 'gemini') return '';
+  const content = msg.content;
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) return content.map(p => typeof p === 'string' ? p : p.text || '').join(' ');
+  return '';
+}
+
+function _extractCodexMessageText(entry) {
+  if (entry.type !== 'response_item' || !entry.payload) return '';
+  const role = entry.payload.role || '';
+  if (role !== 'user' && role !== 'assistant') return '';
+  const content = entry.payload.content;
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter(b => b.type === 'input_text' || b.type === 'text')
+      .map(b => b.text || '')
+      .join(' ');
+  }
+  return '';
+}
+
+function _searchGeminiSessions(q, results) {
+  const geminiSessions = discoverGeminiSessions();
+  for (const gs of geminiSessions) {
+    try {
+      const fs = require('fs');
+      const content = fs.readFileSync(gs.filePath, 'utf-8');
+      const data = JSON.parse(content);
+      const messages = data.messages || [];
+      const matches = [];
+
+      for (const msg of messages) {
+        const text = _extractGeminiMessageText(msg);
+        if (text && text.toLowerCase().includes(q)) {
+          matches.push({ type: msg.type, text: text.substring(0, 200), timestamp: msg.timestamp });
+        }
+      }
+
+      if (matches.length > 0) {
+        results.push({
+          session_id: gs.sessionId || gs.filePath,
+          sessionId: gs.sessionId || gs.filePath,
+          project: '(gemini)',
+          name: gs.name || 'Untitled',
+          match_count: matches.length,
+          matchCount: matches.length,
+          snippets: matches.slice(0, 3).map(m => m.text),
+          matches: matches.slice(0, 3),
+          cli_type: 'gemini',
+        });
+      }
+    } catch { /* skip unreadable files */ }
+  }
+}
+
+function _searchCodexSessions(q, results) {
+  const codexSessions = discoverCodexSessions();
+  for (const cs of codexSessions) {
+    try {
+      const fs = require('fs');
+      const content = fs.readFileSync(cs.filePath, 'utf-8');
+      const lines = content.trim().split('\n');
+      const matches = [];
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const entry = JSON.parse(line);
+          const text = _extractCodexMessageText(entry);
+          if (text && text.toLowerCase().includes(q)) {
+            matches.push({ type: entry.payload?.role || 'unknown', text: text.substring(0, 200), timestamp: entry.timestamp });
+          }
+        } catch { /* skip malformed lines */ }
+      }
+
+      if (matches.length > 0) {
+        results.push({
+          session_id: cs.filePath,
+          sessionId: cs.filePath,
+          project: '(codex)',
+          name: cs.name || 'Untitled',
+          match_count: matches.length,
+          matchCount: matches.length,
+          snippets: matches.slice(0, 3).map(m => m.text),
+          matches: matches.slice(0, 3),
+          cli_type: 'codex',
+        });
+      }
+    } catch { /* skip unreadable files */ }
+  }
+}
+
 async function searchSessions(query, projectFilter, maxResults = 15) {
   const q = query.toLowerCase();
   const results = [];
   const dbProjects = db.getProjects();
 
+  // Search Claude JSONL sessions
   for (const dbProj of dbProjects) {
     if (projectFilter && dbProj.name !== projectFilter) continue;
     const sDir = sessionsDir(dbProj.path);
@@ -164,6 +259,7 @@ async function searchSessions(query, projectFilter, maxResults = 15) {
             matchCount: matches.length,
             snippets: matches.slice(0, 3).map((m) => m.text),
             matches: matches.slice(0, 3),
+            cli_type: 'claude',
           });
         }
       }
@@ -180,46 +276,162 @@ async function searchSessions(query, projectFilter, maxResults = 15) {
     }
   }
 
+  // Search Gemini and Codex sessions
+  if (!projectFilter) {
+    _searchGeminiSessions(q, results);
+    _searchCodexSessions(q, results);
+  }
+
   return results.sort((a, b) => b.match_count - a.match_count).slice(0, maxResults);
+}
+
+function _readGeminiTranscript(sessionId, maxTranscriptChars, maxMessageChars) {
+  const messages = [];
+  let charCount = 0;
+
+  // Find by cli_session_id match or file path
+  const geminiSessions = discoverGeminiSessions();
+  const session = db.getSession(sessionId);
+  const cliSessId = session?.cli_session_id;
+
+  let target = null;
+  if (cliSessId) {
+    target = geminiSessions.find(g => g.sessionId === cliSessId);
+  }
+  if (!target && geminiSessions.length > 0) {
+    // Fall back to most recent
+    target = geminiSessions.sort((a, b) => {
+      const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return tb - ta;
+    })[0];
+  }
+  if (!target) return messages;
+
+  try {
+    const fs = require('fs');
+    const data = JSON.parse(fs.readFileSync(target.filePath, 'utf-8'));
+    const msgs = data.messages || [];
+    // Read from end for most recent context
+    for (let i = msgs.length - 1; i >= 0 && charCount < maxTranscriptChars; i--) {
+      const text = _extractGeminiMessageText(msgs[i]);
+      if (text) {
+        const role = msgs[i].type === 'user' ? 'user' : 'assistant';
+        messages.unshift({ role, text: text.substring(0, maxMessageChars) });
+        charCount += text.length;
+      }
+    }
+  } catch { /* unreadable */ }
+
+  return messages;
+}
+
+function _readCodexTranscript(sessionId, maxTranscriptChars, maxMessageChars) {
+  const messages = [];
+  let charCount = 0;
+
+  const codexSessions = discoverCodexSessions();
+  const session = db.getSession(sessionId);
+  const cliSessId = session?.cli_session_id;
+
+  let target = null;
+  if (cliSessId) {
+    target = codexSessions.find(c => {
+      const rolloutId = basename(require('path').dirname(c.filePath));
+      return rolloutId === cliSessId;
+    });
+  }
+  if (!target && codexSessions.length > 0) {
+    target = codexSessions.sort((a, b) => {
+      const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return tb - ta;
+    })[0];
+  }
+  if (!target) return messages;
+
+  try {
+    const fs = require('fs');
+    const content = fs.readFileSync(target.filePath, 'utf-8');
+    const lines = content.trim().split('\n');
+    for (let i = lines.length - 1; i >= 0 && charCount < maxTranscriptChars; i--) {
+      if (!lines[i].trim()) continue;
+      try {
+        const entry = JSON.parse(lines[i]);
+        const text = _extractCodexMessageText(entry);
+        if (text) {
+          const role = entry.payload?.role === 'user' ? 'user' : 'assistant';
+          messages.unshift({ role, text: text.substring(0, maxMessageChars) });
+          charCount += text.length;
+        }
+      } catch { /* skip malformed */ }
+    }
+  } catch { /* unreadable */ }
+
+  return messages;
 }
 
 async function summarizeSession(sessionId, project) {
   const dbProj = db.getProject(project);
   const projectPath = dbProj ? dbProj.path : join(WORKSPACE, project);
-  const sDir = sessionsDir(projectPath);
-  const jsonlFile = join(sDir, `${sessionId}.jsonl`);
 
-  const content = await readFile(jsonlFile, 'utf-8');
-  const lines = content.trim().split('\n');
-  const messages = [];
+  // Determine CLI type from DB
+  const session = db.getSession(sessionId);
+  const cliType = session?.cli_type || 'claude';
+
   const maxTranscriptChars = config.get('session.summaryMaxTranscriptChars', 1500);
   const maxMessageChars = config.get('session.summaryMaxMessageChars', 500);
-  let charCount = 0;
+  let messages = [];
 
-  for (let i = lines.length - 1; i >= 0 && charCount < maxTranscriptChars; i--) {
+  if (cliType === 'gemini') {
+    messages = _readGeminiTranscript(sessionId, maxTranscriptChars, maxMessageChars);
+  } else if (cliType === 'codex') {
+    messages = _readCodexTranscript(sessionId, maxTranscriptChars, maxMessageChars);
+  } else {
+    // Claude: read from JSONL
+    const sDir = sessionsDir(projectPath);
+    const jsonlFile = join(sDir, `${sessionId}.jsonl`);
+
     try {
-      const entry = JSON.parse(lines[i]);
-      const text = extractMessageText(entry);
-      if (text) {
-        messages.unshift({ role: entry.type, text: text.substring(0, maxMessageChars) });
-        charCount += text.length;
+      const content = await readFile(jsonlFile, 'utf-8');
+      const lines = content.trim().split('\n');
+      let charCount = 0;
+
+      for (let i = lines.length - 1; i >= 0 && charCount < maxTranscriptChars; i--) {
+        try {
+          const entry = JSON.parse(lines[i]);
+          const text = extractMessageText(entry);
+          if (text) {
+            messages.unshift({ role: entry.type, text: text.substring(0, maxMessageChars) });
+            charCount += text.length;
+          }
+        } catch (parseErr) {
+          if (!(parseErr instanceof SyntaxError)) {
+            logger.debug('Unexpected error parsing JSONL line in summarizeSession', {
+              module: 'session-utils',
+              err: parseErr.message,
+            });
+          }
+          /* expected: malformed JSONL line */
+        }
       }
-    } catch (parseErr) {
-      if (!(parseErr instanceof SyntaxError)) {
-        logger.debug('Unexpected error parsing JSONL line in summarizeSession', {
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        logger.error('Error reading session file for summary', {
           module: 'session-utils',
-          err: parseErr.message,
+          sessionId: sessionId.substring(0, 8),
+          err: err.message,
         });
       }
-      /* expected: malformed JSONL line */
     }
   }
 
   if (messages.length === 0)
     return { summary: 'Empty session.', recent_messages: [], recentMessages: [] };
 
+  const cliLabel = cliType === 'gemini' ? 'Gemini' : cliType === 'codex' ? 'Codex' : 'Claude';
   const transcript = messages
-    .map((m) => `${m.role === 'user' ? 'Human' : 'Claude'}: ${m.text}`)
+    .map((m) => `${m.role === 'user' ? 'Human' : cliLabel}: ${m.text}`)
     .join('\n\n');
 
   const prompt = config.getPrompt('summarize-session', { TRANSCRIPT: transcript });
@@ -250,8 +462,100 @@ async function summarizeSession(sessionId, project) {
   }
 }
 
+function _getGeminiTokenUsage(sessionId) {
+  const geminiSessions = discoverGeminiSessions();
+  const session = db.getSession(sessionId);
+  const cliSessId = session?.cli_session_id;
+
+  let target = null;
+  if (cliSessId) {
+    target = geminiSessions.find(g => g.sessionId === cliSessId);
+  }
+  if (!target) return { input_tokens: 0, model: null, max_tokens: 1000000 };
+
+  // Gemini JSON files may include usage data in messages
+  try {
+    const fs = require('fs');
+    const data = JSON.parse(fs.readFileSync(target.filePath, 'utf-8'));
+    const messages = data.messages || [];
+    let inputTokens = 0;
+    let model = target.model || null;
+
+    // Look for usage info in gemini responses (from end)
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.type === 'gemini' && msg.usage) {
+        inputTokens = msg.usage.input_tokens || msg.usage.prompt_token_count || 0;
+        if (msg.model) model = msg.model;
+        break;
+      }
+    }
+
+    return {
+      input_tokens: inputTokens,
+      model,
+      max_tokens: 1000000, // Gemini models have 1M context
+    };
+  } catch {
+    return { input_tokens: 0, model: target.model || null, max_tokens: 1000000 };
+  }
+}
+
+function _getCodexTokenUsage(sessionId) {
+  const codexSessions = discoverCodexSessions();
+  const session = db.getSession(sessionId);
+  const cliSessId = session?.cli_session_id;
+
+  let target = null;
+  if (cliSessId) {
+    target = codexSessions.find(c => {
+      const rolloutId = basename(require('path').dirname(c.filePath));
+      return rolloutId === cliSessId;
+    });
+  }
+  if (!target) return { input_tokens: 0, model: null, max_tokens: 200000 };
+
+  // Codex JSONL may include usage in turn_context or response entries
+  try {
+    const fs = require('fs');
+    const content = fs.readFileSync(target.filePath, 'utf-8');
+    const lines = content.trim().split('\n');
+    let inputTokens = 0;
+    let model = target.model || null;
+
+    for (let i = lines.length - 1; i >= 0; i--) {
+      if (!lines[i].trim()) continue;
+      try {
+        const entry = JSON.parse(lines[i]);
+        if (entry.type === 'turn_context' && entry.payload?.usage) {
+          inputTokens = entry.payload.usage.input_tokens || entry.payload.usage.total_tokens || 0;
+          if (entry.payload.model) model = entry.payload.model;
+          break;
+        }
+      } catch { /* skip malformed */ }
+    }
+
+    return {
+      input_tokens: inputTokens,
+      model,
+      max_tokens: 200000, // Codex/GPT default
+    };
+  } catch {
+    return { input_tokens: 0, model: target.model || null, max_tokens: 200000 };
+  }
+}
+
 async function getTokenUsage(sessionId, project) {
   if (sessionId.startsWith('new_')) return { input_tokens: 0, model: null, max_tokens: 200000 };
+
+  // Check CLI type from DB
+  const session = db.getSession(sessionId);
+  const cliType = session?.cli_type || 'claude';
+
+  if (cliType === 'gemini') return _getGeminiTokenUsage(sessionId);
+  if (cliType === 'codex') return _getCodexTokenUsage(sessionId);
+
+  // Claude: read from JSONL
   const dbProj = db.getProject(project);
   const projectPath = dbProj ? dbProj.path : join(WORKSPACE, project);
   const sDir = sessionsDir(projectPath);
