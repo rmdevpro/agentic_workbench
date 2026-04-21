@@ -286,9 +286,11 @@ module.exports = function createSessionResolver({
                     const found = walk(full);
                     if (found) return found;
                   } else if (e.name.endsWith('.jsonl') && !existingFiles.has(full)) {
-                    // New rollout file — use filename (without .jsonl) as session ID
+                    // New rollout file — extract UUID from filename for resume
                     // Codex files: /sessions/YYYY/MM/DD/rollout-{timestamp}-{uuid}.jsonl
-                    return basename(e.name, '.jsonl');
+                    const name = basename(e.name, '.jsonl');
+                    const uuidMatch = name.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
+                    return uuidMatch ? uuidMatch[1] : name;
                   }
                 }
                 return null;

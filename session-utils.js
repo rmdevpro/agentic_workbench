@@ -337,7 +337,9 @@ function _readCodexTranscript(sessionId, maxTranscriptChars, maxMessageChars) {
   let target = null;
   if (cliSessId) {
     target = codexSessions.find(c => {
-      const rolloutId = basename(c.filePath, '.jsonl');
+      const rolloutName = basename(c.filePath, '.jsonl');
+      const rolloutUuid = rolloutName.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
+      const rolloutId = rolloutUuid ? rolloutUuid[1] : rolloutName;
       return rolloutId === cliSessId;
     });
   }
@@ -509,7 +511,9 @@ function _getCodexTokenUsage(sessionId) {
   let target = null;
   if (cliSessId) {
     target = codexSessions.find(c => {
-      const rolloutId = basename(c.filePath, '.jsonl');
+      const rolloutName = basename(c.filePath, '.jsonl');
+      const rolloutUuid = rolloutName.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
+      const rolloutId = rolloutUuid ? rolloutUuid[1] : rolloutName;
       return rolloutId === cliSessId;
     });
   }

@@ -309,11 +309,15 @@ function registerCoreRoutes(
       return _matchFromList(sorted, _claimedCodex, session,
         (d) => {
           // Codex files: /sessions/YYYY/MM/DD/rollout-{timestamp}-{uuid}.jsonl
-          // The rollout ID is the filename without extension
-          return basename(d.filePath, '.jsonl');
+          // Extract the UUID from the filename for resume
+          const name = basename(d.filePath, '.jsonl');
+          const uuidMatch = name.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
+          return uuidMatch ? uuidMatch[1] : name;
         },
         (sess, match) => {
-          const rolloutId = basename(match.filePath, '.jsonl');
+          const name = basename(match.filePath, '.jsonl');
+          const uuidMatch = name.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
+          const rolloutId = uuidMatch ? uuidMatch[1] : name;
           if (rolloutId && rolloutId !== 'sessions') {
             try { db.setCliSessionId(sess.id, rolloutId); } catch { /* race ok */ }
           }
