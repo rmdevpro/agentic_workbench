@@ -168,6 +168,7 @@ async function handleSessions(args, res) {
       const tmux = safe.sanitizeTmuxName(`bp_${tmpId.substring(0, 12)}_${hash}`);
       safe.tmuxCreateCLI(tmux, projectPath, cliType);
       db.upsertSession(tmpId, proj.id, args.prompt || 'New Session', cliType);
+      if (args.hidden) db.setSessionState(tmpId, 'hidden');
       return { session_id: tmpId, tmux, project: args.project, cli: cliType };
     }
     case 'connect': {

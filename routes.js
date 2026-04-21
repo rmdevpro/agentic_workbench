@@ -694,7 +694,7 @@ function registerCoreRoutes(
 
   app.post('/api/sessions', async (req, res) => {
     try {
-      const { project, prompt, cli_type } = req.body;
+      const { project, prompt, cli_type, hidden } = req.body;
       const cliType = cli_type || 'claude';
       const VALID_CLI_TYPES = ['claude', 'gemini', 'codex'];
       if (!VALID_CLI_TYPES.includes(cliType))
@@ -765,6 +765,7 @@ function registerCoreRoutes(
           ? prompt.substring(0, nameMaxLen).replace(/\n/g, ' ').trim()
           : 'New Session';
       db.upsertSession(tmpId, proj.id, sessionName, cliType);
+      if (hidden) db.setSessionState(tmpId, 'hidden');
 
       if (prompt && cliType === 'claude') {
         // Only inject prompt for Claude — it triggers JSONL creation for session resolution.
