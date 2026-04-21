@@ -950,10 +950,8 @@ build/**</textarea>
         n: p.name, m: p.missing, st: p.state,
         s: p.sessions.map(s => ({ id: s.id, name: s.name, active: s.active, state: s.state, cli: s.cli_type, mc: s.messageCount, ts: s.timestamp }))
       }))) + sessionFilter + sessionSortBy + activeTabId + [...tabs.keys()].join(',');
-      if (stateHash === renderSidebar._lastHash) return;
-      renderSidebar._lastHash = stateHash;
-
       const container = document.getElementById('project-list');
+      if (stateHash === renderSidebar._lastHash && container.childElementCount > 0) return;
       container.innerHTML = '';
 
       for (const project of projectState) {
@@ -1140,6 +1138,8 @@ build/**</textarea>
         group.appendChild(sessionList);
         container.appendChild(group);
       }
+
+      renderSidebar._lastHash = stateHash;
     }
 
     // ── Tab Management ───────────────────────────────
