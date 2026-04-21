@@ -183,6 +183,62 @@ module.exports = function createWatchers({
     }
   }
 
+  async function registerGeminiMcp() {
+    const HOME = safe.HOME;
+    const geminiSettingsFile = join(HOME, '.gemini', 'settings.json');
+    let cfg = {};
+    try {
+      cfg = JSON.parse(await fsp.readFile(geminiSettingsFile, 'utf-8'));
+    } catch (err) {
+      if (err.code !== 'ENOENT' && !(err instanceof SyntaxError)) {
+        logger.warn('Failed to read Gemini settings.json', { module: 'watchers', err: err.message });
+      }
+    }
+
+    if (!cfg.mcpServers) cfg.mcpServers = {};
+    const expectedArgs = [join(__dirname, 'mcp-server.js')];
+    const existing = cfg.mcpServers.blueprint;
+
+    if (!existing || !existing.command || (existing.args && existing.args[0] !== expectedArgs[0])) {
+      cfg.mcpServers.blueprint = {
+        command: 'node',
+        args: expectedArgs,
+        env: { BLUEPRINT_PORT: String(PORT) },
+      };
+      try {
+        await fsp.mkdir(join(HOME, '.gemini'), { recursive: true });
+        await fsp.writeFile(geminiSettingsFile, JSON.stringify(cfg, null, 2));
+        logger.info('Registered Blueprint MCP server for Gemini', { module: 'watchers' });
+      } catch (err) {
+        logger.error('Could not write Gemini MCP config', { module: 'watchers', err: err.message });
+      }
+    }
+  }
+
+  async function registerCodexMcp() {
+    const HOME = safe.HOME;
+    const codexConfigFile = join(HOME, '.codex', 'config.toml');
+    try {
+      let content = '';
+      try {
+        content = await fsp.readFile(codexConfigFile, 'utf-8');
+      } catch (err) {
+        if (err.code !== 'ENOENT') throw err;
+      }
+
+      // Check if blueprint MCP is already registered
+      if (content.includes('[mcp_servers.blueprint]')) return;
+
+      // Append MCP server config in TOML format
+      const mcpConfig = `\n[mcp_servers.blueprint]\ncommand = "node"\nargs = ["${join(__dirname, 'mcp-server.js')}"]\n\n[mcp_servers.blueprint.env]\nBLUEPRINT_PORT = "${PORT}"\n`;
+      await fsp.mkdir(join(HOME, '.codex'), { recursive: true });
+      await fsp.appendFile(codexConfigFile, mcpConfig);
+      logger.info('Registered Blueprint MCP server for Codex', { module: 'watchers' });
+    } catch (err) {
+      logger.error('Could not write Codex MCP config', { module: 'watchers', err: err.message });
+    }
+  }
+
   async function trustProjectDirs() {
     const configFile = join(CLAUDE_HOME, '.claude.json');
     let cfg = {};
@@ -266,6 +322,8 @@ module.exports = function createWatchers({
     stopJsonlWatcher,
     startSettingsWatcher,
     registerMcpServer,
+    registerGeminiMcp,
+    registerCodexMcp,
     trustProjectDirs,
     ensureSettings,
   };

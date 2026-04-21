@@ -276,7 +276,19 @@ if (require.main === module) {
         watchers.startSettingsWatcher();
 
         watchers.registerMcpServer().catch((err) =>
-          logger.error('Post-startup MCP registration failed', {
+          logger.error('Post-startup MCP registration failed (Claude)', {
+            module: 'server',
+            err: err.message,
+          }),
+        );
+        watchers.registerGeminiMcp().catch((err) =>
+          logger.error('Post-startup MCP registration failed (Gemini)', {
+            module: 'server',
+            err: err.message,
+          }),
+        );
+        watchers.registerCodexMcp().catch((err) =>
+          logger.error('Post-startup MCP registration failed (Codex)', {
             module: 'server',
             err: err.message,
           }),
