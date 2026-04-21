@@ -599,6 +599,15 @@
           <button onclick="addMcpServer()">Add</button>
         </div>
       </div>
+
+      <div class="settings-group">
+        <h3>OAuth Detection</h3>
+        <p style="font-size:11px;color:var(--text-muted);margin:0 0 8px">Detects OAuth URLs in CLI output and shows a clickable modal. Disable if OAuth flows are causing problems.</p>
+        <div class="setting-row">
+          <label>Enable OAuth URL detection</label>
+          <input type="checkbox" id="setting-oauth-detection" onchange="oauthDetectionEnabled = this.checked; saveSetting('oauth_detection_enabled', this.checked)">
+        </div>
+      </div>
       </div>
 
       <div id="settings-claude" style="display:none">
@@ -2801,7 +2810,10 @@ build/**</textarea>
     ];
     const AUTH_ERROR_PATTERN = /OAuth token has expired|authentication_error|Not logged in/;
 
+    let oauthDetectionEnabled = false; // Off by default — OAuth flows are unreliable
+
     function checkForAuthIssue(tabId, data) {
+      if (!oauthDetectionEnabled) return;
       if (authModalVisible) return;
 
       // Buffer recent output per tab for URL detection
@@ -3508,6 +3520,8 @@ build/**</textarea>
         document.getElementById('setting-thinking').value = s.thinking_level || 'none';
         document.getElementById('setting-keepalive-mode').value = s.keepalive_mode || 'always';
         document.getElementById('setting-idle-minutes').value = s.keepalive_idle_minutes || 30;
+        oauthDetectionEnabled = s.oauth_detection_enabled === true;
+        document.getElementById('setting-oauth-detection').checked = oauthDetectionEnabled;
         document.getElementById('setting-project-template').value = s.default_project_claude_md || '';
         if (s.theme) document.getElementById('setting-theme').value = s.theme;
         if (s.font_size) document.getElementById('setting-font-size').value = s.font_size;
