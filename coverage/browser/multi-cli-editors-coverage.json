@@ -1,0 +1,90 @@
+{
+  "suite": "multi-cli-editors",
+  "timestamp": "2026-04-20T15:53:37.125Z",
+  "totalEntries": 0,
+  "totalBytes": 0,
+  "usedBytes": 0,
+  "coveragePercent": 0,
+  "functionsTotal": 0,
+  "functionsCovered": 0,
+  "functionCoveragePercent": 0,
+  "criticalFunctions": [
+    {
+      "function": "loadState",
+      "covered": false,
+      "exists": false
+    },
+    {
+      "function": "renderSidebar",
+      "covered": false,
+      "exists": false
+    },
+    {
+      "function": "connectTab",
+      "covered": false,
+      "exists": false
+    },
+    {
+      "function": "checkForAuthIssue",
+      "covered": false,
+      "exists": false
+    },
+    {
+      "function": "showAuthModal",
+      "covered": false,
+      "exists": false
+    },
+    {
+      "function": "submitAuthCode",
+      "covered": false,
+      "exists": false
+    },
+    {
+      "function": "applyTheme",
+      "covered": false,
+      "exists": false
+    },
+    {
+      "function": "saveSetting",
+      "covered": false,
+      "exists": false
+    },
+    {
+      "function": "pollTokenUsage",
+      "covered": false,
+      "exists": false
+    },
+    {
+      "function": "updateStatusBar",
+      "covered": false,
+      "exists": false
+    },
+    {
+      "function": "switchPanel",
+      "covered": false,
+      "exists": false
+    },
+    {
+      "function": "togglePanel",
+      "covered": false,
+      "exists": false
+    },
+    {
+      "function": "checkAuth",
+      "covered": false,
+      "exists": false
+    },
+    {
+      "function": "openSession",
+      "covered": false,
+      "exists": false
+    },
+    {
+      "function": "createSession",
+      "covered": false,
+      "exists": false
+    }
+  ],
+  "coveredFunctions": [],
+  "uncoveredFunctions": []
+}
