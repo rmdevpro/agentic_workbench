@@ -3468,12 +3468,17 @@ build/**</textarea>
         document.getElementById('setting-thinking').value = s.thinking_level || 'none';
         document.getElementById('setting-keepalive-mode').value = s.keepalive_mode || 'always';
         document.getElementById('setting-idle-minutes').value = s.keepalive_idle_minutes || 30;
-        if (s.oauth_detection) {
-          oauthDetection = { claude: true, gemini: false, codex: false, ...s.oauth_detection };
+        if (s.oauth_detection && typeof s.oauth_detection === 'object') {
+          oauthDetection.claude = s.oauth_detection.claude !== undefined ? !!s.oauth_detection.claude : true;
+          oauthDetection.gemini = !!s.oauth_detection.gemini;
+          oauthDetection.codex = !!s.oauth_detection.codex;
         }
-        document.getElementById('setting-oauth-claude').checked = oauthDetection.claude;
-        document.getElementById('setting-oauth-gemini').checked = oauthDetection.gemini;
-        document.getElementById('setting-oauth-codex').checked = oauthDetection.codex;
+        const oauthClaudeEl = document.getElementById('setting-oauth-claude');
+        const oauthGeminiEl = document.getElementById('setting-oauth-gemini');
+        const oauthCodexEl = document.getElementById('setting-oauth-codex');
+        if (oauthClaudeEl) oauthClaudeEl.checked = oauthDetection.claude;
+        if (oauthGeminiEl) oauthGeminiEl.checked = oauthDetection.gemini;
+        if (oauthCodexEl) oauthCodexEl.checked = oauthDetection.codex;
         document.getElementById('setting-project-template').value = s.default_project_claude_md || '';
         if (s.theme) document.getElementById('setting-theme').value = s.theme;
         if (s.font_size) document.getElementById('setting-font-size').value = s.font_size;
