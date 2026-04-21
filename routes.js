@@ -308,12 +308,12 @@ function registerCoreRoutes(
       });
       return _matchFromList(sorted, _claimedCodex, session,
         (d) => {
-          const { basename: bn, dirname: dn } = require('path');
-          return bn(dn(d.filePath));
+          // Codex files: /sessions/YYYY/MM/DD/rollout-{timestamp}-{uuid}.jsonl
+          // The rollout ID is the filename without extension
+          return basename(d.filePath, '.jsonl');
         },
         (sess, match) => {
-          const { basename: bn, dirname: dn } = require('path');
-          const rolloutId = bn(dn(match.filePath));
+          const rolloutId = basename(match.filePath, '.jsonl');
           if (rolloutId && rolloutId !== 'sessions') {
             try { db.setCliSessionId(sess.id, rolloutId); } catch { /* race ok */ }
           }

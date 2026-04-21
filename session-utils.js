@@ -337,7 +337,7 @@ function _readCodexTranscript(sessionId, maxTranscriptChars, maxMessageChars) {
   let target = null;
   if (cliSessId) {
     target = codexSessions.find(c => {
-      const rolloutId = basename(require('path').dirname(c.filePath));
+      const rolloutId = basename(c.filePath, '.jsonl');
       return rolloutId === cliSessId;
     });
   }
@@ -509,7 +509,7 @@ function _getCodexTokenUsage(sessionId) {
   let target = null;
   if (cliSessId) {
     target = codexSessions.find(c => {
-      const rolloutId = basename(require('path').dirname(c.filePath));
+      const rolloutId = basename(c.filePath, '.jsonl');
       return rolloutId === cliSessId;
     });
   }

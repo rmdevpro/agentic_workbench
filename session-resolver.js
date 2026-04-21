@@ -286,9 +286,9 @@ module.exports = function createSessionResolver({
                     const found = walk(full);
                     if (found) return found;
                   } else if (e.name.endsWith('.jsonl') && !existingFiles.has(full)) {
-                    // New rollout file — use directory name as session ID
-                    const rolloutDir = basename(dir);
-                    return rolloutDir;
+                    // New rollout file — use filename (without .jsonl) as session ID
+                    // Codex files: /sessions/YYYY/MM/DD/rollout-{timestamp}-{uuid}.jsonl
+                    return basename(e.name, '.jsonl');
                   }
                 }
                 return null;
