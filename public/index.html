@@ -1404,6 +1404,11 @@ build/**</textarea>
           showEmptyState();
           updateStatusBar();
         }
+      } else if (tabs.size === 0) {
+        activeTabId = null;
+        showEmptyState();
+        updateStatusBar();
+      }
       }
 
       renderTabs();
@@ -1412,12 +1417,15 @@ build/**</textarea>
 
     function showEmptyState() {
       const area = document.getElementById('terminal-area');
+      // Hide any leftover terminal/editor panes
+      area.querySelectorAll('.terminal-pane').forEach(p => p.classList.remove('active'));
       if (!document.getElementById('empty-state')) {
         const el = document.createElement('div');
         el.id = 'empty-state';
         el.innerHTML = '<div>Select a session or create a new one</div><div class="hint">Pick a project from the sidebar to get started</div>';
         area.appendChild(el);
       }
+      document.getElementById('empty-state').style.display = '';
     }
 
     function renderTabs() {
