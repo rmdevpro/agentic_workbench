@@ -1825,9 +1825,12 @@ build/**</textarea>
       panelOpen = !panelOpen;
       document.getElementById('right-panel').classList.toggle('open', panelOpen);
       if (panelOpen) loadPanelData();
-      // Refit active terminal
+      // Refit active terminal (skip file tabs — they have no fitAddon)
       setTimeout(() => {
-        if (activeTabId && tabs.has(activeTabId)) tabs.get(activeTabId).fitAddon.fit();
+        if (activeTabId && tabs.has(activeTabId)) {
+          const t = tabs.get(activeTabId);
+          if (t?.fitAddon) t.fitAddon.fit();
+        }
       }, 250);
     }
 
@@ -3025,7 +3028,8 @@ build/**</textarea>
     // ── Resize observer for terminal area ────────────
     const resizeObserver = new ResizeObserver(() => {
       if (activeTabId && tabs.has(activeTabId)) {
-        tabs.get(activeTabId).fitAddon.fit();
+        const t = tabs.get(activeTabId);
+        if (t?.fitAddon) t.fitAddon.fit();
       }
     });
     resizeObserver.observe(document.getElementById('terminal-area'));
@@ -3310,6 +3314,7 @@ build/**</textarea>
 
     function applyFontSize(size) {
       for (const [, tab] of tabs) {
+        if (tab.type === 'file') continue;
         tab.term.options.fontSize = size;
         tab.fitAddon.fit();
       }
@@ -3317,6 +3322,7 @@ build/**</textarea>
 
     function applyFontFamily(family) {
       for (const [, tab] of tabs) {
+        if (tab.type === 'file') continue;
         tab.term.options.fontFamily = family;
         tab.fitAddon.fit();
       }
