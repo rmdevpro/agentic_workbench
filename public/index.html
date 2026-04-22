@@ -1510,7 +1510,11 @@ build/**</textarea>
         // Send initial size — fit multiple times as layout settles
         tab.fitAddon.fit();
         const dims = tab.fitAddon.proposeDimensions();
-        if (dims) {
+        // Guard: proposeDimensions() returns an object with null cols/rows when
+        // the xterm container has zero dimensions (hidden pane, layout not
+        // settled). Sending nulls causes the server resize-handler to fall
+        // through to ptyProcess.write — the JSON string lands on CLI stdin.
+        if (dims && Number.isFinite(dims.cols) && Number.isFinite(dims.rows) && dims.cols > 0 && dims.rows > 0) {
           ws.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
         }
         // Refit after layout fully settles (fixes tiny terminal on reopen)
@@ -1518,7 +1522,7 @@ build/**</textarea>
           if (tabs.has(tabId)) {
             tab.fitAddon.fit();
             const d = tab.fitAddon.proposeDimensions();
-            if (d && tab.ws?.readyState === WebSocket.OPEN) {
+            if (d && Number.isFinite(d.cols) && Number.isFinite(d.rows) && d.cols > 0 && d.rows > 0 && tab.ws?.readyState === WebSocket.OPEN) {
               tab.ws.send(JSON.stringify({ type: 'resize', cols: d.cols, rows: d.rows }));
             }
           }
@@ -1532,7 +1536,7 @@ build/**</textarea>
 
         if (tab.resizeDisposable) tab.resizeDisposable.dispose();
         tab.resizeDisposable = tab.term.onResize(({ cols, rows }) => {
-          if (tab.ws && tab.ws.readyState === WebSocket.OPEN) {
+          if (tab.ws && tab.ws.readyState === WebSocket.OPEN && Number.isFinite(cols) && Number.isFinite(rows) && cols > 0 && rows > 0) {
             tab.ws.send(JSON.stringify({ type: 'resize', cols, rows }));
           }
         });

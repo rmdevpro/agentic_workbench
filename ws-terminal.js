@@ -107,18 +107,33 @@ module.exports = function createWsTerminal({
       if (msg.startsWith('{')) {
         try {
           const ctrl = JSON.parse(msg);
-          if (
-            ctrl.type === 'resize' &&
-            typeof ctrl.cols === 'number' &&
-            typeof ctrl.rows === 'number'
-          ) {
-            ptyProcess.resize(ctrl.cols, ctrl.rows);
+          if (ctrl.type === 'resize') {
+            // Always consume resize frames. Invalid dims (null / zero /
+            // non-numeric) must NOT fall through to ptyProcess.write —
+            // that would dump the JSON onto the CLI's stdin as if the user
+            // typed it (bug #162).
+            if (
+              Number.isFinite(ctrl.cols) &&
+              Number.isFinite(ctrl.rows) &&
+              ctrl.cols > 0 &&
+              ctrl.rows > 0
+            ) {
+              ptyProcess.resize(ctrl.cols, ctrl.rows);
+            } else {
+              logger.warn('Ignoring resize frame with invalid dims', {
+                module: 'ws-terminal',
+                tmuxSession,
+                cols: ctrl.cols,
+                rows: ctrl.rows,
+              });
+            }
             return;
           }
           if (ctrl.type === 'ping') {
             ws.send(JSON.stringify({ type: 'pong' }));
             return;
           }
+          /* unknown control frame type — fall through and treat as typed text */
         } catch (_parseErr) {
           /* expected: not all messages starting with '{' are valid JSON control frames */
           logger.debug('Non-JSON-control message received', { module: 'ws-terminal', tmuxSession });
