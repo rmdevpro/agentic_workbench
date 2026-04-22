@@ -92,6 +92,35 @@ The workbench is also deployable as a Hugging Face Space. HF provides a persiste
 
 HF Space deployment doesn't go through the Admin-repo compose-override pipeline — it's a separate mechanism owned by the HF Spaces runtime.
 
+## Seeding a Dev Host from Prod Data
+
+Per Admin/RUN-001 §111-114, **data migration between hosts is a per-service concern**. For the workbench specifically, dev hosts are most useful when they run against a recent snapshot of prod's `/data`, so testing happens on real content rather than an empty database.
+
+Procedure (on the dev host, with the dev container stopped):
+
+```bash
+rsync -aHAX --delete \
+  --exclude='.blueprint/qdrant/.lock' \
+  --exclude='*.wal' --exclude='*.shm' \
+  <produser>@<prodhost>:/srv/workbench/ \
+  /srv/workbench/
+
+sudo chown -R 1000:2001 /srv/workbench
+
+# Re-assert dev-mode logo after the rsync (which overwrote the setting):
+sqlite3 /srv/workbench/.blueprint/blueprint.db \
+  "INSERT OR REPLACE INTO settings(key, value) VALUES ('logo_variant', '\"development\"');"
+
+# Start the dev container via the normal Admin-repo compose procedure
+# (see Admin/RUN-001). Do NOT rebuild locally — pull the registry image.
+```
+
+The excludes cover files typically open on a live prod container (Qdrant lock, SQLite WAL/SHM). If a corrupted DB shows up at validation time, stop the prod container briefly and repeat the rsync for a clean snapshot.
+
+Dev's `/data` will drift between rsyncs as the tester creates projects, writes files, accumulates junk — that drift is intentional. Re-run this procedure whenever you want a fresh snapshot. Not automatic; not tied to the deploy pipeline.
+
+Credentials (Claude OAuth, API keys in settings DB) come along with the rsync, so the dev container is authenticated the moment it starts.
+
 ## Workspace Conventions
 
 ### Testing project
