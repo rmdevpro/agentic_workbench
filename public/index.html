@@ -1860,12 +1860,8 @@ build/**</textarea>
 
     async function loadPanelData() {
       if (activePanel === 'files') {
-        // First load initializes; subsequent panel switches refresh the tree
-        if (fileBrowserInitialized) {
-          refreshFileTree();
-        } else {
-          loadFiles();
-        }
+        // Only initialize on first load — manual refresh button handles updates
+        loadFiles();
         return;
       }
       if (activePanel === 'tasks') {
@@ -2539,8 +2535,28 @@ build/**</textarea>
     let fileBrowserInitialized = false;
 
     function refreshFileTree() {
+      // Save expand state of mount headers before rebuilding
+      const expandedMounts = new Set();
+      document.querySelectorAll('#file-browser-tree > div').forEach(section => {
+        const header = section.querySelector('[style*="cursor"]');
+        const container = section.querySelector('div:last-child');
+        if (header && container && container.style.display !== 'none') {
+          const mountPath = header.textContent.replace(/[▶▼]/g, '').trim();
+          expandedMounts.add(mountPath);
+        }
+      });
       fileBrowserInitialized = false;
       loadFiles();
+      // Restore expand state after rebuild
+      setTimeout(() => {
+        document.querySelectorAll('#file-browser-tree > div').forEach(section => {
+          const header = section.querySelector('[style*="cursor"]');
+          const mountPath = header?.textContent?.replace(/[▶▼]/g, '').trim();
+          if (mountPath && expandedMounts.has(mountPath)) {
+            header.click();
+          }
+        });
+      }, 100);
     }
     function autoNavigateFileTree() {
       // Navigate file tree to active session's CWD
