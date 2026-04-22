@@ -49,7 +49,7 @@ services:
       - "6342:3000"   # prod port on irina; override per host as needed
     volumes:
       - /srv/workbench:/data
-      - /mnt/storage:/mnt/storage:ro   # optional, for shared NFS-style storage (see below)
+      - /mnt/storage:/mnt/storage   # optional, for shared NFS-style storage (see below)
     restart: unless-stopped
 ```
 
@@ -171,7 +171,7 @@ To expose NFS or other shared storage in the file browser and project picker, mo
 ```yaml
 volumes:
   - /srv/workbench:/data
-  - /mnt/storage:/mnt/storage:ro
+  - /mnt/storage:/mnt/storage
 ```
 
 This is additive — the workbench works without it. The `/api/mounts` endpoint automatically discovers directories under `/mnt`.
