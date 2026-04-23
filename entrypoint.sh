@@ -55,7 +55,7 @@ if [ ! -f "$CLAUDE/settings.json" ]; then
 fi
 
 # Register Blueprint MCP server globally
-claude mcp add-json --scope user blueprint '{"command":"node","args":["/app/mcp-server.js"],"env":{"BLUEPRINT_PORT":"'"${PORT:-7860}"'"}}' 2>/dev/null || true
+claude mcp add-json --scope user blueprint '{"command":"node","args":["/app/mcp-server.js"]}' 2>/dev/null || true
 
 # Install Blueprint slash commands as global skills
 if [ -d /app/config/skills ]; then

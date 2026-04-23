@@ -15,7 +15,6 @@ module.exports = function createWatchers({
   CLAUDE_HOME,
   logger,
 }) {
-  const PORT = process.env.PORT || 3000;
   const jsonlWatchPaths = new Map();
   const jsonlDebounceTimers = new Map();
 
@@ -163,12 +162,16 @@ module.exports = function createWatchers({
     if (!cfg.mcpServers) cfg.mcpServers = {};
     const expectedArgs = [join(__dirname, 'mcp-server.js')];
     const existing = cfg.mcpServers.blueprint;
+    const isStale = existing && (
+      !existing.command ||
+      (existing.args && existing.args[0] !== expectedArgs[0]) ||
+      (existing.env && 'BLUEPRINT_PORT' in existing.env)
+    );
 
-    if (!existing || !existing.command || (existing.args && existing.args[0] !== expectedArgs[0])) {
+    if (!existing || isStale) {
       cfg.mcpServers.blueprint = {
         command: 'node',
         args: expectedArgs,
-        env: { BLUEPRINT_PORT: String(PORT) },
       };
       try {
         await fsp.writeFile(settingsFile, JSON.stringify(cfg, null, 2));
@@ -198,12 +201,16 @@ module.exports = function createWatchers({
     if (!cfg.mcpServers) cfg.mcpServers = {};
     const expectedArgs = [join(__dirname, 'mcp-server.js')];
     const existing = cfg.mcpServers.blueprint;
+    const isStale = existing && (
+      !existing.command ||
+      (existing.args && existing.args[0] !== expectedArgs[0]) ||
+      (existing.env && 'BLUEPRINT_PORT' in existing.env)
+    );
 
-    if (!existing || !existing.command || (existing.args && existing.args[0] !== expectedArgs[0])) {
+    if (!existing || isStale) {
       cfg.mcpServers.blueprint = {
         command: 'node',
         args: expectedArgs,
-        env: { BLUEPRINT_PORT: String(PORT) },
       };
       try {
         await fsp.mkdir(join(HOME, '.gemini'), { recursive: true });
@@ -226,13 +233,25 @@ module.exports = function createWatchers({
         if (err.code !== 'ENOENT') throw err;
       }
 
-      // Check if blueprint MCP is already registered
-      if (content.includes('[mcp_servers.blueprint]')) return;
+      const hasReg = content.includes('[mcp_servers.blueprint]');
+      const hasStaleEnv = /\[mcp_servers\.blueprint\.env\][\s\S]*?BLUEPRINT_PORT/.test(content);
+      if (hasReg && !hasStaleEnv) return;
 
-      // Append MCP server config in TOML format
-      const mcpConfig = `\n[mcp_servers.blueprint]\ncommand = "node"\nargs = ["${join(__dirname, 'mcp-server.js')}"]\n\n[mcp_servers.blueprint.env]\nBLUEPRINT_PORT = "${PORT}"\n`;
+      if (hasStaleEnv) {
+        // Strip existing blueprint blocks (main + .env) so we can re-append clean.
+        content = content.replace(
+          /\n*\[mcp_servers\.blueprint(?:\.env)?\][^[]*/g,
+          '',
+        ).replace(/\n+$/, '\n');
+      }
+
+      const mcpConfig = `\n[mcp_servers.blueprint]\ncommand = "node"\nargs = ["${join(__dirname, 'mcp-server.js')}"]\n`;
       await fsp.mkdir(join(HOME, '.codex'), { recursive: true });
-      await fsp.appendFile(codexConfigFile, mcpConfig);
+      if (hasStaleEnv) {
+        await fsp.writeFile(codexConfigFile, content + mcpConfig);
+      } else {
+        await fsp.appendFile(codexConfigFile, mcpConfig);
+      }
       logger.info('Registered Blueprint MCP server for Codex', { module: 'watchers' });
     } catch (err) {
       logger.error('Could not write Codex MCP config', { module: 'watchers', err: err.message });

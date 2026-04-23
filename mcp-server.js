@@ -4,8 +4,8 @@
 const http = require('http');
 const readline = require('readline');
 
-const BLUEPRINT_PORT = process.env.BLUEPRINT_PORT || 3000;
-const BASE_URL = `http://localhost:${BLUEPRINT_PORT}`;
+const PORT = process.env.PORT || 7860;
+const BASE_URL = `http://localhost:${PORT}`;
 
 function sendResponse(id, result) {
   process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\n');
