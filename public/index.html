@@ -472,8 +472,8 @@
 
   <div id="sidebar">
     <div id="sidebar-header">
-      <img src="/logo-white.png" alt="Blueprint" class="sidebar-logo logo-dark" height="48">
-      <img src="/logo-blue.png" alt="Blueprint" class="sidebar-logo logo-light" height="48">
+      <img src="/logo-dark.png" alt="Blueprint" class="sidebar-logo logo-dark" height="48">
+      <img src="/logo-light.png" alt="Blueprint" class="sidebar-logo logo-light" height="48">
       <div style="display:flex;gap:4px">
         <button onclick="addProject()" title="Add Project">+</button>
         <button onclick="loadState()" title="Refresh">&#x21bb;</button>
@@ -3368,7 +3368,7 @@ build/**</textarea>
         const res = await fetch('/api/settings');
         const s = await res.json();
         _settingsCache = s;
-        if (s.theme) applyTheme(s.theme);
+        applyTheme(s.theme || 'blueprint-dark');
         if (s.font_size) applyFontSize(s.font_size);
         if (s.font_family) applyFontFamily(s.font_family);
       } catch {}
