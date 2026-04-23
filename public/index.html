@@ -916,21 +916,31 @@ build/**</textarea>
       const snapshot = {
         activeTabId,
         tabCount: tabs.size,
-        tabs: [...tabs.entries()].map(([id, t]) => ({
-          id,
-          type: t.type,
-          cli: t.cli_type || null,
-          paneEl: t.paneEl?.id || null,
-          paneActive: t.paneEl?.classList.contains('active') || false,
-          paneInDom: t.paneEl ? document.body.contains(t.paneEl) : false,
-          tmux: t.tmux || null,
-          wsState: t.ws ? ['CONNECTING','OPEN','CLOSING','CLOSED'][t.ws.readyState] : 'NONE',
-          status: t.status || null,
-        })),
+        tabs: [...tabs.entries()].map(([id, t]) => {
+          const pe = t.paneEl;
+          return {
+            id,
+            type: t.type,
+            cli: t.cli_type || null,
+            paneElId: pe?.id || null,
+            paneActive: pe?.classList.contains('active') || false,
+            paneIsConnected: pe ? pe.isConnected : false,
+            paneComputedDisplay: pe && pe.isConnected ? getComputedStyle(pe).display : '<detached>',
+            paneInlineDisplay: pe?.style?.display || '',
+            paneParent: pe?.parentElement?.id || null,
+            tmux: t.tmux || null,
+            wsState: t.ws ? ['CONNECTING','OPEN','CLOSING','CLOSED'][t.ws.readyState] : 'NONE',
+            status: t.status || null,
+          };
+        }),
         panesInDom: [...document.querySelectorAll('#terminal-area .terminal-pane')].map(p => ({
           id: p.id,
           active: p.classList.contains('active'),
+          computedDisplay: getComputedStyle(p).display,
         })),
+        orphanPanes: [...document.querySelectorAll('#terminal-area .terminal-pane')]
+          .filter(p => ![...tabs.values()].some(t => t.paneEl === p))
+          .map(p => p.id),
       };
       // eslint-disable-next-line no-console
       console.log('[tab-dbg]', event, extra || {}, snapshot);
