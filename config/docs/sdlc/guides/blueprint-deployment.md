@@ -121,6 +121,42 @@ Dev's `/data` will drift between rsyncs as the tester creates projects, writes f
 
 Credentials (Claude OAuth, API keys in settings DB) come along with the rsync, so the dev container is authenticated the moment it starts.
 
+**Verify after rsync:**
+1. Load the dev URL in a browser.
+2. Sidebar lists prod's projects/sessions (data made it across).
+3. Status bar updates when you click into a session (model name, context %, message count).
+4. Open one session, send a trivial prompt, get a real reply (chat path works).
+
+If any of those fail, don't proceed to use the dev host yet — re-check ownership (`chown -R 1000:2001 /srv/workbench`) and that the container started after the rsync, not before.
+
+## Dev ↔ Prod Swap Procedure
+
+Two distinct things people mean by "swap":
+
+### A. Flip ONE host's mode (logo only)
+
+The host stays where it is, just changes which logo it renders. No data movement.
+
+```bash
+# Inside the container (or via curl/sqlite from the host):
+sqlite3 /data/.blueprint/blueprint.db \
+  "INSERT OR REPLACE INTO settings(key, value) VALUES ('logo_variant', '\"production\"');"
+```
+
+Refresh the browser. Done. (Same DB write with `'\"development\"'` to flip the other way.)
+
+### B. Swap which host serves prod (cutover)
+
+Genuine cutover where a different host takes over the prod role:
+
+1. **Pre-flight on the incoming-prod host**: confirm its image is current (`docker image inspect irina:5000/workbench:latest`) and the container is running healthily.
+2. **Seed/refresh data** on the incoming-prod host from the outgoing-prod's `/data` (see "Seeding a Dev Host from Prod Data" above — same procedure, just with the swapped roles).
+3. **Flip logos**: set `logo_variant='production'` on the incoming-prod's DB; set `logo_variant='development'` on the outgoing-prod's DB.
+4. **Stop the outgoing-prod container** so traffic naturally lands on the new prod (or update DNS / reverse-proxy / wherever the prod URL points).
+5. **Verify on incoming-prod**: red Pro logo renders, sessions resume, chat works.
+
+Both A and B are seconds, not hours, when nothing else is changing — they're just DB writes plus optional data movement. If they're taking longer than that, something else is going on (code change, data path change, schema change) and you're doing more than a swap.
+
 ## Workspace Conventions
 
 ### Testing project
