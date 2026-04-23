@@ -1419,6 +1419,15 @@ build/**</textarea>
       if (tab && tab.type === 'file') {
         if (tab.editor && tab.editor.focus) tab.editor.focus();
       } else if (tab && tab.fitAddon) {
+        // Force a synchronous unconditional xterm redraw before fit(). fit() only
+        // refreshes if dimensions changed, but on a tab switch the pane's size
+        // hasn't changed — it was just hidden. Without an explicit refresh, the
+        // xterm canvas stays frozen on whatever was last drawn before the pane
+        // went display:none, which surfaces to the user as "tab switched but
+        // terminal still shows the old session's content" (issue #161).
+        if (tab.term && tab.term.rows) {
+          try { tab.term.refresh(0, tab.term.rows - 1); } catch { /* ignore */ }
+        }
         setTimeout(() => { const t = tabs.get(tabId); if (t?.fitAddon) t.fitAddon.fit(); }, 50);
         setTimeout(() => { const t = tabs.get(tabId); if (t?.fitAddon) t.fitAddon.fit(); }, 300);
         tab.term.focus();
