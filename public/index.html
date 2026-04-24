@@ -1012,9 +1012,13 @@ build/**</textarea>
                 // Update tab name
                 const tabEl = document.querySelector(`[data-tab-id="${tabId}"]`);
                 if (tabEl) tabEl.dataset.tabId = realSession.id;
-                // Update pane ID
+                // Update pane ID. Drop any pre-existing element at the new id
+                // first so we don't end up with two panes sharing one id (#161).
                 const pane = document.getElementById(`pane-${tabId}`);
-                if (pane) pane.id = `pane-${realSession.id}`;
+                if (pane) {
+                  document.getElementById(`pane-${realSession.id}`)?.remove();
+                  pane.id = `pane-${realSession.id}`;
+                }
                 console.log(`[session-resolve] Tab migrated: ${tabId} → ${realSession.id}`);
                 document.dispatchEvent(new CustomEvent('session-ready', { detail: { id: realSession.id, project: tab.project } }));
                 renderTabs();
@@ -1362,10 +1366,13 @@ build/**</textarea>
       const emptyState = document.getElementById('empty-state');
       if (emptyState) emptyState.remove();
 
-      // Create terminal pane
+      // Create terminal pane. Remove any pre-existing element with the same id
+      // first; otherwise switchTab's getElementById finds only the first match
+      // and the orphan stays display:block forever (issue #161).
       const paneEl = document.createElement('div');
       paneEl.className = 'terminal-pane';
       paneEl.id = `pane-${tabId}`;
+      document.getElementById(paneEl.id)?.remove();
       document.getElementById('terminal-area').appendChild(paneEl);
 
       // Create xterm instance with saved preferences
@@ -2453,9 +2460,11 @@ build/**</textarea>
       const tabId = 'file-' + Date.now();
       const fileName = filePath.split('/').pop();
 
+      // Same orphan-pane guard as createTab — see issue #161.
       const paneEl = document.createElement('div');
       paneEl.className = 'terminal-pane';
       paneEl.id = `pane-${tabId}`;
+      document.getElementById(paneEl.id)?.remove();
       document.getElementById('terminal-area').appendChild(paneEl);
 
       // Hide empty state
