@@ -147,15 +147,53 @@ Refresh the browser. Done. (Same DB write with `'\"development\"'` to flip the o
 
 ### B. Swap which host serves prod (cutover)
 
-Genuine cutover where a different host takes over the prod role:
+Genuine cutover where a different host takes over the prod role. Steps are
+ordered so that incoming-prod is fully stopped + wiped + re-seeded before
+its container starts. Don't rely on `rsync --delete` alone — the excludes
+(`*.wal`, `*.shm`, `qdrant/.lock`) leave incoming-prod's pre-existing copies
+of those in place, and a stale `qdrant/.lock` will prevent Qdrant from
+starting cleanly. Explicit wipe avoids the footgun.
 
-1. **Pre-flight on the incoming-prod host**: confirm its image is current (`docker image inspect irina:5000/workbench:latest`) and the container is running healthily.
-2. **Seed/refresh data** on the incoming-prod host from the outgoing-prod's `/data` (see "Seeding a Dev Host from Prod Data" above — same procedure, just with the swapped roles).
-3. **Flip logos**: set `logo_variant='production'` on the incoming-prod's DB; set `logo_variant='development'` on the outgoing-prod's DB.
-4. **Stop the outgoing-prod container** so traffic naturally lands on the new prod (or update DNS / reverse-proxy / wherever the prod URL points).
-5. **Verify on incoming-prod**: red Pro logo renders, sessions resume, chat works.
+1. **Pre-flight on the incoming-prod host**: confirm its image is current (`docker image inspect irina:5000/workbench:latest`) and the container has been built/deployed with the code you intend to ship.
+2. **Stop the incoming-prod container** so it releases file locks and SQLite handles before the wipe:
+   ```bash
+   ssh <user>@<incoming-prod> "cd /srv/.admin/workbench && docker compose stop workbench"
+   ```
+3. **Wipe incoming-prod's `/srv/workbench/`** entirely so no residual dev state survives the cutover (stale qdrant lock, leftover test sessions in DB, orphaned CLI session JSONLs, etc.):
+   ```bash
+   ssh <user>@<incoming-prod> "sudo rm -rf /srv/workbench/* /srv/workbench/.[!.]* /srv/workbench/..?* 2>/dev/null"
+   ```
+4. **Rsync from outgoing-prod**:
+   ```bash
+   ssh <user>@<incoming-prod> "rsync -aHAX --delete \\
+     --exclude='.blueprint/qdrant/.lock' \\
+     --exclude='*.wal' --exclude='*.shm' \\
+     blueprint@<outgoing-prod>:/srv/workbench/ /srv/workbench/ && \\
+     sudo chown -R 1000:2001 /srv/workbench"
+   ```
+   (`--delete` is now redundant given the prior wipe but harmless; keep it as belt-and-suspenders.)
+5. **Flip logos** in both DBs while the incoming-prod container is still stopped (writes go straight to the SQLite file with no live process holding it):
+   ```bash
+   # Incoming prod → production:
+   ssh <user>@<incoming-prod> "sqlite3 /srv/workbench/.blueprint/blueprint.db \\
+     \"INSERT OR REPLACE INTO settings(key, value) VALUES ('logo_variant', '\\\"production\\\"');\""
+   # Outgoing prod → development:
+   ssh blueprint@<outgoing-prod> "sqlite3 /srv/workbench/.blueprint/blueprint.db \\
+     \"INSERT OR REPLACE INTO settings(key, value) VALUES ('logo_variant', '\\\"development\\\"');\""
+   ```
+6. **Start incoming-prod container** with the seeded data:
+   ```bash
+   ssh <user>@<incoming-prod> "cd /srv/.admin/workbench && docker compose up -d workbench"
+   ```
+7. **Stop outgoing-prod container** (or update DNS / reverse-proxy / wherever the prod URL points) so traffic naturally lands on the new prod:
+   ```bash
+   ssh blueprint@<outgoing-prod> "cd /srv/.admin/workbench && docker compose stop workbench"
+   ```
+8. **Verify on incoming-prod**: red Prod logo renders, sidebar populates with outgoing-prod's projects/sessions, click into one, send a trivial prompt, get a real reply.
 
-Both A and B are seconds, not hours, when nothing else is changing — they're just DB writes plus optional data movement. If they're taking longer than that, something else is going on (code change, data path change, schema change) and you're doing more than a swap.
+If anything in steps 6–8 fails, outgoing-prod's container is still safely stopped (not destroyed); you can flip the logos back and `docker compose up -d` outgoing-prod to roll back.
+
+Both A and B are seconds-to-minutes, not hours, when nothing else is changing — they're DB writes plus the rsync. If a cutover is taking longer than that, something else is going on (code change, data path change, schema change) and you're doing more than a swap.
 
 ## Workspace Conventions
 
