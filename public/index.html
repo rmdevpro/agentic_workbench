@@ -2632,7 +2632,9 @@ build/**</textarea>
     let fileBrowserInitialized = false;
 
     function refreshFileTree() {
-      // Save expand state of mount headers before rebuilding
+      const treeEl = document.getElementById('file-browser-tree');
+      // Snapshot top-level mount-header expansion + every directory inside
+      // each mount (jqueryFileTree marks open dirs with class `expanded`).
       const expandedMounts = new Set();
       document.querySelectorAll('#file-browser-tree > div').forEach(section => {
         const header = section.querySelector('[style*="cursor"]');
@@ -2642,10 +2644,16 @@ build/**</textarea>
           expandedMounts.add(mountPath);
         }
       });
+      const expandedPaths = new Set();
+      treeEl.querySelectorAll('li.expanded > a[rel]').forEach(a => {
+        expandedPaths.add(a.getAttribute('rel'));
+      });
+
       fileBrowserInitialized = false;
       loadFiles();
-      // Restore expand state after rebuild
+
       setTimeout(() => {
+        // Re-expand top-level mount headers
         document.querySelectorAll('#file-browser-tree > div').forEach(section => {
           const header = section.querySelector('[style*="cursor"]');
           const mountPath = header?.textContent?.replace(/[▶▼]/g, '').trim();
@@ -2653,6 +2661,36 @@ build/**</textarea>
             header.click();
           }
         });
+
+        // Re-expand inner directories. jqueryFileTree loads children
+        // asynchronously on click, so deeper paths only become clickable
+        // after their parent's load resolves — repeat passes until nothing
+        // is left to expand or progress stops.
+        const remaining = new Set(expandedPaths);
+        let pass = 0;
+        const expandPass = () => {
+          if (remaining.size === 0 || pass++ > 30) return;
+          let progressed = false;
+          const candidates = [...remaining].sort((a, b) => a.length - b.length);
+          for (const path of candidates) {
+            const link = Array.from(treeEl.querySelectorAll('a[rel]'))
+              .find(a => a.getAttribute('rel') === path);
+            if (!link) continue;
+            const li = link.closest('li');
+            if (!li || !li.classList.contains('directory')) {
+              remaining.delete(path);
+              continue;
+            }
+            if (li.classList.contains('expanded')) {
+              remaining.delete(path);
+              continue;
+            }
+            $(link).click();
+            progressed = true;
+          }
+          if (progressed || remaining.size > 0) setTimeout(expandPass, 250);
+        };
+        setTimeout(expandPass, 200);
       }, 100);
     }
     function autoNavigateFileTree() {
@@ -3349,10 +3387,13 @@ build/**</textarea>
       background: '#ffffff', foreground: '#1e1e1e', cursor: '#0066cc',
       selectionBackground: '#add6ff',
       black: '#000000', red: '#cd3131', green: '#008000', yellow: '#795e26',
-      blue: '#0451a5', magenta: '#bc05bc', cyan: '#0598bc', white: '#e5e5e5',
+      blue: '#0451a5', magenta: '#bc05bc', cyan: '#0598bc', white: '#3a3a3a',
       brightBlack: '#666666', brightRed: '#cd3131', brightGreen: '#14ce14',
       brightYellow: '#b5ba00', brightBlue: '#0451a5', brightMagenta: '#bc05bc',
-      brightCyan: '#0598bc', brightWhite: '#a5a5a5',
+      brightCyan: '#0598bc', brightWhite: '#1e1e1e',
+      // white/brightWhite remapped to dark: Claude's "text being written" preview
+      // uses ANSI white codes assuming a dark terminal — would be invisible on
+      // this light background. (#165)
     };
 
     const LIGHT_CSS = {
@@ -3384,10 +3425,12 @@ build/**</textarea>
       background: '#e8f0f8', foreground: '#0e2a4e', cursor: '#1a4a80',
       selectionBackground: '#b0cce8',
       black: '#0e2a4e', red: '#b01030', green: '#186830', yellow: '#6a5010',
-      blue: '#1a4a80', magenta: '#6a2098', cyan: '#106068', white: '#e8f0f8',
+      blue: '#1a4a80', magenta: '#6a2098', cyan: '#106068', white: '#3a6090',
       brightBlack: '#3a6090', brightRed: '#d02040', brightGreen: '#208840',
       brightYellow: '#887020', brightBlue: '#2868a8', brightMagenta: '#8838b8',
-      brightCyan: '#188088', brightWhite: '#f4f8fc',
+      brightCyan: '#188088', brightWhite: '#0e2a4e',
+      // white/brightWhite remapped to dark blueprint blues: previously equal to
+      // the background (#e8f0f8 / #f4f8fc), making any ANSI-white output invisible. (#165)
     };
 
     const BLUEPRINT_LIGHT_CSS = {
