@@ -88,9 +88,97 @@ Alternatively, copy credentials from an already-authenticated machine (with perm
 
 ## Hugging Face Spaces
 
-The workbench is also deployable as a Hugging Face Space. HF provides a persistent volume at `/data` automatically when persistent storage is enabled in the Space settings. HF builds the same `Dockerfile` as every other host; Space configuration lives in `README.huggingface.md`. The Space's logo_variant is typically left at `default`.
+HF Space deployment is fully separate from the Admin-repo compose-override pipeline. Same image, same code; the Space-side runtime is owned by HF.
 
-HF Space deployment doesn't go through the Admin-repo compose-override pipeline — it's a separate mechanism owned by the HF Spaces runtime.
+### What HF gets vs what GitHub holds
+
+GitHub `main` is the canonical source of truth and holds full development history. HF Space repositories are deploy targets — they hold only the **current snapshot** of the workbench, with no concept of (or need for) GitHub's history. This intentional separation matters because HF's pre-receive hook scans every binary blob in any git push and rejects PNGs/binaries above its size threshold without LFS — so pushing GitHub's full history (including blobs from old commits that no longer exist in HEAD) reliably fails. The deploy mechanism therefore **does not use `git push`** — it uses HF's file-upload API.
+
+### Deploy mechanism: `hf upload`
+
+Prerequisites (one-time):
+
+```bash
+pip3 install --user --break-system-packages huggingface_hub
+export PATH=~/.local/bin:$PATH
+export HF_TOKEN=<your-hf-token>   # write scope; from /mnt/storage/credentials/api-keys/huggingface.env
+```
+
+Per-deploy procedure:
+
+```bash
+cd /data/workspace/repos/agentic-workbench
+
+# Stage only tracked files into a clean directory (no node_modules, no .git, no junk).
+rm -rf /tmp/hf-deploy
+mkdir -p /tmp/hf-deploy
+git archive HEAD | tar -x -C /tmp/hf-deploy
+
+# Upload. --delete '*' makes it a true sync (removes Space-side files not in staging).
+hf upload <space-id> /tmp/hf-deploy . --repo-type space \
+  --commit-message "Deploy snapshot of main@$(git rev-parse --short=12 main)" \
+  --delete '*'
+```
+
+`<space-id>` is e.g. `aristotle9/agentic-workbench`. HF makes one new commit on the Space's repo containing the snapshot, then auto-rebuilds the Docker image. Build typically completes in 1–2 minutes; poll `https://huggingface.co/api/spaces/<space-id>` for `runtime.stage == RUNNING`.
+
+**No clone of the HF Space repo is needed**, no `.gitattributes`, no LFS, no force push, no rename of files at deploy time, no separate branches in either repo.
+
+### Two-Space pattern
+
+Deploy the same content to two Spaces with different Space-level Secrets to get two distinct user experiences from one image:
+
+| Space | URL | Secrets | Auth mode (auto-detected) | Use |
+|---|---|---|---|---|
+| `aristotle9/agentic-workbench` | https://aristotle9-agentic-workbench.hf.space | (none) | `template` | Public landing — duplicate-me gate; if a visitor duplicates as a private Space they get full access |
+| `aristotle9/agentic-workbench-test` | https://aristotle9-agentic-workbench-test.hf.space | `BLUEPRINT_USER`, `BLUEPRINT_PASS` | `password` | Login-gated test deploy — for verifying changes against a real HF deployment |
+
+Auth-mode detection logic lives in `server.js:detectAuthMode()` — password mode wins over public-Space template mode when both creds are set.
+
+Set or remove Secrets via HF API:
+
+```bash
+# Set
+curl -sX POST "https://huggingface.co/api/spaces/<space-id>/secrets" \
+  -H "Authorization: Bearer $HF_TOKEN" -H "Content-Type: application/json" \
+  -d '{"key":"BLUEPRINT_USER","value":"<username>"}'
+
+# Remove
+curl -sX DELETE "https://huggingface.co/api/spaces/<space-id>/secrets" \
+  -H "Authorization: Bearer $HF_TOKEN" -H "Content-Type: application/json" \
+  -d '{"key":"BLUEPRINT_USER"}'
+
+# Restart to pick up env changes
+curl -sX POST "https://huggingface.co/api/spaces/<space-id>/restart" \
+  -H "Authorization: Bearer $HF_TOKEN"
+```
+
+### Persistent storage
+
+HF provides a persistent volume at `/data` when persistent storage is enabled in the Space settings (HF web UI → Settings → Persistent storage). Without it, the SQLite DB, qdrant collections, session JSONLs, and workspace all wipe on every Space restart. Recommended for any Space that's used beyond a one-off demo.
+
+### README.md is the HF cardData
+
+The Space's `README.md` carries the HF Space metadata (frontmatter: `title`, `sdk`, `app_port`, etc.) — HF's docker SDK reads this to know how to build and serve the Space. The canonical `README.md` in the GitHub repo includes this frontmatter at the top, so the same file works for both GitHub readers and HF. Don't keep a separate `README.huggingface.md` — that's the historical hack that complicated deploys.
+
+### Logo variant
+
+A Space's `logo_variant` setting is typically left at `default` (canonical blue lockup). Override only if the Space is a designated dev or prod for some user-facing purpose; for marketing/test deploys the default is correct.
+
+### Verification
+
+After a deploy and the Space stage goes RUNNING:
+
+1. `curl -s https://<space-host>/ | grep __GATE_MODE__` — confirms which gate mode the running container detected (`template`, `password`, or `open`).
+2. `curl -sI https://<space-host>/blueprint-preview.png` — content-length should match the source file size (≈176000), not ~131 (which would indicate an LFS pointer was uploaded instead of the binary — should not happen with this deploy mechanism, but worth a sanity check).
+3. **Visual check in a browser** (Playwright or human). HTTP 200 doesn't catch broken-image rendering; an actual page load does.
+
+### What NOT to do
+
+- **Do not `git push` to the HF Space repo.** GitHub history will be rejected (per the size-threshold issue above) or, worse, will accidentally remove `public/*.png` if the local working tree has the historical `*.png` gitignore rule active.
+- **Do not maintain a clone of the HF Space repo.** Earlier deploys did this and accumulated stale LFS hooks in `.git/config` that silently converted PNGs to pointer files. The `hf upload` mechanism does not need a clone.
+- **Do not introduce LFS for `public/*.png`.** They're under HF's API-path size threshold and ship as regular blobs without complication. LFS only adds friction (need `git lfs pull` in the Dockerfile or HF won't resolve pointer files into the build context).
+- **Do not split the HF README from the canonical README.** One file with HF frontmatter at the top serves both audiences.
 
 ## Seeding a Dev Host from Prod Data
 
