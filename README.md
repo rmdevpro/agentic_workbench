@@ -1,17 +1,52 @@
-# Blueprint Server
+---
+title: Blueprint
+emoji: 🔧
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+fullWidth: true
+---
 
-Modular server for managing Claude AI coding sessions via tmux, with smart compaction, terminal streaming, and project management.
+# Blueprint
 
-## Architecture
+Web-based CLI workbench for AI coding agents. Manage Claude Code sessions, projects, and tasks from your browser.
 
-The monolithic `server.js` has been decomposed into focused modules using factory-based dependency injection:
+## Quick Start
+
+1. Click **Duplicate this Space** to create your own copy
+2. Make your Space **private**
+3. Add your `ANTHROPIC_API_KEY` as a Space Secret
+4. Your instance is ready
+
+## Security
+
+Blueprint auto-detects whether it's running on a public or private HF Space:
+
+- **Public Space** — all access is blocked with a landing page. No credentials can be entered or stored.
+- **Private Space** — full access. Optionally set `BLUEPRINT_USER` and `BLUEPRINT_PASS` as Space Secrets to add password protection.
+- **Self-hosted** (docker-compose) — full access, no auth gate.
+
+## Persistent Storage
+
+Blueprint stores all data (database, sessions, workspace) under `/data`. To persist data across Space rebuilds, enable persistent storage in your Space settings. Without it, all data is lost on every rebuild.
+
+## Notes
+
+- Free Spaces sleep after ~15 min of inactivity — tmux sessions will be lost on wake
+- No Docker-in-Docker support (container build features are disabled)
+
+---
+
+## Architecture & Internals
+
+The monolithic `server.js` is decomposed into focused modules using factory-based dependency injection:
 
 | Module                | Responsibility                                                                   |
 | --------------------- | -------------------------------------------------------------------------------- |
 | `server.js`           | Wiring layer: constructs modules, injects deps, starts server                    |
 | `routes.js`           | HTTP boundary: all 40+ route handlers with input validation                      |
-| `compaction.js`       | Smart compaction pipeline with 3-phase orchestration (prep → compact → recover)  |
-| `watchers.js`         | Filesystem monitoring: JSONL watchers, settings sync, compaction polling         |
+| `watchers.js`         | Filesystem monitoring: JSONL watchers, settings sync, MCP registration           |
 | `tmux-lifecycle.js`   | tmux session creation, cleanup, limit enforcement                                |
 | `ws-terminal.js`      | WebSocket ↔ PTY terminal bridge with backpressure handling                       |
 | `session-resolver.js` | Async temp→real session ID resolution                                            |
@@ -36,34 +71,23 @@ session-utils.js                    (imports: safe, db, config, logger)
 keepalive.js                        (factory — deps: safe, config, logger; fully async token reads)
 tmux-lifecycle.js                   (factory — deps: safe, logger)
 session-resolver.js                 (factory — deps: tmux fns, db, safe, config, logger)
-compaction.js                       (factory — deps: tmux fns, db, safe, config, session-utils, logger)
 watchers.js                         (factory — deps: shared-state, db, safe, config, session-utils, logger)
-                                    (receives checkCompactionNeeds via injection)
 ws-terminal.js                      (factory — deps: shared-state, safe, keepalive, config, logger)
                                     (receives tmux fns and watcher fns via injection)
 routes.js                           (deps: db, safe, config, session-utils, keepalive, logger)
-                                    (receives tmux, resolver, compaction fns via injection)
+                                    (receives tmux, resolver fns via injection)
 server.js                           (wiring — constructs all, injects deps, calls config.init(), starts server)
 ```
 
-## Quick Start
+### Local docker-compose
 
-1. Copy `.env.example` to `.env` and configure paths:
+For self-hosted operation:
 
-   ```bash
-   cp .env.example .env
-   ```
+```bash
+docker compose up -d
+```
 
-2. Build and run:
-
-   ```bash
-   docker build -t blueprint-server .
-   docker run -p 3000:3000 --env-file .env \
-     -v /path/to/workspace:/workspace \
-     blueprint-server
-   ```
-
-3. Open `http://localhost:3000` in your browser.
+Then open `http://localhost:7860`. See the **Hugging Face Spaces** section in `config/docs/sdlc/guides/blueprint-deployment.md` for HF deployment.
 
 ## Configuration
 
@@ -72,7 +96,6 @@ All tunables are externalized in `.env` (see `.env.example` for complete list) a
 - **Server**: `PORT`, `WORKSPACE`, `CLAUDE_HOME`, `BLUEPRINT_DATA`
 - **Resources**: `MAX_TMUX_SESSIONS`, `TMUX_CLEANUP_MINUTES`
 - **Logging**: `LOG_LEVEL` (DEBUG, INFO, WARN, ERROR)
-- **Compaction**: Poll intervals, capture lines, thresholds, `compaction.checkerModel` (default: `claude-haiku`), timeouts, `planModeTimeoutMs`, `waitForPromptTimeoutMs`, `planExitSleepMs`, `progressLogIntervalMs`
 - **Keepalive**: `KEEPALIVE_MODE`, `KEEPALIVE_IDLE_MINUTES`, timing thresholds via config, `keepalive.queryTimeoutMs`, prompts externalized to `config/prompts/keepalive-*.md`
 - **API**: File size limits, bridge timeouts (`bridge.cleanupSentMs`, `bridge.cleanupUnsentMs`), login timeouts
 - **WebSocket**: Buffer watermarks, `ws.pingIntervalMs`
@@ -105,23 +128,6 @@ All API endpoints validate inputs:
 - Search queries: max 200 characters
 - Keepalive idle minutes: 1–1440
 - MCP tool inputs: task_id numeric validation, session_id format validation, content length limits
-
-## Smart Compaction Pipeline
-
-The compaction system monitors token usage and orchestrates context compaction:
-
-1. **Monitoring**: `watchers.js` polls JSONL files; `compaction.js` checks token usage against configurable thresholds (advisory 65%, warning 75%, urgent 85%, auto 90%).
-2. **Phase 1 (PREP)**: Enters plan mode, coordinates with checker model to prepare for compaction. Logs start/complete with duration at INFO.
-3. **Phase 2 (COMPACT)**: Sends `/compact` command, waits for prompt to return. Logs start/complete with duration at INFO. Periodic progress logs every 60 seconds during long waits.
-4. **Phase 3 (RECOVERY)**: Provides conversation tail to checker for context restoration. Logs start/complete with duration, `resumeComplete`, and `turnsUsed` at INFO.
-
-### Verbose Pipeline Logging
-
-Set `compaction.verbose: true` in `config/defaults.json` to enable detailed per-stage logging including checker model interactions, blueprint evaluations, and intermediate outputs. Stage start/complete with duration is always logged at INFO level regardless of verbose setting.
-
-### Auto-Compaction Timers
-
-Auto-compaction timers use `.unref()` so they don't prevent process exit during shutdown.
 
 ## MCP Server Registration
 

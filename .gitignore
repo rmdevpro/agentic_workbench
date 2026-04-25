@@ -1,9 +1,18 @@
 node_modules/
 .test-data/
 .playwright-mcp/
+coverage/
 # Test/debug screenshots — only block at repo root (where Playwright/Hymie default-saves).
 # Legitimate PNGs in public/, docs/, etc. are NOT filtered.
 /*.png
+# Output of scripts/prime-test-session.js
+scripts/prime_*.jsonl
+# Session-scoped writing artifacts — never commit.
+3cli-sessions/
+CLAUDE_PENANCE.txt
+alignment-findings.txt
+compaction-injection-discussion.md
+compaction-process-checker-v2.md
 docker-compose.override.yml
 
 # Local junk that shouldn't be tracked.
