@@ -165,13 +165,53 @@ The Space's `README.md` carries the HF Space metadata (frontmatter: `title`, `sd
 
 A Space's `logo_variant` setting is typically left at `default` (canonical blue lockup). Override only if the Space is a designated dev or prod for some user-facing purpose; for marketing/test deploys the default is correct.
 
-### Verification
+### Per-deploy auth setup (Hymie, one-time per deploy)
 
-After a deploy and the Space stage goes RUNNING:
+HF deploys are rare; spend the manual time per deploy to set up auth properly. **HF Spaces here run without persistent storage** — every `hf upload` triggers a Docker rebuild that wipes `/data`, including all CLI auth. So auth has to be re-established after every deploy.
 
-1. `curl -s https://<space-host>/ | grep __GATE_MODE__` — confirms which gate mode the running container detected (`template`, `password`, or `open`).
-2. `curl -sI https://<space-host>/blueprint-preview.png` — content-length should match the source file size (≈176000), not ~131 (which would indicate an LFS pointer was uploaded instead of the binary — should not happen with this deploy mechanism, but worth a sanity check).
-3. **Visual check in a browser** (Playwright or human). HTTP 200 doesn't catch broken-image rendering; an actual page load does.
+Use Hymie (or Hymie2) to drive a real Firefox session. Steps (one-time per deploy, on the **password test Space**):
+
+1. **Open the test Space** in Hymie's Firefox: `https://aristotle9-agentic-workbench-test.hf.space/` — login form appears (gate is in `password` mode because Space Secrets are set).
+2. **Log in** with the gate creds (`aristotle9` / `Vault2011$` from `/mnt/storage/credentials/api-keys/huggingface.env`). Workbench shell appears with "Not authenticated — open any session and run `/login`" warning at top.
+3. **Open Settings → API KEYS section.**
+   - Paste the Gemini API key (from `/mnt/storage/credentials/api-keys/gemini.env`) into "Gemini API Key".
+   - Paste the OpenAI key (from `/mnt/storage/credentials/api-keys/openai.env`) into "OpenAI / Codex API Key" (Codex CLI uses the OpenAI key).
+   - Close Settings (auto-save on blur).
+4. **Create a project** (sidebar `+` → pick a folder under `/data/workspace`, e.g. `docs`).
+5. **Create a Claude session** (project header `+` → CLAUDE → enter any prompt like "say hello" → Start Session).
+6. **In the Claude tab, run `/login`** → menu appears → press Enter to select option 1 ("Claude account with subscription"). Two parallel UI channels appear:
+   - The Blueprint **gate modal** ("Authentication Required") — **this is the designed path**.
+   - The CLI's own terminal prompt: `Paste code here if prompted >` — **ignore this entirely**.
+7. **Click "Authenticate with Claude"** in the modal → opens the OAuth tab on `claude.ai`.
+8. **Authorize** → redirected to `platform.claude.com/oauth/code/callback` with the auth code displayed → click "Copy Code".
+9. **Switch back to the test Space tab**, paste the code in the modal's input field, click Submit. Modal closes; the "Not authenticated" warning at top disappears.
+
+**Known bug (#184):** the modal Submit successfully sets up Blueprint-side auth but does NOT advance the running CLI session out of its `/login` prompt — the CLI sits at `Paste code here if prompted >` indefinitely. Until that's fixed, **close and recreate the Claude session after the modal Submit completes.** The new session will pick up the freshly-written `~/.claude/.credentials.json` and start authenticated.
+
+10. **Confirm Claude is authenticated** by creating a new Claude session — it should show "Welcome back …" and the workbench-top warning should be gone.
+
+After this, Hymie can be closed. **Switch to Playwright for the verification suite.**
+
+### Verification suite (Playwright, every deploy)
+
+Run **as a user would** via Playwright — actually navigate, click, type, screenshot, observe. Do not script `browser_evaluate` calls reading the DOM as a substitute for user actions; the runbook entries are descriptions of what a user does, not copy-paste scripts.
+
+Eight tests, ~10 min total:
+
+| # | ID | Where to run | What it covers | Notes |
+|---|---|---|---|---|
+| 1 | **GATE-MKT-01** (HF-deploy-specific) | Marketing Space (no creds) | Page loads; `__GATE_MODE__ === 'template'`; `planlogo.png` renders (not broken-image); `blueprint-preview.png` background renders; "Duplicate this Space" button present | No login required |
+| 2 | **GATE-LOGIN-01** (HF-deploy-specific) | Test Space (creds set) | Page loads; `__GATE_MODE__ === 'password'`; login form rendered with username + password fields; planlogo visible | No login required |
+| 3 | **GATE-LOGIN-02** (HF-deploy-specific) | Test Space | Submit valid creds → redirected past gate; full app shell visible (sidebar, status bar, panel toggles) | Uses gate creds |
+| 4 | **SMOKE-01** (`tests/blueprint-test-runbook.md` Phase 1) | Test Space (post-login) | Page title "Blueprint"; sidebar present; project list populates; settings modal hidden | |
+| 5 | **SMOKE-02** (Phase 1) | Test Space | `.project-group` count matches `/api/state` projects; active filter selected by default | |
+| 6 | **SMOKE-03** (Phase 1) | Test Space | `/health` returns ok; `/api/auth/status` returns valid; `/api/mounts` returns array | |
+| 7 | **USR-05** (Phase 7) | Test Space | Open Files panel, expand a mount, click into a directory, file tree renders | |
+| 8 | **REG-148-01** (`tests/blueprint-test-runbook.md` REG-148-01, P0) | Test Space | Create one Claude + one Gemini + one Codex session in the same project; for 5 rounds, click each tab → send a verifiable message ("what is 7 times 8") → wait 10s → confirm CLI responded with the correct answer (not just echoed input). | Requires Hymie auth setup above to be complete. |
+
+REG-148-01 is the definitive functional check — runbook is explicit that "clicking tabs is NOT enough; you must chat with each CLI and verify it responds." Failure criteria are strict (any 401, blank response, login screen, piled-up input, or wrong-CLI content = FAIL).
+
+If REG-148-01 fails because a CLI shows a login prompt or 401, the per-deploy Hymie auth step (above) was incomplete — go redo it.
 
 ### What NOT to do
 
@@ -179,6 +219,9 @@ After a deploy and the Space stage goes RUNNING:
 - **Do not maintain a clone of the HF Space repo.** Earlier deploys did this and accumulated stale LFS hooks in `.git/config` that silently converted PNGs to pointer files. The `hf upload` mechanism does not need a clone.
 - **Do not introduce LFS for `public/*.png`.** They're under HF's API-path size threshold and ship as regular blobs without complication. LFS only adds friction (need `git lfs pull` in the Dockerfile or HF won't resolve pointer files into the build context).
 - **Do not split the HF README from the canonical README.** One file with HF frontmatter at the top serves both audiences.
+- **Do not paste the OAuth code into the Claude CLI's `/login` prompt** when the gate modal is also showing. The modal is the designed path; the CLI prompt is a parallel channel that races for the same single-use code. Using both will break one or the other (#184). Modal-only.
+- **Do not assume the modal Submit advances the live CLI.** Per #184, it doesn't. Close + recreate any Claude session that was mid-`/login` when you completed the modal.
+- **Do not OAuth into the wrong Blueprint** when copying the auth code back. If you have multiple Blueprint tabs open in the same Hymie browser (e.g. both irina prod at `192.168.1.110:7860` AND the HF test Space), check the URL bar before pasting — the auth code is single-use and will land wherever you submit it first.
 
 ## Seeding a Dev Host from Prod Data
 
