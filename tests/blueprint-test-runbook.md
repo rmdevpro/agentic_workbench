@@ -164,15 +164,38 @@ Before starting, verify all of the following:
 
 ## Test Execution
 
-### Phase 0: Claude Authentication (required for Phase 5+)
+### Phase 0: Environment Setup (required for everything that follows)
 
-Claude CLI tests (Phase 5: CLI & Terminal) require valid Claude credentials in the container. Without auth, `/status`, `/plan`, `/model`, and all prompt-based tests will fail with "Not logged in."
+Phase 0 prepares a clean, authenticated test environment for the rest of the runbook. It has TWO steps that always run together: first a fresh container, then OAuth on top.
+
+#### 0.A: Fresh container (also covers REG-FRESH-01)
+
+A fresh container with an empty `/data` volume must come up cleanly. This is the "Fresh Install Works" regression — by virtue of Phase 0.A succeeding, REG-FRESH-01 PASSes for the run.
+
+**Steps:**
+1. On `${WORKBENCH_HOST}`: `docker run --rm -d --name blueprint-test-fresh -v <ephemeral-volume>:/data -p <free-port>:7860 <image>` (or use a docker-compose entry that creates the ephemeral volume each run).
+2. Bind `${WORKBENCH_URL}` to that container's port for this run.
+3. Wait up to 30s for `/health` to return `{status:'ok'}`.
+4. `browser_navigate` to `${WORKBENCH_URL}` — verify the empty-state UI renders, sidebar shows zero (or default-seeded) projects.
+5. `docker exec ${WORKBENCH_CONTAINER} ls /data/.blueprint/blueprint.db` — DB file exists (entrypoint.sh + db.js migrations ran).
+6. `docker exec ${WORKBENCH_CONTAINER} ls /data/workspace` — workspace dir created.
+7. `curl ${WORKBENCH_URL}/api/state` — returns `{projects: []}` or default seeded projects without errors.
+
+**Expected:** Container starts within 30s. /health green. UI loads. DB + workspace seeded. No 500s in initial requests.
+
+**Result:** ☐ PASS ☐ FAIL
+
+If 0.A FAILs: STOP — file an issue, do not proceed. Nothing downstream is meaningful without a working container.
+
+#### 0.B: Claude Authentication (required for Phase 5+)
+
+Claude CLI tests (Phase 5: CLI & Terminal) require valid Claude credentials in the just-spawned container.
 
 **Option A: Hymie desktop automation (full OAuth flow)**
 Use Hymie MCP to automate the browser-based OAuth flow. This tests the actual auth pipeline end-to-end. Requires Hymie MCP server connected.
 
 **Option B: Inject credentials from an authenticated device (with user permission)**
-Copy the credentials file from a machine that already has valid Claude auth into the container. This skips the OAuth flow but ensures CLI tests can run.
+Copy the credentials file from a machine that already has valid Claude auth into the container.
 
 ```bash
 # From the authenticated machine, copy credentials to the workbench container:
@@ -184,7 +207,13 @@ cat ~/.claude/credentials.json
 echo '<paste credentials JSON>' > ~/.claude/credentials.json
 ```
 
-Ask the user which option to use. If neither is available — fix the auth path; do NOT skip Phase 5. set up auth (one of the options above) before Phase 5. Do NOT proceed without auth — Phase 5 tests will FAIL.
+Ask the orchestrator which option to use. If neither is available, fix the auth path before proceeding — Phase 5 tests will FAIL without auth.
+
+**Result:** ☐ PASS ☐ FAIL
+
+#### Orchestrator-directed SKIP
+
+When the orchestrator explicitly directs "skip Phase 0 — re-use existing dev container with persistent auth," then 0.A and 0.B both record SKIP with that orchestrator reason verbatim, and REG-FRESH-01 also records SKIP with the same reason. This is the only way SKIP appears for any test in this runbook.
 
 ---
 
@@ -3601,24 +3630,13 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 
 ---
 
-### REG-FRESH-01: Fresh Install Works
-**Issue:** Fresh install with empty volume
+### REG-FRESH-01: Fresh Install Works (covered by Phase 0.A)
 
-**Steps:**
-1. Wipe persistent volume completely
-2. Start container with empty volume
-3. `curl /health` — should return ok
-4. Navigate to UI — sidebar renders, empty state shown
-5. Create a project and session — works without errors
-6. All 3 CLI types can be created and connected
+This regression is now covered by **Phase 0.A: Fresh container** at the top of the runbook. Phase 0.A spins up a fresh container on an ephemeral `/data` volume and verifies clean startup, DB seeding, workspace creation, and `/api/state` health — which is exactly what this regression checks.
 
-**Expected:**
-- Health endpoint returns ok
-- No database errors (session_meta model column exists)
-- Workspace directory created with correct permissions (not root)
-- Entrypoint seeds docs, CLAUDE.md, GEMINI.md, AGENTS.md
+If Phase 0.A passes, REG-FRESH-01 inherits PASS. If 0.A fails, REG-FRESH-01 fails too and the run stops per the Phase 0 protocol. There are no separate steps to run here.
 
-**Result:** ☐ PASS ☐ FAIL
+**Result (mirror Phase 0.A):** ☐ PASS ☐ FAIL
 
 ---
 
