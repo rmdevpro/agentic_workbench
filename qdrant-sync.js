@@ -263,12 +263,21 @@ function buildCandidateConfig(overrideKey, overrideValue) {
 
 // #180: cheapest possible provider call to verify the candidate config is usable.
 // Returns { ok: true } or { ok: false, error: '<provider error string>' }.
+// Timeout caps the cost so a slow/unreachable provider can't hang PUT /api/settings
+// for more than VALIDATE_TIMEOUT_MS (per 3-CLI review of the original change).
+const VALIDATE_TIMEOUT_MS = 8000;
 async function validateProviderConfig(cfg) {
   try {
     if (!cfg.key && !cfg.isHF) {
       return { ok: false, error: `No API key configured for ${cfg.model || 'provider'}` };
     }
-    await embedWithConfig(cfg, ['ping'], 384);
+    await Promise.race([
+      embedWithConfig(cfg, ['ping'], 384),
+      new Promise((_, reject) => setTimeout(
+        () => reject(new Error(`validation timed out after ${VALIDATE_TIMEOUT_MS}ms`)),
+        VALIDATE_TIMEOUT_MS,
+      )),
+    ]);
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };
