@@ -3341,8 +3341,13 @@ build/**</textarea>
     // flag is set whenever the search box has 2+ chars; cleared when empty.
     let searchActive = false;
     let searchTimer = null;
+    // 3-CLI review fix: monotonic version so an in-flight /api/search response
+    // arriving after the user cleared/changed the query doesn't repopulate
+    // stale results. Only the current version's response renders.
+    let _searchVersion = 0;
     document.getElementById('session-search').addEventListener('input', (e) => {
       if (searchTimer) clearTimeout(searchTimer);
+      _searchVersion++; // invalidate any in-flight request
       const q = e.target.value.trim();
       if (q.length < 2) {
         // Clearing search: invalidate render-cache so the project-tree view
@@ -3355,12 +3360,16 @@ build/**</textarea>
         return;
       }
       searchActive = true;
+      const myVersion = _searchVersion;
       searchTimer = setTimeout(async () => {
         try {
           const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
           const data = await res.json();
+          if (myVersion !== _searchVersion) return; // stale response
           renderSearchResults(data.results);
-        } catch {}
+        } catch {
+          if (myVersion !== _searchVersion) return;
+        }
       }, 300);
     });
 
