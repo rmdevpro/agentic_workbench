@@ -75,9 +75,15 @@ function getEmbeddingConfig() {
 
   switch (provider) {
     case 'gemini': {
-      // Try DB setting (legacy), then env var (set by entrypoint, by PUT /api/settings, or externally)
-      // #178: env var must match what routes.js writes — process.env.GEMINI_API_KEY, NOT GOOGLE_API_KEY.
-      let key = _parseSetting('gemini_api_key', '') || process.env.GEMINI_API_KEY || '';
+      // Try DB setting (legacy), then env vars set by routes.js (GEMINI_API_KEY, primary)
+      // or by older entrypoints / external config (GOOGLE_API_KEY, kept as fallback for
+      // backwards compat — Gemini CLI itself accepts both).
+      // #178: routes.js:1135 writes process.env.GEMINI_API_KEY; this file used to read
+      // only GOOGLE_API_KEY, so DB writes wouldn't reach here. Now reads both.
+      let key = _parseSetting('gemini_api_key', '')
+        || process.env.GEMINI_API_KEY
+        || process.env.GOOGLE_API_KEY
+        || '';
       return { url: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-embedding-001', key };
     }
     case 'openai': {
