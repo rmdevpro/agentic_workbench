@@ -262,11 +262,15 @@ const stmts = {
   disableMcpForProject: db.prepare('DELETE FROM mcp_project_enabled WHERE project_id = ? AND mcp_name = ?'),
   getEnabledMcpForProject: db.prepare('SELECT m.* FROM mcp_registry m JOIN mcp_project_enabled e ON m.name = e.mcp_name WHERE e.project_id = ?'),
 
-  // #181: log surfacing
+  // #181: log surfacing.
+  // ts is stored as JS ISO8601 with millis ('2026-04-26T12:34:56.789Z'). The retention
+  // sweep MUST compare in the same format — `datetime('now', ?)` returns SQLite's
+  // 'YYYY-MM-DD HH:MM:SS' which is lexicographically NOT comparable to the ISO form.
+  // Use strftime to emit matching format on both sides.
   insertLog: db.prepare('INSERT INTO logs (ts, level, module, message, context) VALUES (?, ?, ?, ?, ?)'),
   errorCountSince: db.prepare("SELECT COUNT(*) AS n FROM logs WHERE level = 'ERROR' AND ts >= ?"),
   topErrorSince: db.prepare("SELECT module, message, ts FROM logs WHERE level = 'ERROR' AND ts >= ? ORDER BY ts DESC LIMIT 1"),
-  cleanupOldLogs: db.prepare("DELETE FROM logs WHERE ts < datetime('now', ?)"),
+  cleanupOldLogs: db.prepare("DELETE FROM logs WHERE ts < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)"),
 };
 
 module.exports = {
@@ -504,7 +508,10 @@ module.exports = {
     if (mod) { where.push('module = ?'); params.push(mod); }
     if (since) { where.push('ts >= ?'); params.push(since); }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-    const lim = Math.min(parseInt(limit, 10) || 200, 5000);
+    // Clamp to [1, 5000]. Negative limits would otherwise reach SQLite where
+    // LIMIT -1 means "no limit" — would let a caller dump the whole table.
+    const parsed = parseInt(limit, 10);
+    const lim = Math.max(1, Math.min(Number.isFinite(parsed) ? parsed : 200, 5000));
     return db.prepare(`SELECT id, ts, level, module, message, context FROM logs ${whereSql} ORDER BY ts DESC LIMIT ${lim}`).all(...params);
   },
   cleanupOldLogs(modifier = '-7 days') {

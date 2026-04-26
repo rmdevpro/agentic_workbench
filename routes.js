@@ -1247,7 +1247,8 @@ function registerCoreRoutes(
   // since: '1h' / '24h' / '7d' / ISO8601 timestamp. Default: last 1h.
   app.get('/api/logs', (req, res) => {
     const { level, module: mod } = req.query;
-    const limit = Math.min(parseInt(req.query.limit, 10) || 200, 5000);
+    const parsed = parseInt(req.query.limit, 10);
+    const limit = Math.max(1, Math.min(Number.isFinite(parsed) ? parsed : 200, 5000));
     const since = _parseSince(req.query.since || '1h');
     const rows = db.queryLogs({ level, module: mod, since, limit });
     res.json({ since, count: rows.length, rows });
