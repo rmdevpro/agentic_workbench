@@ -2,7 +2,20 @@
 
 This is the single master runbook for all Blueprint UI testing. It consolidates the original Phase 1-7 runbook, Phase 8-10 new feature tests, and easy-fixes tests into one document.
 
-Executed by an AI agent using Playwright MCP against the HF Space. Output is a pass/fail checklist per test, with GitHub issues filed for each failure.
+Executed by an AI agent using Playwright MCP against any Blueprint deployment. Output is a pass/fail checklist per test, with GitHub issues filed for each failure.
+
+## Target
+
+The runbook is environment-agnostic. The user specifies the target at execution time and the executor binds these values:
+
+- `${WORKBENCH_URL}` — base URL of the workbench under test (e.g. `${WORKBENCH_URL}`, `${WORKBENCH_URL}`)
+- `${WORKBENCH_CONTAINER}` — Docker container name for `docker exec` / `docker logs` style commands (e.g. `workbench`, `blueprint-test`)
+- `${WORKBENCH_HOST}` — host machine reachable for `ssh` and `docker` commands (e.g. `aristotle9@m5`, `blueprint@hf-space-host`)
+- `${GATE_USER}` / `${GATE_PASS}` — gate credentials if the deployment uses HF Space password auth; leave blank otherwise
+
+Anywhere a test step says `${WORKBENCH_URL}/api/...`, substitute the actual URL for the run. The executor is responsible for the substitution; the runbook itself never names a specific port or hostname in the runnable steps.
+
+Historical incident notes (Phase 5 & Phase 8 sections) may reference specific deployments by name — those are records of what happened, not instructions to repeat.
 
 ## Progress Tracker
 
@@ -23,12 +36,11 @@ Executed by an AI agent using Playwright MCP against the HF Space. Output is a p
 | **Total** | **~145** | |
 
 ## Meta
-- **Target:** https://aristotle9-agentic-workbench.hf.space (HF public Space with password auth)
-- **Login:** username `testuser`, password `testpass123` via gate login form
+- **Target:** `${WORKBENCH_URL}` (specified per run — see Target section above)
+- **Login:** `${GATE_USER}` / `${GATE_PASS}` if a gate is present; otherwise direct
 - **Tool:** Playwright MCP (local, NOT Malory)
-- **Branch:** huggingface-space
 - **Container user:** `blueprint` (UID 1000)
-- **Workspace path:** `/home/blueprint/workspace`
+- **Workspace path:** `/data/workspace`
 - **MCP Tools:** 3 tools — `blueprint_files`, `blueprint_sessions`, `blueprint_tasks`
 - **Settings tabs:** General, Claude Code, Vector Search, System Prompts
 - **Session types:** Claude, Gemini, Codex (selected via + dropdown)
@@ -46,7 +58,7 @@ These changes affect many test steps. Read before executing.
 6. **Quorum removed:** No quorum UI, no `/api/quorum/ask`, no `blueprint_ask_quorum`.
 7. **Smart compaction removed:** No `/api/sessions/:id/smart-compact`, no `blueprint_smart_compaction`.
 8. **Settings reorganized:** 4 tabs (General, Claude Code, Vector Search, System Prompts). Model/Thinking/Keepalive moved to Claude Code tab. Quorum fields (#14-16) and Tasks checkbox (#17) removed.
-9. **Workspace path:** `/home/blueprint/workspace` (not `/mnt/workspace`). Container user is `blueprint` (not `hopper`).
+9. **Workspace path:** `/data/workspace` (not `/mnt/workspace`). Container user is `blueprint` (not `hopper`).
 10. **CLI type indicator:** `.active-dot` replaced by CLI type label (C/G/X) with per-CLI colors.
 11. **Session creation:** `+` button opens dropdown: C Claude, G Gemini, X Codex, Terminal. `createSession(projectName, cliType)` accepts CLI type.
 12. **MCP tools consolidated:** 17 tools → 3 (`blueprint_files`, `blueprint_sessions`, `blueprint_tasks`). All action-based.
@@ -139,8 +151,8 @@ When a test fails:
 
 Before starting, verify all of the following:
 
-1. **HF Space running:** `browser_navigate` to `https://aristotle9-agentic-workbench.hf.space` loads the gate page
-2. **Login:** Fill username `testuser`, password `testpass123`, click Sign In
+1. **Workbench reachable:** `browser_navigate` to `${WORKBENCH_URL}` loads the page (gate page if a gate is configured, otherwise the workbench itself)
+2. **Login (if gate present):** Fill `${GATE_USER}` / `${GATE_PASS}`, click Sign In. Skip if no gate.
 3. **API reachable:** `browser_evaluate` with `fetch('/health').then(r=>r.json())` returns `{status:'ok'}`
 4. **Baseline state:** Create a test project if none exists. Do NOT delete sessions (AD-004: deleteSession is permanently disabled). Instead, create fresh test sessions with unique names and archive them after.
 5. **WebSocket connected:** Open a session tab, then verify its WebSocket: `browser_evaluate` with `activeTabId && tabs.get(activeTabId)?.ws?.readyState` returns `1` (OPEN). Note: there is no global `ws` variable; WebSocket connections are per-tab.
@@ -160,7 +172,7 @@ Use Hymie MCP to automate the browser-based OAuth flow. This tests the actual au
 Copy the credentials file from a machine that already has valid Claude auth into the container. This skips the OAuth flow but ensures CLI tests can run.
 
 ```bash
-# From the authenticated machine, copy credentials to the HF Space container:
+# From the authenticated machine, copy credentials to the workbench container:
 # 1. Read the local credentials
 cat ~/.claude/credentials.json
 
@@ -182,7 +194,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 **Priority:** P0
 
 **Steps:**
-1. `browser_navigate` to `https://aristotle9-agentic-workbench.hf.space` (login first if gate page shown)
+1. `browser_navigate` to `${WORKBENCH_URL}` (login with ${GATE_USER}/${GATE_PASS} first if gate page shown)
 2. `browser_screenshot` to capture initial load
 3. `browser_evaluate`: `document.title`
 4. `browser_evaluate`: `document.querySelector('#sidebar') !== null`
@@ -250,7 +262,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 - Health endpoint returns `{status:'ok'}`
 - Auth status returns `{valid:true}` (not `authenticated`)
 - WebSocket readyState is `1` (OPEN) for the active tab
-- Mounts endpoint returns array (may be empty on HF Spaces if nothing mounted under `/mnt`)
+- Mounts endpoint returns array (may be empty on cloud deployments if nothing mounted under `/mnt`)
 
 **Verify:**
 - All four checks return expected values
@@ -1835,7 +1847,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 - Buffer contains compaction-related output or acknowledgment (match `/compact|context|summar/i`)
 
 **Result:** ☒ PASS ☐ FAIL ☐ SKIP
-**Notes:** /compact ran and showed "Conversation compacted (ctrl+o for history)" and "Compacted (ctrl+o to see full summary)". INCIDENT: container exited (code 137) during this test run — manual `docker stop` by someone on M5, not OOM (container has no memory limit, host had 224 GiB available). Restarted via `docker start blueprint-test`. CLI /compact itself completed successfully before the stop.
+**Notes:** /compact ran and showed "Conversation compacted (ctrl+o for history)" and "Compacted (ctrl+o to see full summary)". INCIDENT: container exited (code 137) during this test run — manual `docker stop` by someone on M5, not OOM (container has no memory limit, host had 224 GiB available). Restarted via `docker start ${WORKBENCH_CONTAINER}`. CLI /compact itself completed successfully before the stop.
 
 ---
 
@@ -2069,7 +2081,7 @@ For each test below, use the standardized terminal I/O pattern:
 **Priority:** P0
 
 **Steps:**
-1. **Fresh start:** `browser_navigate` to `https://aristotle9-agentic-workbench.hf.space`
+1. **Fresh start:** `browser_navigate` to `${WORKBENCH_URL}`
 2. **Verify projects load:** `browser_evaluate`: `document.querySelectorAll('.project-group').length > 0` -- assert true
 3. **Get project name:** `browser_evaluate`: `fetch('/api/state').then(r=>r.json()).then(d=>d.projects[0].name)` -- save as PROJECT_NAME
 4. **Create new session:**
@@ -2306,7 +2318,7 @@ Smart compaction was removed from the codebase. All CST stress tests are permane
 
 #### Stress Tests (CST-01 through CST-20) -- REMOVED
 
-**Incident (2026-04-14):** During EDGE-07 execution, triggering smart compaction caused the blueprint-test container to consume all available memory and be OOM-killed (exit 137). Container was restarted via `docker start blueprint-test`. Compaction ran for approximately 460 seconds (Phase 1 only) before the kill. This confirms the feature is unsuitable for production and validates its removal.
+**Incident (2026-04-14):** During EDGE-07 execution, triggering smart compaction caused the blueprint-test container to consume all available memory and be OOM-killed (exit 137). Container was restarted via `docker start ${WORKBENCH_CONTAINER}`. Compaction ran for approximately 460 seconds (Phase 1 only) before the kill. This confirms the feature is unsuitable for production and validates its removal.
 
 Context threshold, compaction cycle, and autocompaction stress tests.
 
@@ -2470,7 +2482,7 @@ Ask CLI, Quorum, Guides, Skills, and Prompts tests removed — features deleted 
 
 ### NF-38: Workspace Path
 **Action:** Fetch `/api/state`.
-**Verify:** workspace = `/home/blueprint/workspace`. No references to hopper or /mnt/workspace.
+**Verify:** workspace = `/data/workspace`. No references to hopper or /mnt/workspace.
 
 ---
 
@@ -3052,13 +3064,13 @@ Quick pass/fail checklist for all 139 UI elements. Execute with `browser_evaluat
 - **Timeouts:** CLI tests with Claude responses: 15-30s. UI-only tests: 1-3s.
 - **Flaky tests:** Retry once with doubled waits before marking FAIL.
 - **Screenshots:** Minimum: SMOKE-01, every FAIL, E2E-01 key steps.
-- **API Base:** `fetch()` in `browser_evaluate` uses relative paths. Direct HTTP uses `https://aristotle9-agentic-workbench.hf.space/api/`.
+- **API Base:** `fetch()` in `browser_evaluate` uses relative paths. Direct HTTP uses `${WORKBENCH_URL}/api/`.
 
 ---
 
 ## Phase 13: Regression Tests for Session Fixes (Issues #119-#150)
 
-Tests for all fixes applied in the huggingface-space branch. Every test uses Playwright MCP with full UI interaction. No curl-only testing.
+Tests for all fixes applied in the canonical branch. Every test uses Playwright MCP with full UI interaction. No curl-only testing.
 
 ---
 
@@ -3785,7 +3797,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 **Fix:** `public/index.html` — `#panel-content { overflow-x: auto }` + `UL.jqueryFileTree LI > A { white-space: nowrap }`.
 **Surface:** UI/visual — requires HEADED browser per "no headless for visual bugs" rule.
 
-**Setup:** UI deploy (HF test Space or M5 dev). Open Files panel.
+**Setup:** UI deploy at ${WORKBENCH_URL}. Open Files panel.
 
 **Steps:**
 1. Open Files panel via right-pane `☰` toggle.
@@ -3850,7 +3862,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 **Setup:** Backend deploy on M5 dev with Gemini provider configured. Need at least one workspace file the chunker would produce empty chunks for (e.g., empty CLAUDE.md, frontmatter-only .md).
 
 **Steps:**
-1. Confirm baseline: `docker logs workbench --since 5m | grep "EmpsuptyEmbedContentRequest.content contains an empty Part"` should show OLD entries (pre-fix).
+1. Confirm baseline: `docker logs ${WORKBENCH_CONTAINER} --since 5m | grep "EmpsuptyEmbedContentRequest.content contains an empty Part"` should show OLD entries (pre-fix).
 2. Trigger reindex of `documents` via `POST /api/qdrant/reindex` with `{collection: "documents"}`.
 3. Watch logs during reindex: should NOT produce any new `empty Part` errors.
 4. Sanity: collection point count grows, files that had empty chunks contribute zero points (skipped) but DO NOT abort the file's other valid chunks.
@@ -3978,10 +3990,10 @@ Should print the input unchanged — author lines / non-URL `@` patterns are NOT
 
 **Surface:** UI/visual + backend. Requires headed browser (Hymie) + a real Claude OAuth flow. Auth state is wiped on every HF rebuild (no persistent storage), so this is the canonical per-deploy auth setup test.
 
-**Setup:** HF test Space rebuilt with the fix. Gate creds + API keys ready (`/mnt/storage/credentials/api-keys/`). Hymie Firefox session.
+**Setup:** ${WORKBENCH_URL} rebuilt with the fix. ${GATE_USER}/${GATE_PASS} (if gate present) + API keys ready (`/mnt/storage/credentials/api-keys/`). Hymie Firefox session.
 
 **Steps (real user):**
-1. Open `https://aristotle9-agentic-workbench-test.hf.space/` in Hymie Firefox.
+1. Open `${WORKBENCH_URL}/` in Hymie Firefox.
 2. Log in with `aristotle9` / `Vault2011$`.
 3. Settings → API Keys: paste Gemini key + OpenAI key. Close Settings.
 4. Create a project (sidebar `+` → pick `/data/workspace/docs`).
@@ -3991,7 +4003,7 @@ Should print the input unchanged — author lines / non-URL `@` patterns are NOT
 8. **Modal appears** ("Authentication Required") + CLI shows "Paste code here >".
 9. Click "Authenticate with Claude" in modal → OAuth tab opens.
 10. Authorize on `claude.ai` → land on `platform.claude.com/oauth/code/callback` with the code → click "Copy Code".
-11. Switch back to test Space tab.
+11. Switch back to the workbench tab.
 12. Paste code in modal's "Paste authorization code here" input.
 13. Click Submit.
 14. **Verify**: CLI should advance from "Paste code here >" to "Login successful" + show "Welcome back …" greeting AUTOMATICALLY. No manual paste/Enter in CLI required.
@@ -4013,10 +4025,10 @@ Should print the input unchanged — author lines / non-URL `@` patterns are NOT
 **Fix:** `public/index.html` — flex-column chain on `#panel-content` + `.panel-section` with `min-height: 0` so `#file-browser-tree` is bounded to its flex parent's height instead of taking natural height.
 **Surface:** UI/visual — requires HEADED browser per "no headless for visual bugs" rule.
 
-**Setup:** UI deploy (HF test Space or M5 dev). Open Files panel via the right-pane `☰` toggle. Need a workspace with enough nested content that the rendered tree exceeds viewport height. If a real workspace doesn't have enough content, inject synthetic items via `browser_evaluate` to force overflow (per the verification recipe below).
+**Setup:** UI deploy at ${WORKBENCH_URL}. Open Files panel via the right-pane `☰` toggle. Need a workspace with enough nested content that the rendered tree exceeds viewport height. If a real workspace doesn't have enough content, inject synthetic items via `browser_evaluate` to force overflow (per the verification recipe below).
 
 **Steps (real user perspective):**
-1. Log in (gate creds for test Space).
+1. Log in with ${GATE_USER}/${GATE_PASS} if a gate is present.
 2. Click `☰` to open the right Files panel.
 3. Click `▶ /data/workspace` to expand the mount.
 4. Drill into a directory with many subdirs/files. Recursively expand a few levels.
@@ -4080,12 +4092,12 @@ Then measure:
 ### HOTFIX-173: xterm scrollbar tracks buffer growth while scrolled up
 **Issue:** #173 — xterm scrollbar range doesn't update when buffer grows while user is scrolled up
 **Fix:** `public/index.html:1401-area` — added `term.onWriteParsed → term.refresh(0, term.rows-1)` hook.
-**Surface:** UI/visual — REQUIRES headed browser per "no headless for visual bugs" rule. Use HF test Space + Hymie Firefox.
+**Surface:** UI/visual — REQUIRES headed browser per "no headless for visual bugs" rule. Use ${WORKBENCH_URL} + headed browser.
 
-**Setup:** UI deploy (HF test Space). Hymie OAuth setup complete per `blueprint-deployment.md`.
+**Setup:** UI deploy at ${WORKBENCH_URL}. Hymie OAuth setup complete per `blueprint-deployment.md`.
 
 **Steps:**
-1. Open the test Space in Hymie Firefox, log in past gate.
+1. Open ${WORKBENCH_URL} in a headed browser; log in past gate if present.
 2. Open a Claude session. Send a prompt that produces long streaming output: e.g., `list every directory under /data/workspace recursively and describe each in one sentence`.
 3. As soon as output starts streaming (within first 10-20 lines), scroll up in the terminal pane to read earlier rows. Keep the viewport above the bottom while output continues.
 4. Wait until at least 50+ new rows have been appended to the buffer below the viewport.
@@ -4109,7 +4121,7 @@ Then measure:
 **Fix:** `Dockerfile` — installed `tini` via apt and changed `ENTRYPOINT` to `["/usr/bin/tini", "--", "/entrypoint.sh"]`. tini at PID 1 auto-reaps any orphans regardless of which intermediate (tmux/bash) ancestor died.
 **Surface:** Container infrastructure — verify on any deployed container after image rebuild.
 
-**Setup:** Container deploy with the new image (M5 dev or HF test Space). Connect via `docker exec` or SSH.
+**Setup:** Container deploy at ${WORKBENCH_URL}. Connect via `docker exec` or SSH.
 
 **Steps:**
 1. `docker exec blueprint-dev ps -o pid,user,stat,cmd -e` — note PID 1 should be `/usr/bin/tini -- /entrypoint.sh`.
@@ -4137,11 +4149,11 @@ Then measure:
 - `mcp-tools.js` — `tokens` action routes through `getSessionInfo`.
 **Surface:** Backend refactor — verify via curl + spot-check sidebar/status bar in Hymie.
 
-**Setup:** Deploy to M5 dev. Have at least one Claude session and one Gemini or Codex session running (any 1d+ existing sessions in the sidebar work).
+**Setup:** Deploy to ${WORKBENCH_URL}. Have at least one Claude session and one Gemini or Codex session running (any 1d+ existing sessions in the sidebar work).
 
 **Steps:**
-1. `curl http://m5:7860/api/state | jq '.sessions[0:3] | map({id,name,model,messageCount,active,cli_type})'` — confirm sessions render with name/model/messageCount/active populated for both Claude and non-Claude.
-2. Pick an active session id, `curl 'http://m5:7860/api/sessions/<id>/tokens?project=<project>' | jq` — confirm `{input_tokens, model, max_tokens}` shape unchanged.
+1. `curl ${WORKBENCH_URL}/api/state | jq '.sessions[0:3] | map({id,name,model,messageCount,active,cli_type})'` — confirm sessions render with name/model/messageCount/active populated for both Claude and non-Claude.
+2. Pick an active session id, `curl '${WORKBENCH_URL}/api/sessions/<id>/tokens?project=<project>' | jq` — confirm `{input_tokens, model, max_tokens}` shape unchanged.
 3. Same id again immediately — should return same numbers (cache hit).
 4. Sidebar in Hymie Firefox: open M5 dev, confirm session list renders identically to before (names, message counts, active dot, model labels for non-Claude).
 5. Status bar (active session bar): open a Claude session, confirm Model/Tokens populate correctly within 1-2 polls.
@@ -4168,13 +4180,13 @@ Then measure:
 - `public/index.html` — clickable error banner alongside auth banner. Polls `/api/logs/summary` every 60s, opens a modal showing the last 50 ERROR rows on click.
 **Surface:** Backend + UI — verify backend via curl, UI via headed Hymie Firefox.
 
-**Setup:** Deploy to M5 dev (or HF test Space). For UI step, Hymie Firefox.
+**Setup:** Deploy to ${WORKBENCH_URL}. For UI step, Hymie Firefox.
 
 **Backend steps:**
-1. Generate at least one ERROR via a known-failing operation: `curl -X PUT http://m5:7860/api/settings -H 'Content-Type: application/json' -d '{"key":"gemini_api_key","value":"deliberately-bad-key-181-test"}'` — returns 400 and writes a WARN log.
-2. Force an ERROR: `docker exec workbench node -e "require('/app/logger.js').error('runbook test 181', {module:'runbook-181', code:42})"`.
-3. `curl http://m5:7860/api/logs/summary?since=1h | jq` — expect `errorCount >= 1`, `topError.module == 'runbook-181'`.
-4. `curl 'http://m5:7860/api/logs?level=ERROR&module=runbook-181&limit=10' | jq '.rows[0]'` — confirm the row has ts/level/module/message/context fields.
+1. Generate at least one ERROR via a known-failing operation: `curl -X PUT ${WORKBENCH_URL}/api/settings -H 'Content-Type: application/json' -d '{"key":"gemini_api_key","value":"deliberately-bad-key-181-test"}'` — returns 400 and writes a WARN log.
+2. Force an ERROR: `docker exec ${WORKBENCH_CONTAINER} node -e "require('/app/logger.js').error('runbook test 181', {module:'runbook-181', code:42})"`.
+3. `curl ${WORKBENCH_URL}/api/logs/summary?since=1h | jq` — expect `errorCount >= 1`, `topError.module == 'runbook-181'`.
+4. `curl '${WORKBENCH_URL}/api/logs?level=ERROR&module=runbook-181&limit=10' | jq '.rows[0]'` — confirm the row has ts/level/module/message/context fields.
 5. `since` parser: try `?since=15m`, `?since=24h`, `?since=2026-04-26T00:00:00Z` — all should return valid responses.
 
 **UI steps (Hymie):**
@@ -4183,7 +4195,7 @@ Then measure:
 3. Click the banner → modal opens listing recent errors (time / module / message columns).
 4. Close the modal; banner remains visible until the 1h window passes.
 
-**Cleanup:** `docker exec workbench sqlite3 /data/.blueprint/blueprint.db "DELETE FROM logs WHERE module IN ('runbook-181','verify-181')"`.
+**Cleanup:** `docker exec ${WORKBENCH_CONTAINER} sqlite3 /data/.blueprint/blueprint.db "DELETE FROM logs WHERE module IN ('runbook-181','verify-181')"`.
 
 **Expected:**
 - Errors persist to `logs` table immediately (within the same request).
@@ -4198,15 +4210,15 @@ Then measure:
 ### HOTFIX-180: API key changes validated synchronously on PUT /api/settings
 **Issue:** #180 — bad keys silently saved; only failed later in background reindex; user thought save succeeded.
 **Fix:** `routes.js:1133` (PUT /api/settings) calls `qdrant.validateProviderConfig(buildCandidateConfig(key, value))` for `gemini_api_key`, `codex_api_key`, `vector_embedding_provider`, `vector_custom_url`, `vector_custom_key`. On failure: returns 400 with the actual provider error string, does NOT save.
-**Surface:** Backend API — can be tested with curl against M5 dev or HF test Space.
+**Surface:** Backend API — can be tested with curl against ${WORKBENCH_URL}.
 
 **Setup:** Backend deploy. Get a valid Gemini API key for the positive case.
 
 **Steps:**
-1. Negative case (bad key): `curl -X PUT http://m5:7860/api/settings -H 'Content-Type: application/json' -d '{"key":"gemini_api_key","value":"obviously-bad-key-xyz"}'`
+1. Negative case (bad key): `curl -X PUT ${WORKBENCH_URL}/api/settings -H 'Content-Type: application/json' -d '{"key":"gemini_api_key","value":"obviously-bad-key-xyz"}'`
 2. Confirm response is `400` with body containing `"API key validation failed: ..."` and the provider model name.
-3. Verify setting was NOT saved: `curl http://m5:7860/api/settings | jq .gemini_api_key` — should be the prior value (or unset), NOT `obviously-bad-key-xyz`.
-4. Positive case (good key): `curl -X PUT http://m5:7860/api/settings -H 'Content-Type: application/json' -d '{"key":"gemini_api_key","value":"<real-key>"}'`
+3. Verify setting was NOT saved: `curl ${WORKBENCH_URL}/api/settings | jq .gemini_api_key` — should be the prior value (or unset), NOT `obviously-bad-key-xyz`.
+4. Positive case (good key): `curl -X PUT ${WORKBENCH_URL}/api/settings -H 'Content-Type: application/json' -d '{"key":"gemini_api_key","value":"<real-key>"}'`
 5. Confirm response is `200 {saved: true}`. Verify it was saved.
 6. Provider switch case: with provider currently `huggingface`, send `{"key":"vector_embedding_provider","value":"openai"}` while no codex key is set — expect `400` (validation fails because no key for openai).
 
@@ -4226,11 +4238,11 @@ Then measure:
 **Fix:** wrap each handoff in `db.db.transaction(() => { … })()`. /api/state can never observe both rows now.
 **Surface:** Backend.
 
-**Setup:** Deploy to M5 dev. Have a Claude session creation flow ready.
+**Setup:** Deploy to ${WORKBENCH_URL}. Have a Claude session creation flow ready.
 
 **Steps:**
 1. From a fresh page load on M5 dev, create a new Claude session via the UI's + button (any project) with a prompt.
-2. Within the next ~30s, hit `/api/state` repeatedly: `for i in $(seq 1 30); do curl -sS http://m5:7860/api/state | jq -r '[.projects[].sessions[] | select(.cli_type == "claude")] | length' ; sleep 1; done`
+2. Within the next ~30s, hit `/api/state` repeatedly: `for i in $(seq 1 30); do curl -sS ${WORKBENCH_URL}/api/state | jq -r '[.projects[].sessions[] | select(.cli_type == "claude")] | length' ; sleep 1; done`
 3. Expected: count never doubles around the resolution time. Pre-fix could see a 1-2s window where the same session appeared twice (one with new_<ts> id, one with the real UUID).
 4. Sidebar visual check: only one entry per session through the resolution.
 
@@ -4247,12 +4259,12 @@ Then measure:
 **Fix:** `ws-terminal.js` — when a WS connects with a known tmuxSession whose tmux pane is gone, look up the blueprint session by tmuxName prefix (`db.getSessionByPrefix`), respawn tmux via `safe.tmuxCreateCLI` using the session's project_path + cli_type, then attach. Falls through to the existing close-with-error path if lookup or respawn fails.
 **Surface:** Backend WS path + UI behavior. REQUIRES Playwright UI verification (per UI-component rule).
 
-**Setup:** Deploy to M5 dev. Open a Claude session in the workbench so a tmux pane exists.
+**Setup:** Deploy to ${WORKBENCH_URL}. Open a Claude session in the workbench so a tmux pane exists.
 
 **Steps:**
 1. Open a Claude session via the UI. Confirm the terminal is attached and showing prompt.
-2. Identify the tmux session name from server logs (`docker logs workbench --tail 50 | grep tmux`) — format `bp_<id12>_<hash>`.
-3. From host: `ssh aristotle9@m5 'docker exec workbench tmux kill-session -t bp_xxxxxxxxxxxx_yyyy'`
+2. Identify the tmux session name from server logs (`docker logs ${WORKBENCH_CONTAINER} --tail 50 | grep tmux`) — format `bp_<id12>_<hash>`.
+3. From host: `ssh ${WORKBENCH_HOST} 'docker exec workbench tmux kill-session -t bp_xxxxxxxxxxxx_yyyy'`
 4. In Playwright (or Hymie Firefox), refresh the workbench page.
 5. Wait ~3s. The same session tab should reattach with a fresh terminal — NO "[Session detached]" message, NO need to close/relaunch.
 6. Server log should show `Auto-respawned dead tmux session for reconnecting tab` with the tmuxSession name.
@@ -4277,7 +4289,7 @@ Then measure:
 **Fix:** `saveSetting` now: (a) snapshots previousValue before optimistic write, (b) checks res.ok, (c) on failure rolls `_settingsCache[key]` back AND shows red dismissible banner inside Settings modal with the actual provider error string, (d) clears banner on next successful save. Network error and HTTP non-OK both handled.
 **Surface:** UI — REQUIRES Playwright (or Hymie) verification. Backend curl alone is insufficient.
 
-**Setup:** Deploy to M5 dev. Have a known-valid Gemini API key already saved (so you can confirm rollback).
+**Setup:** Deploy to ${WORKBENCH_URL}. Have a known-valid Gemini API key already saved (so you can confirm rollback).
 
 **Steps (Playwright):**
 1. Navigate to M5 dev workbench. Click Settings (bottom of sidebar) → Settings modal opens.
@@ -4286,7 +4298,7 @@ Then measure:
 4. Wait ~2.5s for the validation round-trip.
 5. Assert: `document.getElementById('settings-error-banner')` exists and contains "API key validation failed: ..." with the real provider error.
 6. Assert: `_settingsCache.gemini_api_key` matches the previous (valid) value, NOT the bad one typed.
-7. Confirm via `curl http://m5:7860/api/settings | jq .gemini_api_key` that the DB still has the original key.
+7. Confirm via `curl ${WORKBENCH_URL}/api/settings | jq .gemini_api_key` that the DB still has the original key.
 8. Now type the original valid value back (or any valid value) → banner disappears, save succeeds.
 9. Click the X on the banner → banner dismisses without affecting state.
 
@@ -4309,13 +4321,13 @@ Then measure:
 
 | Symptom | Likely Cause | Action |
 |---------|-------------|--------|
-| `browser_navigate` times out or returns blank page | Container is down or not listening on port 7867 | Verify container is running: `docker ps` on M5. Restart if needed: `docker restart blueprint-test`. Retry after 10s. |
-| `/health` returns non-200 or fetch fails | Server process crashed inside container | Check container logs: `docker logs blueprint-test --tail 50`. Restart container. |
+| `browser_navigate` times out or returns blank page | Container is down or not listening on its expected port | Verify container is running: `docker ps` on M5. Restart if needed: `docker restart ${WORKBENCH_CONTAINER}`. Retry after 10s. |
+| `/health` returns non-200 or fetch fails | Server process crashed inside container | Check container logs: `docker logs ${WORKBENCH_CONTAINER} --tail 50`. Restart container. |
 | `/api/auth/status` returns `{valid:false}` | Auth token expired | Complete the auth flow: show `#auth-modal`, follow the link, paste the code. All tests requiring Claude responses will fail without valid auth. |
 | WebSocket `readyState` stays 0 or 3 | WebSocket endpoint unreachable or server overloaded | Wait 5s and recheck. If persistent, `browser_refresh` and reopen the session tab. |
 | `activeTabId` is null | No session tab is open | Click a session in the sidebar to open a tab before running tab-dependent tests. |
 | `browser_click` does nothing (no DOM change) | Element obscured by modal/overlay, or element not rendered yet | Dismiss any open modals first (see baseline reset). Add `browser_wait` 500 before retrying. |
-| Session creation via API returns 500 | No projects exist, or tmux is full | Create a project first via `POST /api/projects`. Check `docker exec blueprint-test tmux list-sessions` for tmux limits. |
+| Session creation via API returns 500 | No projects exist, or tmux is full | Create a project first via `POST /api/projects`. Check `docker exec ${WORKBENCH_CONTAINER} tmux list-sessions` for tmux limits. |
 | SMOKE-01 fails | App not loading at all | Stop execution. Investigate container health. No downstream tests are valid. |
 | Tests see stale data after state changes | Sidebar not refreshed | Call `browser_evaluate`: `loadState()` then `browser_wait` 2000 before re-checking. |
 | `#new-session-prompt` not found | Overlay not opened; + button click missed | Retry `browser_click` on `.project-group .new-btn`. Ensure the project group is expanded (not collapsed). |
