@@ -596,12 +596,12 @@
         <div class="setting-row">
           <label>Gemini API Key</label>
           <input id="setting-gemini-key" type="password" placeholder="Enter key..." style="flex:1;padding:4px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;font-family:monospace"
-            onchange="saveSetting('gemini_api_key', this.value)">
+            onchange="saveSetting('gemini_api_key', this.value, this)">
         </div>
         <div class="setting-row">
           <label>OpenAI / Codex API Key</label>
           <input id="setting-codex-key" type="password" placeholder="Enter key..." style="flex:1;padding:4px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;font-family:monospace"
-            onchange="saveSetting('codex_api_key', this.value)">
+            onchange="saveSetting('codex_api_key', this.value, this)">
         </div>
       </div>
 
@@ -698,12 +698,12 @@
           <div class="setting-row">
             <label>Endpoint URL</label>
             <input id="setting-vector-custom-url" type="text" placeholder="https://api.example.com/v1" style="flex:1;padding:4px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;font-family:monospace"
-              onchange="saveSetting('vector_custom_url', this.value)">
+              onchange="saveSetting('vector_custom_url', this.value, this)">
           </div>
           <div class="setting-row">
             <label>API Key</label>
             <input id="setting-vector-custom-key" type="password" placeholder="Enter key..." style="flex:1;padding:4px 8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;font-family:monospace"
-              onchange="saveSetting('vector_custom_key', this.value)">
+              onchange="saveSetting('vector_custom_key', this.value, this)">
           </div>
         </div>
       </div>
@@ -3804,7 +3804,8 @@ build/**</textarea>
     }
 
     function onVectorProviderChange(provider) {
-      saveSetting('vector_embedding_provider', provider);
+      const sel = document.getElementById('setting-vector-provider');
+      saveSetting('vector_embedding_provider', provider, sel);
       document.getElementById('vector-custom-fields').style.display = provider === 'custom' ? '' : 'none';
     }
 
@@ -3879,15 +3880,32 @@ build/**</textarea>
       document.getElementById('settings-modal').classList.remove('visible');
     }
 
-    async function saveSetting(key, value) {
-      // #180 (UI follow-up): every save is optimistic — _settingsCache and any
-      // bound input field are already showing the new value by the time we get
-      // here. If the server rejects, we must roll BOTH back, otherwise the UI
-      // continues to show a value the server doesn't actually have. 3-CLI RCA
-      // consensus: previous optimistic-write-then-blind-await pattern made the
-      // UI lie about persisted state on every validation failure.
+    // #180-UI: per-key save versioning so a late-arriving response from an
+    // earlier save can't roll back a newer successful save. Each PUT bumps the
+    // version; the response handler only acts on its own (still-current) ticket.
+    const _settingsSaveVersion = {};
+
+    async function saveSetting(key, value, inputEl = null) {
+      // Optimistic write: _settingsCache and the bound input both already show
+      // the new value. On failure we roll BOTH back so the UI doesn't lie about
+      // persisted state. 3-CLI RCA consensus on the original symptom: pure
+      // optimistic-write-then-blind-await broke when the server returned 400.
       const previousValue = _settingsCache[key];
       _settingsCache[key] = value;
+      const myVersion = (_settingsSaveVersion[key] || 0) + 1;
+      _settingsSaveVersion[key] = myVersion;
+
+      const rollback = (errMsg) => {
+        // Skip rollback if a newer save has already started for this key —
+        // that newer save is now the source of truth.
+        if (_settingsSaveVersion[key] !== myVersion) return;
+        _settingsCache[key] = previousValue;
+        if (inputEl && 'value' in inputEl) {
+          inputEl.value = previousValue == null ? '' : String(previousValue);
+        }
+        showSettingsError(errMsg);
+      };
+
       let res;
       try {
         res = await fetch('/api/settings', {
@@ -3896,23 +3914,21 @@ build/**</textarea>
           body: JSON.stringify({ key, value }),
         });
       } catch (err) {
-        _settingsCache[key] = previousValue;
-        showSettingsError(`Save failed: ${err.message}`);
+        rollback(`Save failed: ${err.message}`);
         return false;
       }
       if (!res.ok) {
-        // Backend rejects bad API keys / unreachable provider configs with
-        // 400 + an error string. Surface it to the user; roll the cache back.
-        _settingsCache[key] = previousValue;
         let errMsg = `Save failed (HTTP ${res.status})`;
         try {
           const data = await res.json();
           if (data && data.error) errMsg = data.error;
         } catch { /* not JSON */ }
-        showSettingsError(errMsg);
+        rollback(errMsg);
         return false;
       }
-      hideSettingsError();
+      // Only the most recent save clears the banner; a stale-success arriving
+      // after a newer-failure shouldn't suppress the newer error.
+      if (_settingsSaveVersion[key] === myVersion) hideSettingsError();
       return true;
     }
 
@@ -3929,12 +3945,28 @@ build/**</textarea>
           border-radius: 4px; font-size: 13px; display: flex; align-items: center;
           justify-content: space-between; gap: 8px;
         `;
+        // Static structure — only the message <span> ever receives untrusted text,
+        // and that's set via textContent below (not innerHTML).
+        const msgWrap = document.createElement('span');
+        const icon = document.createElement('span');
+        icon.style.cssText = 'font-size:14px;margin-right:4px';
+        icon.textContent = '⚠';
+        const msgEl = document.createElement('span');
+        msgEl.id = 'settings-error-banner-msg';
+        msgWrap.appendChild(icon);
+        msgWrap.appendChild(msgEl);
+        const closeBtn = document.createElement('button');
+        closeBtn.style.cssText = 'background:none;border:none;color:var(--error,#d32f2f);cursor:pointer;font-size:16px;padding:0 4px';
+        closeBtn.textContent = '×';
+        closeBtn.onclick = hideSettingsError;
+        banner.appendChild(msgWrap);
+        banner.appendChild(closeBtn);
         modal.insertBefore(banner, modal.firstElementChild?.nextElementSibling || null);
       }
-      banner.innerHTML = `
-        <span><span style="font-size:14px">&#9888;</span> ${escapeHtml(msg).slice(0, 600)}</span>
-        <button onclick="hideSettingsError()" style="background:none;border:none;color:var(--error,#d32f2f);cursor:pointer;font-size:16px;padding:0 4px">&times;</button>
-      `;
+      // textContent neutralizes any HTML in the server-provided error string —
+      // safer than innerHTML+escapeHtml even if escapeHtml is ever broken.
+      const msgEl = document.getElementById('settings-error-banner-msg');
+      if (msgEl) msgEl.textContent = String(msg).slice(0, 600);
     }
 
     function hideSettingsError() {
