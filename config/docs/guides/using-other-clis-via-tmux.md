@@ -99,7 +99,7 @@ Use blueprint_set_session_config with session_id="<sub-session-id>" and state="h
 
 ## Gemini
 
-Requires `GOOGLE_API_KEY` — set it in Blueprint Settings > API Keys.
+Requires `GEMINI_API_KEY` (Blueprint sets this from Settings > API Keys; Gemini CLI also accepts `GOOGLE_API_KEY` for backwards compat).
 
 ```bash
 tmux new-session -d -s gemini -x 200 -y 50

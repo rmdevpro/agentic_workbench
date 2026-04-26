@@ -4,7 +4,7 @@ Gemini CLI is available in the Blueprint container for code reviews, architectur
 
 ## Setup
 
-Configure your API key in Blueprint Settings > API Keys. The key is exported as `GOOGLE_API_KEY` at container startup.
+Configure your API key in Blueprint Settings > API Keys. The key is exported as `GEMINI_API_KEY` to spawned tmux sessions (Gemini CLI accepts either `GEMINI_API_KEY` or `GOOGLE_API_KEY` — Blueprint standardizes on the former per #178).
 
 ## Recommended: Tmux Sessions
 
