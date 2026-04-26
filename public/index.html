@@ -1045,6 +1045,11 @@ build/**</textarea>
     }
 
     function renderSidebar() {
+      // #195: when search is active, the project-list shows search results
+      // (rendered by renderSearchResults). Periodic loadState() polls must not
+      // clobber that view by re-rendering the full project tree. The search
+      // handler clears searchActive when the input empties.
+      if (searchActive) return;
       // Skip re-render if state hasn't changed (prevents DOM detach during clicks)
       const stateHash = JSON.stringify(projectState.map(p => ({
         n: p.name, m: p.missing, st: p.state,
@@ -1977,8 +1982,18 @@ build/**</textarea>
 
     async function loadPanelData() {
       if (activePanel === 'files') {
-        // Only initialize on first load — manual refresh button handles updates
-        loadFiles();
+        // #203: poll-on-focus — refresh the tree when the panel becomes
+        // active so newly-created files appear without a manual click. First
+        // load goes through loadFiles(); subsequent loads (within the
+        // POLL_ON_FOCUS_DEBOUNCE_MS window) reuse the snapshot via
+        // refreshFileTree() which preserves expanded state.
+        const POLL_ON_FOCUS_DEBOUNCE_MS = 1000;
+        if (!fileBrowserInitialized) {
+          loadFiles();
+        } else if (!loadPanelData._lastFileRefresh || Date.now() - loadPanelData._lastFileRefresh > POLL_ON_FOCUS_DEBOUNCE_MS) {
+          loadPanelData._lastFileRefresh = Date.now();
+          refreshFileTree();
+        }
         return;
       }
       if (activePanel === 'tasks') {
@@ -3321,11 +3336,16 @@ build/**</textarea>
 
     // ── Session Search ────────────────────────────────
 
+    // #195: while user is searching, periodic loadState() polls must NOT
+    // re-render the sidebar (would clobber the search-results view). This
+    // flag is set whenever the search box has 2+ chars; cleared when empty.
+    let searchActive = false;
     let searchTimer = null;
     document.getElementById('session-search').addEventListener('input', (e) => {
       if (searchTimer) clearTimeout(searchTimer);
       const q = e.target.value.trim();
-      if (q.length < 2) { renderSidebar(); return; }
+      if (q.length < 2) { searchActive = false; renderSidebar(); return; }
+      searchActive = true;
       searchTimer = setTimeout(async () => {
         try {
           const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
@@ -3336,8 +3356,6 @@ build/**</textarea>
     });
 
     function renderSearchResults(results) {
-      // Invalidate renderSidebar hash so clearing search triggers a re-render
-      renderSidebar._lastHash = null;
       const container = document.getElementById('project-list');
       container.innerHTML = '';
       if (results.length === 0) {
@@ -3362,6 +3380,7 @@ build/**</textarea>
         `;
         item.addEventListener('click', () => {
           document.getElementById('session-search').value = '';
+          searchActive = false;
           openSession({ id: r.sessionId, name: r.name }, r.project);
           renderSidebar();
         });

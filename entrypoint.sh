@@ -19,15 +19,18 @@ if [ -d /app/config/docs ]; then
 fi
 
 # Seed default system prompts if not present
-if [ -f /app/config/CLAUDE.md ] && [ ! -f "$CLAUDE/CLAUDE.md" ]; then
+# #197: use -s (file exists AND non-empty) instead of -f (file exists). Empty
+# 0-byte prompt files left over from earlier deploys would otherwise survive
+# forever and never get re-seeded.
+if [ -f /app/config/CLAUDE.md ] && [ ! -s "$CLAUDE/CLAUDE.md" ]; then
   cp /app/config/CLAUDE.md "$CLAUDE/CLAUDE.md"
   echo "[entrypoint] Seeded global CLAUDE.md"
 fi
-if [ -f /app/config/GEMINI.md ] && [ ! -f "$CLAUDE/GEMINI.md" ]; then
+if [ -f /app/config/GEMINI.md ] && [ ! -s "$CLAUDE/GEMINI.md" ]; then
   cp /app/config/GEMINI.md "$CLAUDE/GEMINI.md"
   echo "[entrypoint] Seeded global GEMINI.md"
 fi
-if [ -f /app/config/AGENTS.md ] && [ ! -f "$CLAUDE/AGENTS.md" ]; then
+if [ -f /app/config/AGENTS.md ] && [ ! -s "$CLAUDE/AGENTS.md" ]; then
   cp /app/config/AGENTS.md "$CLAUDE/AGENTS.md"
   echo "[entrypoint] Seeded global AGENTS.md"
 fi
