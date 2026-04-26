@@ -267,6 +267,15 @@ function findSessionsDir(projectPath) {
   return join(CLAUDE_HOME, 'projects', encoded);
 }
 
+// #189: keep client-visible error messages informative without leaking
+// URL-embedded credentials. Operator-side logs still see the raw message.
+function sanitizeErrorForClient(msg, maxLen = 1000) {
+  if (typeof msg !== 'string') return '';
+  return msg
+    .replace(/\b(https?:\/\/)[^/\s:@]+:[^/\s@]+@/gi, '$1***:***@')
+    .substring(0, maxLen);
+}
+
 module.exports = {
   WORKSPACE,
   CLAUDE_HOME,
@@ -274,6 +283,7 @@ module.exports = {
   resolveProjectPath,
   sanitizeTmuxName,
   shellEscape,
+  sanitizeErrorForClient,
   claudeExecAsync,
   tmuxExecAsync,
   tmuxExists,

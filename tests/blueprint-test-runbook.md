@@ -3780,6 +3780,69 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 
 ---
 
+### HOTFIX-186: File browser pane scrolls horizontally when tree content overflows
+**Issue:** #186 — File browser pane: add horizontal scroll when tree content overflows
+**Fix:** `public/index.html` — `#panel-content { overflow-x: auto }` + `UL.jqueryFileTree LI > A { white-space: nowrap }`.
+**Surface:** UI/visual — requires HEADED browser per "no headless for visual bugs" rule.
+
+**Setup:** UI deploy (HF test Space or M5 dev). Open Files panel.
+
+**Steps:**
+1. Open Files panel via right-pane `☰` toggle.
+2. Expand `/data/workspace` → expand a subdirectory with deeply nested paths or long filenames (e.g., `repos/<long-name>/.../something.md`).
+3. Confirm long names do NOT wrap onto a second line.
+4. Confirm a horizontal scrollbar appears at the bottom of the panel when names exceed pane width.
+5. Drag the horizontal scrollbar right — confirm full filenames become visible.
+
+**Expected:**
+- One filename per row (no wrap).
+- Horizontal scroll appears + works when content overflows.
+- Vertical scroll continues to work.
+
+**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+
+---
+
+### HOTFIX-189: API responses sanitize URL credentials
+**Issue:** #189 — Wider error messages may echo URL credentials / paths
+**Fix:** `safe-exec.js` — added `sanitizeErrorForClient(msg)` that strips `https?://user:pass@host` userinfo. `routes.js:536` + `:1366` use it on client-visible error responses. Internal logger calls keep raw 1000-char messages.
+
+**Setup:** Backend deploy.
+
+**Steps:**
+1. POST `/api/projects` with `{path: "https://baduser:topsecret@github.com/no/such/repo.git"}` (or a real URL with fake creds).
+2. Inspect the 400 response body — `error` field should contain `https://***:***@github.com/...`, NOT the original `baduser:topsecret`.
+3. Inspect the matching `Git clone failed` line in `docker logs` — should still contain the FULL raw URL with creds (operator log path).
+
+**Expected:**
+- Client response has redacted credentials (`***:***@`).
+- Internal log has raw URL for operator debugging.
+- Both are bounded at 1000 chars.
+
+**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+
+---
+
+### HOTFIX-176: qdrant-sync survives cold-start race + recovers from later qdrant outages
+**Issue:** #176 — `qdrant-sync.start()` returns silently on cold-start race, never retries
+**Fix:** `qdrant-sync.js` — `_waitForQdrant` does 5 inline retries with linear backoff (1s, 2s, 3s, 4s, 5s = ~15s ceiling) before scheduling a 60s-interval background retry that takes over if qdrant comes up later.
+
+**Setup:** Backend deploy on M5 dev. Need a way to start the workbench with qdrant temporarily unavailable.
+
+**Steps:**
+1. **Cold-start race**: stop the workbench. Restart it. With normal startup ordering (entrypoint launches qdrant + node concurrently), look at the early logs — should see at most one `Qdrant not available` at WARN/INFO with retries, then `Qdrant sync starting`. Should NOT see `qdrant-sync._running = false` indefinitely.
+2. **Background recovery**: simulate qdrant going down then coming back. From inside the container: `pkill qdrant`, wait 30s, watch log for `scheduling background re-attempt` warning. Restart qdrant manually (`/opt/qdrant/qdrant &`). Within 60s, expect `Qdrant reachable again — starting vector sync` log line and `_running = true` at the API/MCP layer.
+3. Stop the container (`docker stop`) and confirm `stop()` clears the background timer (no zombie interval after container exit).
+
+**Expected:**
+- Cold-start race: sync starts within ~15s even if qdrant lags.
+- Background recovery: sync starts on its own after qdrant comes back, no manual restart needed.
+- Clean shutdown: no leftover interval timer after `stop()`.
+
+**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+
+---
+
 ### HOTFIX-188: registerCodexMcp does not corrupt config.toml
 **Issue:** #188 — Codex config corruption from over-greedy cleanup regex
 **Fix:** `watchers.js:236` — deleted the cleanup branch entirely; function now just check-and-appends.

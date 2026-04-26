@@ -707,13 +707,44 @@ function watchDir(dir, syncFn) {
 // ── Public API ─────────────────────────────────────────────────────────────
 
 let _running = false;
+let _bgRetryTimer = null;
+
+// #176: cold-start race — node may start before qdrant has bound :6333
+// (~200ms gap, sometimes longer). Retry with backoff before giving up; if
+// still unreachable, schedule a periodic background re-attempt so qdrant
+// coming up later (or recovering after a crash) lights up sync without
+// requiring a server restart.
+async function _waitForQdrant({ inlineRetries = 5, inlineDelayMs = 1000 } = {}) {
+  for (let i = 0; i < inlineRetries; i++) {
+    if (await qdrantHealthy()) return true;
+    await new Promise(r => setTimeout(r, inlineDelayMs * (i + 1)));
+  }
+  return false;
+}
+
+function _scheduleBackgroundRetry() {
+  if (_bgRetryTimer) return;
+  const intervalMs = 60_000;
+  _bgRetryTimer = setInterval(async () => {
+    if (_running) { clearInterval(_bgRetryTimer); _bgRetryTimer = null; return; }
+    if (await qdrantHealthy()) {
+      logger.info('Qdrant reachable again — starting vector sync', { module: 'qdrant-sync' });
+      clearInterval(_bgRetryTimer);
+      _bgRetryTimer = null;
+      // Don't await — let start() run on its own and return early on next health check.
+      start().catch(err => logger.error('Background qdrant start failed', { module: 'qdrant-sync', err: err.message }));
+    }
+  }, intervalMs);
+  if (_bgRetryTimer.unref) _bgRetryTimer.unref();
+}
 
 async function start() {
   if (_running) return;
 
-  // Check if Qdrant is reachable
-  if (!(await qdrantHealthy())) {
-    logger.info('Qdrant not available — vector sync disabled', { module: 'qdrant-sync' });
+  // Check if Qdrant is reachable (with bounded inline retry for cold-start race)
+  if (!(await _waitForQdrant())) {
+    logger.warn('Qdrant not available after inline retries — scheduling background re-attempt', { module: 'qdrant-sync' });
+    _scheduleBackgroundRetry();
     return;
   }
 
@@ -768,6 +799,7 @@ function stop() {
   }
   _watchers.length = 0;
   if (_debounceTimer) clearTimeout(_debounceTimer);
+  if (_bgRetryTimer) { clearInterval(_bgRetryTimer); _bgRetryTimer = null; }
   _running = false;
 }
 

@@ -533,7 +533,7 @@ function registerCoreRoutes(
           });
           return res
             .status(400)
-            .json({ error: `Git clone failed: ${gitErr.message?.substring(0, 1000)}` });
+            .json({ error: `Git clone failed: ${safe.sanitizeErrorForClient(gitErr.message)}` });
         }
         db.ensureProject(repoName, targetPath);
         await trustDir(targetPath);
@@ -1363,7 +1363,7 @@ function registerCoreRoutes(
       res.json({ summary: result.summary, recentMessages: result.recentMessages });
     } catch (err) {
       logger.error('Error generating summary', { module: 'routes', err: err.message });
-      res.status(500).json({ error: err.message?.substring(0, 1000) });
+      res.status(500).json({ error: safe.sanitizeErrorForClient(err.message) });
     }
   });
 
