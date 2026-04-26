@@ -854,23 +854,28 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 **Source:** BRW-40
 **Priority:** P1
 
+The Prompts tab shows three read-only template buttons (C / G / X) that open CLAUDE.md / GEMINI.md / AGENTS.md in a file-editor tab, plus an editable Default Project Template textarea. Earlier versions had an inline `#setting-global-claude-md` textarea — that has been replaced by the read-only buttons.
+
 **Steps:**
 1. Open settings modal
 2. `browser_click` on `[data-settings-tab="prompts"]`
 3. `browser_evaluate`: `document.querySelector('#settings-prompts').style.display !== 'none'`
-4. `browser_evaluate`: `document.querySelector('#setting-global-claude-md') !== null`
-5. `browser_evaluate`: `document.querySelector('#setting-project-template') !== null`
-6. `browser_screenshot`
+4. `browser_evaluate`: count buttons under `#settings-prompts` whose `onclick` includes `openFileTab` — must be exactly 3 (one each for CLAUDE.md, GEMINI.md, AGENTS.md). Confirm each button's `onclick` references the correct path.
+5. `browser_evaluate`: `document.querySelector('#setting-project-template') !== null` — Default Project Template textarea must still be present.
+6. Click the C (Claude) button: `browser_click` on the button whose `onclick` includes `'CLAUDE.md'`. Wait, then verify a file-editor tab opened with that path (`document.querySelector('.tab.active')?.dataset.filePath?.endsWith('CLAUDE.md')`).
+7. Repeat step 6 for the G (Gemini) and X (Codex) buttons.
+8. `browser_screenshot`
 
 **Expected:**
-- Prompts tab shows global CLAUDE.md editor and project template editor
-- Both textareas are present
+- Prompts tab visible.
+- 3 read-only template buttons exist; each opens its corresponding global prompt file in a file-editor tab.
+- Default Project Template textarea (`#setting-project-template`) still editable.
 
 **Verify:**
-- Elements exist and tab is visible
+- All 3 buttons present + clickable + each opens the right file.
+- Project template textarea present.
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
-**Notes:** Prompts tab visible, #setting-global-claude-md and #setting-project-template both present.
+**Result:** ☐ PASS ☐ FAIL ☐ SKIP
 
 ---
 
