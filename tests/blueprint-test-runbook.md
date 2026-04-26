@@ -1687,19 +1687,36 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 
 **Setup:** Requires at least 2 projects. Verify: `browser_evaluate`: `fetch('/api/state').then(r=>r.json()).then(d=>d.projects.length >= 2 ? d.projects.map(p=>p.name) : 'NEED 2+ PROJECTS')`
 
+The `+` dropdown (`.new-session-menu`) has `display:none` by default and only opens via the project header's `+` click handler. A scripted `button.click()` followed immediately by `document.querySelector('.new-session-menu [data-cli=...]').click()` races — the menu often closes before the second click lands. Use the helper below to force the menu open, click the menu item, then restore.
+
+**Helper (use in steps 1 and 5):**
+```js
+// Reliably pick a CLI/Terminal option from a project's + dropdown
+function openSessionFromMenu(projectName, cliType) {
+  const groups = document.querySelectorAll('.project-group');
+  const grp = Array.from(groups).find(g => g.querySelector('.project-header span:nth-child(2)')?.textContent.trim() === projectName);
+  if (!grp) throw new Error('project not found: ' + projectName);
+  const menu = grp.querySelector('.new-session-menu');
+  menu.style.display = 'flex';                                        // force open
+  const item = menu.querySelector(`[data-cli="${cliType}"]`);
+  item.click();
+  menu.style.display = '';                                            // restore default
+}
+```
+
 **Steps:**
-1. Open a terminal on project A: click `+` on first project header, then click "Terminal" option
+1. Open a terminal on project A: `browser_evaluate`: `openSessionFromMenu('<projectAName>', 'terminal')`
 2. `browser_wait` 2000
 3. Save tab ID for project A: `browser_evaluate`: `activeTabId` -- save as TAB_A
-4. `browser_evaluate`: `tabs.get(activeTabId)?.project` -- should be project A name
-5. Open a terminal on project B: click `+` on second project header, then click "Terminal" option
+4. `browser_evaluate`: `tabs.get(activeTabId)?.project` -- must equal `<projectAName>` (FAIL if not)
+5. Open a terminal on project B: `browser_evaluate`: `openSessionFromMenu('<projectBName>', 'terminal')`
 6. `browser_wait` 2000
 7. Save tab ID for project B: `browser_evaluate`: `activeTabId` -- save as TAB_B
-8. `browser_evaluate`: `tabs.get(activeTabId)?.project` -- should be project B name
-9. Verify isolation: TAB_A and TAB_B are different tab IDs with different project associations
-10. Close project A terminal: `browser_click` on first tab's close button
+8. `browser_evaluate`: `tabs.get(activeTabId)?.project` -- must equal `<projectBName>` (FAIL if not)
+9. Verify isolation: `browser_evaluate`: `TAB_A !== TAB_B && tabs.get(TAB_A)?.project !== tabs.get(TAB_B)?.project`
+10. Close project A terminal: `browser_click` on TAB_A's close button (`.tab[data-tab-id='${TAB_A}'] .tab-close`)
 11. `browser_wait` 500
-12. Verify project B terminal still works: `browser_evaluate`: `tabs.get('TAB_B')?.ws?.readyState === 1`
+12. Verify project B terminal still works: `browser_evaluate`: `tabs.get(TAB_B)?.ws?.readyState === 1`
 13. `browser_screenshot`
 
 **Expected:**
