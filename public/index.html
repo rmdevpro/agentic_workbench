@@ -3228,10 +3228,13 @@ build/**</textarea>
       const cliType = tab.cli_type || 'claude';
       const statusData = tab._statusData || {};
 
-      // Model: use statusData for Claude, session state for others
+      // Model: prefer live statusData; fall back to sidebar session data for ALL CLIs.
+      // #187: the cliType-only restriction caused Claude to show "unknown" until
+      // the second message (the first /api/sessions/:id/tokens call returns model
+      // only after a JSONL exists). The sidebar already has the model populated
+      // from /api/state — use that as a fallback regardless of cliType.
       let model = statusData.model || 'unknown';
-      if (cliType !== 'claude' && model === 'unknown') {
-        // Try to get model from sidebar session data
+      if (model === 'unknown') {
         const sessData = projectState.flatMap(p => p.sessions).find(s => s.id === tab.id);
         if (sessData?.model) model = sessData.model;
       }

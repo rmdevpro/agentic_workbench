@@ -3905,6 +3905,73 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 
 ---
 
+### HOTFIX-187: Status bar Model populates from sidebar fallback for all CLIs
+**Issue:** #187 — Status bar shows "Model: unknown" for first turn after creating a Claude session
+**Fix:** `public/index.html:updateStatusBar` — drop the `cliType !== 'claude'` guard on the projectState fallback so all CLIs use the sidebar's model data when `/api/sessions/:id/tokens` hasn't returned yet.
+
+**Setup:** UI deploy. Need a fresh CLI session creation to trigger the previously-lagging path.
+
+**Steps (real user):**
+1. Log in past gate.
+2. Create a Claude session in any project. Wait for prompt.
+3. Send a message ("what is 7 times 8" or any prompt).
+4. Wait for response.
+5. **Read the status bar at the bottom**: should show `Model: Sonnet` (or appropriate model name) immediately, NOT `Model: unknown`.
+6. Sanity: do the same for a Gemini session and a Codex session — both should also show their model immediately.
+
+**Expected:**
+- Status bar Model field shows correct model on first response, not on second.
+- Behavior consistent across Claude / Gemini / Codex.
+
+**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+
+---
+
+### HOTFIX-190: sanitizeErrorForClient redacts token@host and query-string secrets
+**Issue:** #190 — sanitizer scope expansion
+**Fix:** `safe-exec.js:sanitizeErrorForClient` — added two more redaction passes after the existing user:pass@ pass:
+1. Bare `https://token@host` → `https://***@host`
+2. Common credential query params (`api_key`, `token`, `auth`, `key`, `secret`, `password`, `access_token`, `refresh_token`, `api-key`, `x-api-key`, `apikey`) → value redacted to `***`
+
+**Setup:** Backend deploy.
+
+**Steps (direct unit test inside container):**
+```bash
+docker exec workbench node -e "
+const safe = require('/app/safe-exec');
+const tests = [
+  ['user:pass', 'https://baduser:topsecret@github.com/repo.git'],
+  ['token@', 'fatal: failed for https://ghp_abc123def456@github.com/repo.git'],
+  ['api_key qs', 'GET https://api.example.com/v1/things?api_key=sk-secret123 failed'],
+  ['token qs', 'POST /endpoint?token=xoxb-12345 returned 401'],
+  ['multi qs', 'auth=A&user=alice&api_key=K&page=3'],
+  ['plain', 'Could not resolve host: example.com'],
+];
+for (const [label, t] of tests) console.log(label.padEnd(12), '→', safe.sanitizeErrorForClient(t));
+"
+```
+
+**Expected output**:
+- `user:pass` → `https://***:***@github.com/...`
+- `token@` → `https://***@github.com/...`
+- `api_key qs` → `?api_key=*** failed`
+- `token qs` → `?token=*** returned`
+- `multi qs` → `auth=***&user=alice&api_key=***&page=3` (only credential-named params redacted; `user=alice`, `page=3` left alone)
+- `plain` → unchanged (no URL credentials present)
+
+**Negative case (false-positive guard):**
+```bash
+docker exec workbench node -e "
+const safe = require('/app/safe-exec');
+console.log(safe.sanitizeErrorForClient('Author: alice@example.com'));
+"
+```
+Should print the input unchanged — author lines / non-URL `@` patterns are NOT touched.
+
+**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+
+---
+
 ### HOTFIX-194: Right file panel stays bounded to viewport, scrollbars stay reachable
 **Issue:** #194 — file tree grows past viewport bottom; horizontal scrollbar lands below the fold
 **Fix:** `public/index.html` — flex-column chain on `#panel-content` + `.panel-section` with `min-height: 0` so `#file-browser-tree` is bounded to its flex parent's height instead of taking natural height.

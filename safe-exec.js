@@ -267,12 +267,18 @@ function findSessionsDir(projectPath) {
   return join(CLAUDE_HOME, 'projects', encoded);
 }
 
-// #189: keep client-visible error messages informative without leaking
+// #189/#190: keep client-visible error messages informative without leaking
 // URL-embedded credentials. Operator-side logs still see the raw message.
+// Order matters: user:pass@ runs first (more specific), then bare token@.
+// Query-string secret params get their value redacted but param name kept
+// so users can still see the structure of the failing URL.
+const _SECRET_QUERY_PARAMS = /([?&])(api_key|token|auth|key|secret|password|access_token|refresh_token|api-key|x-api-key|apikey)=([^&\s]*)/gi;
 function sanitizeErrorForClient(msg, maxLen = 1000) {
   if (typeof msg !== 'string') return '';
   return msg
     .replace(/\b(https?:\/\/)[^/\s:@]+:[^/\s@]+@/gi, '$1***:***@')
+    .replace(/\b(https?:\/\/)[^/\s:@]+@/gi, '$1***@')
+    .replace(_SECRET_QUERY_PARAMS, '$1$2=***')
     .substring(0, maxLen);
 }
 
