@@ -707,6 +707,7 @@ function watchDir(dir, syncFn) {
 // ── Public API ─────────────────────────────────────────────────────────────
 
 let _running = false;
+let _starting = false;
 let _bgRetryTimer = null;
 
 // #176: cold-start race — node may start before qdrant has bound :6333
@@ -739,57 +740,63 @@ function _scheduleBackgroundRetry() {
 }
 
 async function start() {
-  if (_running) return;
-
-  // Check if Qdrant is reachable (with bounded inline retry for cold-start race)
-  if (!(await _waitForQdrant())) {
-    logger.warn('Qdrant not available after inline retries — scheduling background re-attempt', { module: 'qdrant-sync' });
-    _scheduleBackgroundRetry();
-    return;
-  }
-
-  _running = true;
-  logger.info('Qdrant sync starting', { module: 'qdrant-sync', url: QDRANT_URL });
-
-  // Ensure collections exist with per-collection dims
-  for (const [key, name] of Object.entries(COLLECTIONS)) {
-    const cfg = getCollectionConfig(key);
-    if (cfg.enabled) await ensureCollection(name, cfg.dims);
-  }
-
-  // Initial full scan
+  // Guard against concurrent invocations (initial start vs background retry,
+  // or two background retry firings overlapping on a slow qdrantHealthy()).
+  if (_running || _starting) return;
+  _starting = true;
   try {
-    const docCount = await scanDocs();
-    const codeCount = await scanCode();
-    const claudeCount = await scanClaudeSessions();
-    const geminiCount = await scanGeminiSessions();
-    const codexCount = await scanCodexSessions();
-    logger.info('Qdrant initial sync complete', {
-      module: 'qdrant-sync',
-      documents: docCount,
-      code: codeCount,
-      claude: claudeCount,
-      gemini: geminiCount,
-      codex: codexCount,
-    });
-  } catch (err) {
-    logger.error('Qdrant initial sync error', { module: 'qdrant-sync', err: err.message });
-  }
+    // Check if Qdrant is reachable (with bounded inline retry for cold-start race)
+    if (!(await _waitForQdrant())) {
+      logger.warn('Qdrant not available after inline retries — scheduling background re-attempt', { module: 'qdrant-sync' });
+      _scheduleBackgroundRetry();
+      return;
+    }
 
-  // Set up file watchers — both documents and code watch the workspace
-  watchDir(WORKSPACE, scanDocs);
-  watchDir(WORKSPACE, scanCode);
-  watchDir(join(CLAUDE_HOME, 'projects'), scanClaudeSessions);
+    _running = true;
+    logger.info('Qdrant sync starting', { module: 'qdrant-sync', url: QDRANT_URL });
 
-  const geminiBase = join(process.env.HOME || '/data', '.gemini');
-  watchDir(geminiBase, scanGeminiSessions);
+    // Ensure collections exist with per-collection dims
+    for (const [key, name] of Object.entries(COLLECTIONS)) {
+      const cfg = getCollectionConfig(key);
+      if (cfg.enabled) await ensureCollection(name, cfg.dims);
+    }
 
-  const codexBase = process.env.CODEX_HOME || join(process.env.HOME || '/data', '.codex');
-  watchDir(codexBase, scanCodexSessions);
+    // Initial full scan
+    try {
+      const docCount = await scanDocs();
+      const codeCount = await scanCode();
+      const claudeCount = await scanClaudeSessions();
+      const geminiCount = await scanGeminiSessions();
+      const codexCount = await scanCodexSessions();
+      logger.info('Qdrant initial sync complete', {
+        module: 'qdrant-sync',
+        documents: docCount,
+        code: codeCount,
+        claude: claudeCount,
+        gemini: geminiCount,
+        codex: codexCount,
+      });
+    } catch (err) {
+      logger.error('Qdrant initial sync error', { module: 'qdrant-sync', err: err.message });
+    }
 
-  // Watch additional paths
-  for (const p of getAdditionalPaths()) {
-    watchDir(p, scanDocs);
+    // Set up file watchers — both documents and code watch the workspace
+    watchDir(WORKSPACE, scanDocs);
+    watchDir(WORKSPACE, scanCode);
+    watchDir(join(CLAUDE_HOME, 'projects'), scanClaudeSessions);
+
+    const geminiBase = join(process.env.HOME || '/data', '.gemini');
+    watchDir(geminiBase, scanGeminiSessions);
+
+    const codexBase = process.env.CODEX_HOME || join(process.env.HOME || '/data', '.codex');
+    watchDir(codexBase, scanCodexSessions);
+
+    // Watch additional paths
+    for (const p of getAdditionalPaths()) {
+      watchDir(p, scanDocs);
+    }
+  } finally {
+    _starting = false;
   }
 }
 
@@ -801,6 +808,7 @@ function stop() {
   if (_debounceTimer) clearTimeout(_debounceTimer);
   if (_bgRetryTimer) { clearInterval(_bgRetryTimer); _bgRetryTimer = null; }
   _running = false;
+  _starting = false;
 }
 
 async function search(query, collections = null, limit = 10) {
