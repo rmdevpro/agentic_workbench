@@ -182,9 +182,13 @@
     .panel-tab:hover { color: var(--text-primary); }
     .panel-tab.active { background: var(--bg-tertiary); color: var(--text-primary); border-color: var(--accent); }
 
-    /* #186: overflow-x:auto so deep paths / long filenames in the file tree
-       can be reached via horizontal scroll instead of getting clipped. */
-    #panel-content { flex: 1; overflow-y: auto; overflow-x: auto; padding: 12px 16px; }
+    /* #194: flex column + min-height:0 chain so the file tree pane is bounded
+       to viewport height. Without this, .panel-section + #file-browser-tree
+       grow to natural height, the inner overflow:auto's horizontal scrollbar
+       lives below the viewport bottom, and the tree extends past the page.
+       #186: white-space:nowrap so long filenames don't wrap and can scroll. */
+    #panel-content { flex: 1; min-height: 0; padding: 12px 16px; display: flex; flex-direction: column; }
+    .panel-section { flex: 1; min-height: 0; display: flex; flex-direction: column; }
     #panel-content UL.jqueryFileTree LI > A { white-space: nowrap; }
 
     .panel-section h3 {
