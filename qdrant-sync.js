@@ -159,8 +159,7 @@ const syncStmts = {
 
 // ── Embedding API ──────────────────────────────────────────────────────────
 
-async function embed(texts, dims) {
-  const cfg = getEmbeddingConfig();
+async function embedWithConfig(cfg, texts, dims) {
   if (!cfg.key && !cfg.isHF) throw new Error('No embedding API key configured');
 
   // #192: Gemini's OpenAI-compat embeddings endpoint caps batches at 100. HF and
@@ -170,7 +169,7 @@ async function embed(texts, dims) {
   if (texts.length > MAX_BATCH) {
     const out = [];
     for (let i = 0; i < texts.length; i += MAX_BATCH) {
-      const sub = await embed(texts.slice(i, i + MAX_BATCH), dims);
+      const sub = await embedWithConfig(cfg, texts.slice(i, i + MAX_BATCH), dims);
       out.push(...sub);
       if (i + MAX_BATCH < texts.length) await new Promise(r => setTimeout(r, 100));
     }
@@ -218,6 +217,57 @@ async function embed(texts, dims) {
 
   const data = await response.json();
   return data.data.map(d => d.embedding);
+}
+
+async function embed(texts, dims) {
+  return embedWithConfig(getEmbeddingConfig(), texts, dims);
+}
+
+// #180: build a candidate provider cfg from a (key,value) override pair so we can
+// validate before persisting. Falls back to current settings/env for unspecified pieces.
+function buildCandidateConfig(overrideKey, overrideValue) {
+  const provider = overrideKey === 'vector_embedding_provider'
+    ? overrideValue
+    : _parseSetting('vector_embedding_provider', 'huggingface');
+
+  switch (provider) {
+    case 'gemini': {
+      const key = overrideKey === 'gemini_api_key'
+        ? (overrideValue || '')
+        : (_parseSetting('gemini_api_key', '') || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '');
+      return { url: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-embedding-001', key };
+    }
+    case 'openai': {
+      const key = overrideKey === 'codex_api_key'
+        ? (overrideValue || '')
+        : (_readCodexKey() || _parseSetting('codex_api_key', '') || process.env.OPENAI_API_KEY || '');
+      return { url: 'https://api.openai.com/v1', model: 'text-embedding-3-small', key };
+    }
+    case 'custom': {
+      const url = overrideKey === 'vector_custom_url' ? (overrideValue || '') : _parseSetting('vector_custom_url', '');
+      const key = overrideKey === 'vector_custom_key' ? (overrideValue || '') : _parseSetting('vector_custom_key', '');
+      return { url: url || 'http://localhost:11434/v1', model: 'custom', key: key || 'no-key' };
+    }
+    case 'huggingface':
+    default: {
+      const hfToken = process.env.HF_TOKEN || '';
+      return { url: 'https://api-inference.huggingface.co/models/sentence-transformers/all-MiniLM-L6-v2', model: 'hf-free', key: hfToken, isHF: true };
+    }
+  }
+}
+
+// #180: cheapest possible provider call to verify the candidate config is usable.
+// Returns { ok: true } or { ok: false, error: '<provider error string>' }.
+async function validateProviderConfig(cfg) {
+  try {
+    if (!cfg.key && !cfg.isHF) {
+      return { ok: false, error: `No API key configured for ${cfg.model || 'provider'}` };
+    }
+    await embedWithConfig(cfg, ['ping'], 384);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
 }
 
 // ── Qdrant REST API ────────────────────────────────────────────────────────
@@ -907,4 +957,4 @@ async function status() {
   return { available: true, running: _running, url: QDRANT_URL, collections };
 }
 
-module.exports = { start, stop, search, status, embed, qdrantHealthy, reindexCollection };
+module.exports = { start, stop, search, status, embed, qdrantHealthy, reindexCollection, buildCandidateConfig, validateProviderConfig };

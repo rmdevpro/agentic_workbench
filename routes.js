@@ -1130,9 +1130,26 @@ function registerCoreRoutes(
     res.json({ ...defaults, ...settings });
   });
 
-  app.put('/api/settings', (req, res) => {
+  app.put('/api/settings', async (req, res) => {
     const { key, value } = req.body;
     if (!key) return res.status(400).json({ error: 'key required' });
+
+    // #180: validate API key / provider changes synchronously before persisting,
+    // so a bad key doesn't leave the runtime silently broken.
+    const VALIDATED_KEYS = new Set([
+      'gemini_api_key', 'codex_api_key', 'vector_embedding_provider',
+      'vector_custom_url', 'vector_custom_key',
+    ]);
+    if (VALIDATED_KEYS.has(key)) {
+      const qdrant = require('./qdrant-sync');
+      const cfg = qdrant.buildCandidateConfig(key, value);
+      const result = await qdrant.validateProviderConfig(cfg);
+      if (!result.ok) {
+        logger.warn('Settings validation failed', { module: 'routes', settingKey: key, provider: cfg.model, err: result.error });
+        return res.status(400).json({ error: `API key validation failed: ${result.error}`, provider: cfg.model });
+      }
+    }
+
     db.setSetting(key, JSON.stringify(value));
 
     // Update process env when API keys change so new CLI sessions get them

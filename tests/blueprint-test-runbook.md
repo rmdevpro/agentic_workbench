@@ -4104,6 +4104,54 @@ Then measure:
 
 ---
 
+### HOTFIX-174: tini reaps orphan zombie CLI processes
+**Issue:** #174 — `[claude] <defunct>` zombies accumulate in container; `node` (PID 1) doesn't reap reparented orphan grandchildren.
+**Fix:** `Dockerfile` — installed `tini` via apt and changed `ENTRYPOINT` to `["/usr/bin/tini", "--", "/entrypoint.sh"]`. tini at PID 1 auto-reaps any orphans regardless of which intermediate (tmux/bash) ancestor died.
+**Surface:** Container infrastructure — verify on any deployed container after image rebuild.
+
+**Setup:** Container deploy with the new image (M5 dev or HF test Space). Connect via `docker exec` or SSH.
+
+**Steps:**
+1. `docker exec blueprint-dev ps -o pid,user,stat,cmd -e` — note PID 1 should be `/usr/bin/tini -- /entrypoint.sh`.
+2. Open a Claude session in the workbench so a `claude` child exists.
+3. Find the claude PID: `docker exec blueprint-dev pgrep -af claude`.
+4. SIGKILL the claude PID: `docker exec blueprint-dev kill -9 <PID>`.
+5. Wait 5 seconds, then `docker exec blueprint-dev ps -o pid,stat,cmd -e | grep -i defunct`.
+
+**Expected:**
+- PID 1 is tini (`/usr/bin/tini`), not `node`.
+- After killing the claude process and waiting, no `<defunct>` entries appear (or any that briefly existed are reaped within 1-2s).
+- Pre-fix baseline (M5 prod 2026-04-24): `[claude] <defunct>` persisted 3+ hours.
+
+**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+
+---
+
+### HOTFIX-180: API key changes validated synchronously on PUT /api/settings
+**Issue:** #180 — bad keys silently saved; only failed later in background reindex; user thought save succeeded.
+**Fix:** `routes.js:1133` (PUT /api/settings) calls `qdrant.validateProviderConfig(buildCandidateConfig(key, value))` for `gemini_api_key`, `codex_api_key`, `vector_embedding_provider`, `vector_custom_url`, `vector_custom_key`. On failure: returns 400 with the actual provider error string, does NOT save.
+**Surface:** Backend API — can be tested with curl against M5 dev or HF test Space.
+
+**Setup:** Backend deploy. Get a valid Gemini API key for the positive case.
+
+**Steps:**
+1. Negative case (bad key): `curl -X PUT http://m5:7860/api/settings -H 'Content-Type: application/json' -d '{"key":"gemini_api_key","value":"obviously-bad-key-xyz"}'`
+2. Confirm response is `400` with body containing `"API key validation failed: ..."` and the provider model name.
+3. Verify setting was NOT saved: `curl http://m5:7860/api/settings | jq .gemini_api_key` — should be the prior value (or unset), NOT `obviously-bad-key-xyz`.
+4. Positive case (good key): `curl -X PUT http://m5:7860/api/settings -H 'Content-Type: application/json' -d '{"key":"gemini_api_key","value":"<real-key>"}'`
+5. Confirm response is `200 {saved: true}`. Verify it was saved.
+6. Provider switch case: with provider currently `huggingface`, send `{"key":"vector_embedding_provider","value":"openai"}` while no codex key is set — expect `400` (validation fails because no key for openai).
+
+**Expected:**
+- Bad key → synchronous `400` with provider error string, no DB write.
+- Good key → `200 {saved: true}`, DB row updated.
+- Provider switch with missing key → `400`, provider remains unchanged.
+- Per-validation latency: ~50-200ms (one tiny embed call per validated PUT).
+
+**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+
+---
+
 ## Troubleshooting
 
 | Symptom | Likely Cause | Action |

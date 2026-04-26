@@ -2,7 +2,7 @@ FROM node:22-slim
 
 RUN apt-get update && apt-get install -y \
     git curl ca-certificates python3 make g++ tmux ssh openssh-client jq \
-    ffmpeg zip unzip rsync sqlite3 tree \
+    ffmpeg zip unzip rsync sqlite3 tree tini \
     && rm -rf /var/lib/apt/lists/*
 
 # Install GitHub CLI
@@ -56,5 +56,5 @@ ENV PORT=7860
 WORKDIR /data
 EXPOSE 7860
 
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]
 CMD ["node", "/app/server.js"]
