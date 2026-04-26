@@ -233,25 +233,16 @@ module.exports = function createWatchers({
         if (err.code !== 'ENOENT') throw err;
       }
 
-      const hasReg = content.includes('[mcp_servers.blueprint]');
-      const hasStaleEnv = /\[mcp_servers\.blueprint\.env\][\s\S]*?BLUEPRINT_PORT/.test(content);
-      if (hasReg && !hasStaleEnv) return;
-
-      if (hasStaleEnv) {
-        // Strip existing blueprint blocks (main + .env) so we can re-append clean.
-        content = content.replace(
-          /\n*\[mcp_servers\.blueprint(?:\.env)?\][^[]*/g,
-          '',
-        ).replace(/\n+$/, '\n');
-      }
+      // #188: previously this branch also tried to migrate an old
+      // [mcp_servers.blueprint.env]/BLUEPRINT_PORT block away with a regex
+      // that ate too much and corrupted the file. The migration is now dead
+      // weight (any persistent-/data host has either already migrated or
+      // already been corrupted), so just check-and-append.
+      if (content.includes('[mcp_servers.blueprint]')) return;
 
       const mcpConfig = `\n[mcp_servers.blueprint]\ncommand = "node"\nargs = ["${join(__dirname, 'mcp-server.js')}"]\n`;
       await fsp.mkdir(join(HOME, '.codex'), { recursive: true });
-      if (hasStaleEnv) {
-        await fsp.writeFile(codexConfigFile, content + mcpConfig);
-      } else {
-        await fsp.appendFile(codexConfigFile, mcpConfig);
-      }
+      await fsp.appendFile(codexConfigFile, mcpConfig);
       logger.info('Registered Blueprint MCP server for Codex', { module: 'watchers' });
     } catch (err) {
       logger.error('Could not write Codex MCP config', { module: 'watchers', err: err.message });

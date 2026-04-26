@@ -3780,6 +3780,28 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 
 ---
 
+### HOTFIX-188: registerCodexMcp does not corrupt config.toml
+**Issue:** #188 — Codex config corruption from over-greedy cleanup regex
+**Fix:** `watchers.js:236` — deleted the cleanup branch entirely; function now just check-and-appends.
+
+**Setup:** Backend deploy. Need a container where Codex config exists and is loadable BEFORE this verification (validate baseline by running `codex --version`).
+
+**Steps:**
+1. On a fresh dev container, confirm `~/.codex/config.toml` is empty or missing.
+2. Start the workbench (Blueprint MCP registration runs at startup).
+3. Cat the config: `cat /data/.codex/config.toml`. Confirm it contains exactly one `[mcp_servers.blueprint]` block with `command = "node"` and `args = ["..."]`. Confirm syntactically valid TOML by running `codex --version` — should print version, not a parse error.
+4. Restart Blueprint (re-runs registration). Re-cat config: should NOT have a duplicate `[mcp_servers.blueprint]` block (the early-return guard prevents double-append).
+5. Negative case: manually pre-populate `/data/.codex/config.toml` with non-MCP content (e.g. a `[notice.foo]` block). Restart. Confirm Blueprint appends its block AFTER the existing content without modifying or corrupting it.
+
+**Expected:**
+- Single valid `[mcp_servers.blueprint]` block; rest of file untouched.
+- `codex --version` prints version (no TOML parse error).
+- Multiple Blueprint restarts produce no duplicate registrations.
+
+**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+
+---
+
 ### HOTFIX-173: xterm scrollbar tracks buffer growth while scrolled up
 **Issue:** #173 — xterm scrollbar range doesn't update when buffer grows while user is scrolled up
 **Fix:** `public/index.html:1401-area` — added `term.onWriteParsed → term.refresh(0, term.rows-1)` hook.
