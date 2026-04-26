@@ -224,11 +224,16 @@ async function embed(texts, dims) {
 }
 
 // #180: build a candidate provider cfg from a (key,value) override pair so we can
-// validate before persisting. Falls back to current settings/env for unspecified pieces.
+// validate before persisting. Targets the provider that the overridden setting belongs
+// to (e.g. PUT gemini_api_key always validates against Gemini, regardless of which
+// provider is currently active), so the user always gets a real check on what they typed.
 function buildCandidateConfig(overrideKey, overrideValue) {
-  const provider = overrideKey === 'vector_embedding_provider'
-    ? overrideValue
-    : _parseSetting('vector_embedding_provider', 'huggingface');
+  let provider;
+  if (overrideKey === 'vector_embedding_provider') provider = overrideValue;
+  else if (overrideKey === 'gemini_api_key') provider = 'gemini';
+  else if (overrideKey === 'codex_api_key') provider = 'openai';
+  else if (overrideKey === 'vector_custom_url' || overrideKey === 'vector_custom_key') provider = 'custom';
+  else provider = _parseSetting('vector_embedding_provider', 'huggingface');
 
   switch (provider) {
     case 'gemini': {
