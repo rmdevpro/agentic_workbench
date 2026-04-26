@@ -17,6 +17,10 @@ module.exports = function createWsTerminal({
   startJsonlWatcher,
   stopJsonlWatcher,
   spawnPty,
+  // #157: db is needed to look up the blueprint session by tmuxName prefix so we
+  // can auto-respawn a dead tmux pane (project_path + cli_type) when a tab tries
+  // to reattach after idle-cleanup or container restart killed it.
+  db,
 }) {
   const highWater = config ? config.get('ws.bufferHighWaterMark', 1048576) : 1048576;
   const lowWater = config ? config.get('ws.bufferLowWaterMark', 524288) : 524288;
@@ -33,10 +37,41 @@ module.exports = function createWsTerminal({
     dbgTab('connect:enter', { tmuxSession });
 
     if (!(await tmuxExists(tmuxSession))) {
-      dbgTab('connect:no-tmux-session', { tmuxSession });
-      ws.send(JSON.stringify({ type: 'error', message: `No tmux session: ${tmuxSession}` }));
-      ws.close();
-      return;
+      // #157: tab is reconnecting to a session whose tmux pane is gone (idle
+      // cleanup, container restart, etc.). Try to respawn instead of forcing
+      // the user to close + relaunch the tab. tmuxName format: bp_<id12>_<hash>
+      let respawned = false;
+      if (db && tmuxSession.startsWith('bp_')) {
+        const idPrefix = tmuxSession.slice(3, 15);
+        try {
+          const sessRow = db.getSessionByPrefix(idPrefix);
+          if (sessRow && sessRow.project_path) {
+            dbgTab('connect:respawning-tmux', { tmuxSession, sessionId: sessRow.id, cli: sessRow.cli_type });
+            // Recreate tmux with the same CLI + project. Best-effort — if this
+            // fails, fall through to the close path below.
+            safe.tmuxCreateCLI(tmuxSession, sessRow.project_path, sessRow.cli_type || 'claude', []);
+            // tmuxCreateCLI is fire-and-forget but synchronous on shell exec.
+            // Brief retry loop to confirm tmux is up before attaching.
+            for (let i = 0; i < 10; i++) {
+              await new Promise(r => setTimeout(r, 100));
+              if (await tmuxExists(tmuxSession)) { respawned = true; break; }
+            }
+            if (respawned) {
+              logger.info('Auto-respawned dead tmux session for reconnecting tab', {
+                module: 'ws-terminal', tmuxSession, sessionId: sessRow.id.substring(0, 12), cli: sessRow.cli_type,
+              });
+            }
+          }
+        } catch (err) {
+          logger.warn('Auto-respawn failed; closing WS', { module: 'ws-terminal', tmuxSession, err: err.message });
+        }
+      }
+      if (!respawned) {
+        dbgTab('connect:no-tmux-session', { tmuxSession });
+        ws.send(JSON.stringify({ type: 'error', message: `No tmux session: ${tmuxSession}` }));
+        ws.close();
+        return;
+      }
     }
 
     // NOTE: node-pty.spawn() is synchronous by design (native addon fork).

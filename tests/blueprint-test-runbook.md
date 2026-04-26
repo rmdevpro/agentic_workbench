@@ -4220,6 +4220,58 @@ Then measure:
 
 ---
 
+### HOTFIX-147: Atomic temp→real session-id handoff
+**Issue:** #147 — duplicate session entries appearing in sidebar/tab bar after creating a new session.
+**Root cause (3-CLI consensus):** `resolveSessionId` and `resolveStaleNewSessions` in session-resolver.js performed insert-real → update-metadata → delete-temp as separate statements. `/api/state` polls landing in the brief window saw both rows.
+**Fix:** wrap each handoff in `db.db.transaction(() => { … })()`. /api/state can never observe both rows now.
+**Surface:** Backend.
+
+**Setup:** Deploy to M5 dev. Have a Claude session creation flow ready.
+
+**Steps:**
+1. From a fresh page load on M5 dev, create a new Claude session via the UI's + button (any project) with a prompt.
+2. Within the next ~30s, hit `/api/state` repeatedly: `for i in $(seq 1 30); do curl -sS http://m5:7860/api/state | jq -r '[.projects[].sessions[] | select(.cli_type == "claude")] | length' ; sleep 1; done`
+3. Expected: count never doubles around the resolution time. Pre-fix could see a 1-2s window where the same session appeared twice (one with new_<ts> id, one with the real UUID).
+4. Sidebar visual check: only one entry per session through the resolution.
+
+**Expected:**
+- No duplicate entries in `/api/state` at any moment.
+- Sidebar shows one entry per session throughout the resolution.
+
+**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+
+---
+
+### HOTFIX-157: Auto-respawn dead tmux pane on tab reconnect
+**Issue:** #157 — coming back to a tab after long idle / container restart, terminal shows "[Session detached]" and user must close + relaunch.
+**Fix:** `ws-terminal.js` — when a WS connects with a known tmuxSession whose tmux pane is gone, look up the blueprint session by tmuxName prefix (`db.getSessionByPrefix`), respawn tmux via `safe.tmuxCreateCLI` using the session's project_path + cli_type, then attach. Falls through to the existing close-with-error path if lookup or respawn fails.
+**Surface:** Backend WS path + UI behavior. REQUIRES Playwright UI verification (per UI-component rule).
+
+**Setup:** Deploy to M5 dev. Open a Claude session in the workbench so a tmux pane exists.
+
+**Steps:**
+1. Open a Claude session via the UI. Confirm the terminal is attached and showing prompt.
+2. Identify the tmux session name from server logs (`docker logs workbench --tail 50 | grep tmux`) — format `bp_<id12>_<hash>`.
+3. From host: `ssh aristotle9@m5 'docker exec workbench tmux kill-session -t bp_xxxxxxxxxxxx_yyyy'`
+4. In Playwright (or Hymie Firefox), refresh the workbench page.
+5. Wait ~3s. The same session tab should reattach with a fresh terminal — NO "[Session detached]" message, NO need to close/relaunch.
+6. Server log should show `Auto-respawned dead tmux session for reconnecting tab` with the tmuxSession name.
+7. Click into the session — terminal accepts input, CLI launches afresh (since old conversation is gone, but tab is alive).
+
+**Expected:**
+- Tab reattaches automatically after tmux pane was killed.
+- Server log emits the auto-respawn line.
+- No "[Session detached]" message visible to the user.
+- If lookup fails (corrupt tmuxName, missing DB row), falls back to existing close-with-error behavior — graceful, no crash.
+
+**Watch for regressions:**
+- Tab reconnects with the right CLI type (claude/gemini/codex matches the original session).
+- New session content reflects a fresh CLI launch (the prior conversation is gone — that's the trade-off; we recover the tab, not the in-memory state).
+
+**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+
+---
+
 ### HOTFIX-180-UI: Settings UI surfaces validation errors + rolls back optimistic cache
 **Issue:** #180 follow-up — original backend validation worked, but `saveSetting` in public/index.html was fire-and-forget (no `res.ok` check, no error surface, no rollback of `_settingsCache[key]`). User typed bad key, saw nothing, assumed save succeeded.
 **Fix:** `saveSetting` now: (a) snapshots previousValue before optimistic write, (b) checks res.ok, (c) on failure rolls `_settingsCache[key]` back AND shows red dismissible banner inside Settings modal with the actual provider error string, (d) clears banner on next successful save. Network error and HTTP non-OK both handled.

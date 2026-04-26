@@ -89,6 +89,7 @@ const terminal = createWsTerminal({
   scheduleTmuxCleanup: tmux.scheduleTmuxCleanup,
   startJsonlWatcher: watchers.startJsonlWatcher,
   stopJsonlWatcher: watchers.stopJsonlWatcher,
+  db,
 });
 
 // Smart compaction removed — no kill callback needed

@@ -48,14 +48,18 @@ module.exports = function createSessionResolver({
               to: realId.substring(0, 8),
             });
 
+            // #147: wrap insert(real) + metadata copies + delete(temp) in a single
+            // transaction so /api/state can never observe both rows simultaneously.
+            // 3-CLI RCA on the duplicate-session symptom converged on this race.
             const tmpSession = db.getSession(tmpId);
-            db.upsertSession(realId, projectId, tmpSession?.name || null, tmpSession?.cli_type || 'claude');
-            if (tmpSession?.user_renamed) db.renameSession(realId, tmpSession.name);
-            if (tmpSession?.notes) db.setSessionNotes(realId, tmpSession.notes);
-            if (tmpSession?.state && tmpSession.state !== 'active')
-              db.setSessionState(realId, tmpSession.state);
-
-            db.deleteSession(tmpId);
+            db.db.transaction(() => {
+              db.upsertSession(realId, projectId, tmpSession?.name || null, tmpSession?.cli_type || 'claude');
+              if (tmpSession?.user_renamed) db.renameSession(realId, tmpSession.name);
+              if (tmpSession?.notes) db.setSessionNotes(realId, tmpSession.notes);
+              if (tmpSession?.state && tmpSession.state !== 'active')
+                db.setSessionState(realId, tmpSession.state);
+              db.deleteSession(tmpId);
+            })();
 
             try {
               await safe.tmuxExecAsync(['rename-session', '-t', tmux, tmuxName(realId)]);
@@ -179,11 +183,14 @@ module.exports = function createSessionResolver({
             from: stale.id.substring(0, 15),
             to: realId.substring(0, 8),
           });
-          db.upsertSession(realId, dbProj.id, stale.name || null, stale.cli_type || 'claude');
-          if (stale.user_renamed) db.renameSession(realId, stale.name);
-          if (stale.notes) db.setSessionNotes(realId, stale.notes);
-          if (stale.state && stale.state !== 'active') db.setSessionState(realId, stale.state);
-          db.deleteSession(stale.id);
+          // #147: same atomic-handoff transaction as resolveSessionId.
+          db.db.transaction(() => {
+            db.upsertSession(realId, dbProj.id, stale.name || null, stale.cli_type || 'claude');
+            if (stale.user_renamed) db.renameSession(realId, stale.name);
+            if (stale.notes) db.setSessionNotes(realId, stale.notes);
+            if (stale.state && stale.state !== 'active') db.setSessionState(realId, stale.state);
+            db.deleteSession(stale.id);
+          })();
         } else {
           logger.info('Startup: removing orphaned temp session', {
             module: 'session-resolver',
