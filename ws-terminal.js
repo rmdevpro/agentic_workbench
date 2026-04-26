@@ -32,6 +32,11 @@ module.exports = function createWsTerminal({
     logger.info(`[tab-dbg] ${event}`, { module: 'ws-terminal', ...extra, mapSize: sessionWsClients.size, mapKeys: [...sessionWsClients.keys()] });
   }
 
+  // #157 (3-CLI review): in-flight respawn map keyed by tmuxSession. Rapid parallel
+  // reconnects to the same dead pane all wait on the same promise instead of each
+  // calling tmuxCreateCLI (which would double-spawn or race the existence check).
+  const _respawnsInFlight = new Map();
+
   async function handleTerminalConnection(ws, tmuxSession) {
     tmuxSession = safe.sanitizeTmuxName(tmuxSession);
     dbgTab('connect:enter', { tmuxSession });
@@ -42,29 +47,53 @@ module.exports = function createWsTerminal({
       // the user to close + relaunch the tab. tmuxName format: bp_<id12>_<hash>
       let respawned = false;
       if (db && tmuxSession.startsWith('bp_')) {
-        const idPrefix = tmuxSession.slice(3, 15);
-        try {
-          const sessRow = db.getSessionByPrefix(idPrefix);
-          if (sessRow && sessRow.project_path) {
-            dbgTab('connect:respawning-tmux', { tmuxSession, sessionId: sessRow.id, cli: sessRow.cli_type });
-            // Recreate tmux with the same CLI + project. Best-effort — if this
-            // fails, fall through to the close path below.
-            safe.tmuxCreateCLI(tmuxSession, sessRow.project_path, sessRow.cli_type || 'claude', []);
-            // tmuxCreateCLI is fire-and-forget but synchronous on shell exec.
-            // Brief retry loop to confirm tmux is up before attaching.
-            for (let i = 0; i < 10; i++) {
-              await new Promise(r => setTimeout(r, 100));
-              if (await tmuxExists(tmuxSession)) { respawned = true; break; }
+        // 3-CLI review concern: dedupe rapid parallel reconnects. If a respawn is
+        // already in flight for this tmuxSession, wait on its promise instead of
+        // starting a second tmuxCreateCLI race.
+        let inFlight = _respawnsInFlight.get(tmuxSession);
+        if (!inFlight) {
+          inFlight = (async () => {
+            try {
+              const idPrefix = tmuxSession.slice(3, 15);
+              const sessRow = db.getSessionByPrefix(idPrefix);
+              if (!sessRow || !sessRow.project_path) return false;
+              // 3-CLI review concern: validate the prefix lookup actually points
+              // back to THIS tmuxSession (defense vs prefix collisions across
+              // session ids that share their first 12 chars).
+              const expectedTmux = safe.tmuxNameFor(sessRow.id);
+              if (expectedTmux !== tmuxSession) {
+                logger.warn('Auto-respawn: prefix-matched session does not derive same tmuxName', {
+                  module: 'ws-terminal', tmuxSession, expectedTmux, sessionId: sessRow.id,
+                });
+                return false;
+              }
+              dbgTab('connect:respawning-tmux', { tmuxSession, sessionId: sessRow.id, cli: sessRow.cli_type });
+              // Re-check just before spawn (race against another reconnect that
+              // might have created the pane between our first check and this one).
+              if (await tmuxExists(tmuxSession)) return true;
+              safe.tmuxCreateCLI(tmuxSession, sessRow.project_path, sessRow.cli_type || 'claude', []);
+              // Confirm pane is up before attaching (tmuxCreateCLI uses execFileSync
+              // but tmux server may need a beat to register).
+              for (let i = 0; i < 10; i++) {
+                await new Promise(r => setTimeout(r, 100));
+                if (await tmuxExists(tmuxSession)) {
+                  logger.info('Auto-respawned dead tmux session for reconnecting tab', {
+                    module: 'ws-terminal', tmuxSession, sessionId: sessRow.id.substring(0, 12), cli: sessRow.cli_type,
+                  });
+                  return true;
+                }
+              }
+              return false;
+            } catch (err) {
+              logger.warn('Auto-respawn failed', { module: 'ws-terminal', tmuxSession, err: err.message });
+              return false;
+            } finally {
+              _respawnsInFlight.delete(tmuxSession);
             }
-            if (respawned) {
-              logger.info('Auto-respawned dead tmux session for reconnecting tab', {
-                module: 'ws-terminal', tmuxSession, sessionId: sessRow.id.substring(0, 12), cli: sessRow.cli_type,
-              });
-            }
-          }
-        } catch (err) {
-          logger.warn('Auto-respawn failed; closing WS', { module: 'ws-terminal', tmuxSession, err: err.message });
+          })();
+          _respawnsInFlight.set(tmuxSession, inFlight);
         }
+        respawned = await inFlight;
       }
       if (!respawned) {
         dbgTab('connect:no-tmux-session', { tmuxSession });
