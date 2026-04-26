@@ -3344,7 +3344,16 @@ build/**</textarea>
     document.getElementById('session-search').addEventListener('input', (e) => {
       if (searchTimer) clearTimeout(searchTimer);
       const q = e.target.value.trim();
-      if (q.length < 2) { searchActive = false; renderSidebar(); return; }
+      if (q.length < 2) {
+        // Clearing search: invalidate render-cache so the project-tree view
+        // actually rebuilds (state hash hasn't changed since last full render,
+        // so renderSidebar would otherwise short-circuit and leave the search-
+        // results DOM in place).
+        searchActive = false;
+        renderSidebar._lastHash = null;
+        renderSidebar();
+        return;
+      }
       searchActive = true;
       searchTimer = setTimeout(async () => {
         try {
@@ -3381,6 +3390,7 @@ build/**</textarea>
         item.addEventListener('click', () => {
           document.getElementById('session-search').value = '';
           searchActive = false;
+          renderSidebar._lastHash = null; // force rebuild from search-results back to project-tree
           openSession({ id: r.sessionId, name: r.name }, r.project);
           renderSidebar();
         });
