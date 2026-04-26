@@ -39,6 +39,24 @@ function validateSessionId(sessionId) {
   return SESSION_ID_PATTERN.test(sessionId);
 }
 
+// #181: parse a relative ('1h' / '24h' / '7d' / '15m') or absolute ISO8601 'since'
+// query param into an ISO timestamp. Returns ISO string suitable for SQLite TEXT
+// timestamp comparison.
+function _parseSince(input) {
+  if (!input) return new Date(Date.now() - 3600 * 1000).toISOString();
+  const m = /^(\d+)([smhd])$/.exec(String(input).trim());
+  if (m) {
+    const n = parseInt(m[1], 10);
+    const mult = { s: 1000, m: 60 * 1000, h: 3600 * 1000, d: 86400 * 1000 }[m[2]];
+    return new Date(Date.now() - n * mult).toISOString();
+  }
+  // Try as ISO timestamp
+  const d = new Date(input);
+  if (!Number.isNaN(d.getTime())) return d.toISOString();
+  // Fallback to 1h
+  return new Date(Date.now() - 3600 * 1000).toISOString();
+}
+
 function registerCoreRoutes(
   app,
   {
@@ -1221,6 +1239,26 @@ function registerCoreRoutes(
     }
 
     res.json({ gemini: hasGemini, openai: hasOpenai });
+  });
+
+  // ── Logs (#181) ───────────────────────────────────────────────────────────
+
+  // GET /api/logs?level=ERROR&module=qdrant-sync&since=1h&limit=200
+  // since: '1h' / '24h' / '7d' / ISO8601 timestamp. Default: last 1h.
+  app.get('/api/logs', (req, res) => {
+    const { level, module: mod } = req.query;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 200, 5000);
+    const since = _parseSince(req.query.since || '1h');
+    const rows = db.queryLogs({ level, module: mod, since, limit });
+    res.json({ since, count: rows.length, rows });
+  });
+
+  // GET /api/logs/summary?since=1h — used by the UI banner.
+  app.get('/api/logs/summary', (req, res) => {
+    const since = _parseSince(req.query.since || '1h');
+    const errorCount = db.errorCountSince(since);
+    const topError = errorCount > 0 ? db.topErrorSince(since) : null;
+    res.json({ since, errorCount, topError });
   });
 
   // ── Qdrant / Vector Search ────────────────────────────────────────────────

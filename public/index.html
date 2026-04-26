@@ -3987,12 +3987,103 @@ build/**</textarea>
       if (banner) banner.remove();
     }
 
+    // ── Error Banner (#181) ──────────────────────────
+    // Polls /api/logs/summary every minute. If errors landed in the last hour,
+    // surfaces a clickable banner with the count + most recent module/message.
+    // Click opens a modal listing the last 50 ERROR rows for triage.
+
+    async function checkErrors() {
+      try {
+        const res = await fetch('/api/logs/summary?since=1h');
+        const summary = await res.json();
+        if (summary.errorCount > 0) {
+          showErrorBanner(summary.errorCount, summary.topError);
+        } else {
+          hideErrorBanner();
+        }
+      } catch (err) {
+        console.error('Error summary check failed:', err);
+      }
+    }
+
+    function showErrorBanner(count, topError) {
+      let banner = document.getElementById('error-banner');
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'error-banner';
+        banner.style.cssText = `
+          background: var(--bg-tertiary); border-bottom: 2px solid var(--error, #d32f2f);
+          padding: 10px 16px; font-size: 13px; color: var(--error, #d32f2f);
+          display: flex; align-items: center; gap: 8px; cursor: pointer;
+        `;
+        banner.title = 'Click for details';
+        banner.onclick = openErrorLogModal;
+        document.getElementById('main').insertBefore(banner, document.getElementById('tab-bar'));
+      }
+      const top = topError ? ` — top: <strong>${escapeHtml(topError.module || 'unknown')}</strong> ${escapeHtml(topError.message).slice(0, 120)}` : '';
+      banner.innerHTML = `
+        <span style="font-size:16px">&#9888;</span>
+        <span>${count} error(s) in the last hour${top} <em style="margin-left:8px;opacity:0.7">[click for details]</em></span>
+      `;
+    }
+
+    function hideErrorBanner() {
+      const banner = document.getElementById('error-banner');
+      if (banner) banner.remove();
+    }
+
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    async function openErrorLogModal() {
+      let modal = document.getElementById('error-log-modal');
+      if (modal) { modal.remove(); return; }
+      const res = await fetch('/api/logs?level=ERROR&since=1h&limit=50');
+      const data = await res.json();
+      modal = document.createElement('div');
+      modal.id = 'error-log-modal';
+      modal.style.cssText = `
+        position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 10000;
+        display: flex; align-items: center; justify-content: center;
+      `;
+      modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+      const rowsHtml = (data.rows || []).map(r => `
+        <tr>
+          <td style="padding:4px 8px;color:var(--text-secondary);white-space:nowrap;font-family:monospace;font-size:11px">${escapeHtml(r.ts)}</td>
+          <td style="padding:4px 8px;font-family:monospace;font-size:11px">${escapeHtml(r.module || '—')}</td>
+          <td style="padding:4px 8px;font-size:12px">${escapeHtml(r.message)}</td>
+        </tr>
+      `).join('');
+      modal.innerHTML = `
+        <div style="background:var(--bg-primary);color:var(--text-primary);width:90%;max-width:1100px;max-height:80vh;overflow:auto;border-radius:8px;padding:16px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <strong>Recent errors (last 1h, max 50)</strong>
+            <button onclick="document.getElementById('error-log-modal').remove()" style="background:none;border:1px solid var(--border);color:var(--text-primary);padding:4px 12px;border-radius:4px;cursor:pointer">Close</button>
+          </div>
+          <table style="width:100%;border-collapse:collapse">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border)">
+                <th style="text-align:left;padding:4px 8px">Time</th>
+                <th style="text-align:left;padding:4px 8px">Module</th>
+                <th style="text-align:left;padding:4px 8px">Message</th>
+              </tr>
+            </thead>
+            <tbody>${rowsHtml || '<tr><td colspan="3" style="padding:16px;text-align:center;opacity:0.7">No errors in the last hour</td></tr>'}</tbody>
+          </table>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+
     // ── Init ─────────────────────────────────────────
     loadState();
     loadFiles();
     setInterval(loadState, REFRESH_MS);
     setTimeout(checkAuth, 1000);
     setInterval(checkAuth, 60000);
+    setTimeout(checkErrors, 2000);
+    setInterval(checkErrors, 60000);
     loadAppearanceSettings();
   </script>
 </body>

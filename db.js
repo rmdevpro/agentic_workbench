@@ -162,6 +162,19 @@ db.exec(`
     mcp_name TEXT NOT NULL REFERENCES mcp_registry(name) ON DELETE CASCADE,
     PRIMARY KEY (project_id, mcp_name)
   );
+
+  CREATE TABLE IF NOT EXISTS logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    level TEXT NOT NULL,
+    module TEXT,
+    message TEXT NOT NULL,
+    context TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_logs_ts        ON logs(ts);
+  CREATE INDEX IF NOT EXISTS idx_logs_level_ts  ON logs(level, ts);
+  CREATE INDEX IF NOT EXISTS idx_logs_module_ts ON logs(module, ts);
 `);
 
 // ── Prepared Statements ────────────────────────────────────────────────────
@@ -248,6 +261,12 @@ const stmts = {
   enableMcpForProject: db.prepare('INSERT OR IGNORE INTO mcp_project_enabled (project_id, mcp_name) VALUES (?, ?)'),
   disableMcpForProject: db.prepare('DELETE FROM mcp_project_enabled WHERE project_id = ? AND mcp_name = ?'),
   getEnabledMcpForProject: db.prepare('SELECT m.* FROM mcp_registry m JOIN mcp_project_enabled e ON m.name = e.mcp_name WHERE e.project_id = ?'),
+
+  // #181: log surfacing
+  insertLog: db.prepare('INSERT INTO logs (ts, level, module, message, context) VALUES (?, ?, ?, ?, ?)'),
+  errorCountSince: db.prepare("SELECT COUNT(*) AS n FROM logs WHERE level = 'ERROR' AND ts >= ?"),
+  topErrorSince: db.prepare("SELECT module, message, ts FROM logs WHERE level = 'ERROR' AND ts >= ? ORDER BY ts DESC LIMIT 1"),
+  cleanupOldLogs: db.prepare("DELETE FROM logs WHERE ts < datetime('now', ?)"),
 };
 
 module.exports = {
@@ -466,6 +485,30 @@ module.exports = {
   },
   disableMcpForProject(projectId, mcpName) {
     stmts.disableMcpForProject.run(projectId, mcpName);
+  },
+
+  // #181: log surfacing
+  insertLog(ts, level, mod, message, context) {
+    stmts.insertLog.run(ts, level, mod, message, context);
+  },
+  errorCountSince(sinceTs) {
+    return stmts.errorCountSince.get(sinceTs).n;
+  },
+  topErrorSince(sinceTs) {
+    return stmts.topErrorSince.get(sinceTs) || null;
+  },
+  queryLogs({ level, module: mod, since, limit }) {
+    const where = [];
+    const params = [];
+    if (level) { where.push('level = ?'); params.push(level); }
+    if (mod) { where.push('module = ?'); params.push(mod); }
+    if (since) { where.push('ts >= ?'); params.push(since); }
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const lim = Math.min(parseInt(limit, 10) || 200, 5000);
+    return db.prepare(`SELECT id, ts, level, module, message, context FROM logs ${whereSql} ORDER BY ts DESC LIMIT ${lim}`).all(...params);
+  },
+  cleanupOldLogs(modifier = '-7 days') {
+    return stmts.cleanupOldLogs.run(modifier).changes;
   },
   getEnabledMcpForProject(projectId) {
     return stmts.getEnabledMcpForProject.all(projectId);

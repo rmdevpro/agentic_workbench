@@ -4127,6 +4127,42 @@ Then measure:
 
 ---
 
+### HOTFIX-181: Dual-sink logger + /api/logs query API + UI error banner
+**Issue:** #181 — log surfacing: 2,374 qdrant-sync 404s went unnoticed because logs only existed in Docker's stdout ring buffer.
+**Fix:**
+- `db.js` — new `logs` table (id, ts, level, module, message, context) with indices on ts, level+ts, module+ts. Helpers: `insertLog`, `queryLogs`, `errorCountSince`, `topErrorSince`, `cleanupOldLogs`.
+- `logger.js` — every `log.{debug,info,warn,error}` call now also persists to `logs` table via lazy `db` require. Failure-safe (one stderr warn per process). Hourly TTL sweep via setInterval.unref'd; default retention `LOG_RETENTION='-7 days'`.
+- `routes.js` — `GET /api/logs?level=&module=&since=1h&limit=200`, `GET /api/logs/summary?since=1h` (count + topError for banner).
+- `public/index.html` — clickable error banner alongside auth banner. Polls `/api/logs/summary` every 60s, opens a modal showing the last 50 ERROR rows on click.
+**Surface:** Backend + UI — verify backend via curl, UI via headed Hymie Firefox.
+
+**Setup:** Deploy to M5 dev (or HF test Space). For UI step, Hymie Firefox.
+
+**Backend steps:**
+1. Generate at least one ERROR via a known-failing operation: `curl -X PUT http://m5:7860/api/settings -H 'Content-Type: application/json' -d '{"key":"gemini_api_key","value":"deliberately-bad-key-181-test"}'` — returns 400 and writes a WARN log.
+2. Force an ERROR: `docker exec workbench node -e "require('/app/logger.js').error('runbook test 181', {module:'runbook-181', code:42})"`.
+3. `curl http://m5:7860/api/logs/summary?since=1h | jq` — expect `errorCount >= 1`, `topError.module == 'runbook-181'`.
+4. `curl 'http://m5:7860/api/logs?level=ERROR&module=runbook-181&limit=10' | jq '.rows[0]'` — confirm the row has ts/level/module/message/context fields.
+5. `since` parser: try `?since=15m`, `?since=24h`, `?since=2026-04-26T00:00:00Z` — all should return valid responses.
+
+**UI steps (Hymie):**
+1. Open M5 dev workbench in Hymie Firefox.
+2. Confirm a red error banner appears at the top within ~60s of the test errors above (or refresh).
+3. Click the banner → modal opens listing recent errors (time / module / message columns).
+4. Close the modal; banner remains visible until the 1h window passes.
+
+**Cleanup:** `docker exec workbench sqlite3 /data/.blueprint/blueprint.db "DELETE FROM logs WHERE module IN ('runbook-181','verify-181')"`.
+
+**Expected:**
+- Errors persist to `logs` table immediately (within the same request).
+- Banner shows count + top module within 60s of new errors.
+- Modal lists rows ordered DESC by ts.
+- Disk: hourly cleanup deletes rows older than `LOG_RETENTION` env var (default 7 days).
+
+**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+
+---
+
 ### HOTFIX-180: API key changes validated synchronously on PUT /api/settings
 **Issue:** #180 — bad keys silently saved; only failed later in background reindex; user thought save succeeded.
 **Fix:** `routes.js:1133` (PUT /api/settings) calls `qdrant.validateProviderConfig(buildCandidateConfig(key, value))` for `gemini_api_key`, `codex_api_key`, `vector_embedding_provider`, `vector_custom_url`, `vector_custom_key`. On failure: returns 400 with the actual provider error string, does NOT save.
