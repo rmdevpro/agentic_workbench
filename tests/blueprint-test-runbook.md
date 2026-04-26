@@ -1890,6 +1890,8 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 
 **Setup:** Ensure a session tab is open with WebSocket connected.
 
+This test enters plan mode AND exits it before concluding, so subsequent tests in the same session (e.g. CLI-08 file creation) are not blocked by leftover plan mode.
+
 **Steps:**
 1. `browser_evaluate`: `tabs.get(activeTabId).ws.send('/plan\r')`
 2. `browser_wait` 3000
@@ -1897,15 +1899,19 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
    ```
    browser_evaluate: (() => { const lines = []; const buf = tabs.get(activeTabId).term.buffer.active; const start = Math.max(0, buf.length - 20); for (let i = start; i < buf.length; i++) { const line = buf.getLine(i)?.translateToString(true); if (line?.trim()) lines.push(line.trim()); } return lines; })()
    ```
+   Verify the buffer contains a plan-mode indicator (match `/plan mode (on|enabled)/i`).
+4. **Exit plan mode** (cleanup so CLI-08 isn't broken): `browser_evaluate`: `tabs.get(activeTabId).ws.send('/plan\r')` (toggles back off)
+5. `browser_wait` 3000
+6. Read terminal buffer again and verify the plan-mode indicator is GONE (no `plan mode on` line in the last 20 buffer lines).
 
 **Expected:**
-- Plan mode is toggled or plan information shown
+- Step 3 buffer contains "plan mode on" (or equivalent enabled marker).
+- Step 6 buffer no longer shows that marker — Claude is back in normal mode.
 
 **Verify:**
-- Buffer contains "plan" related output (match `/plan/i`)
+- Plan mode toggled on AND off cleanly within this test.
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
-**Notes:** `/plan` → "Enabled plan mode" confirmed in buffer. Status bar showed "plan mode on (shift+tab to cycle)".
+**Result:** ☐ PASS ☐ FAIL ☐ SKIP
 
 ---
 
