@@ -65,17 +65,18 @@ These changes affect many test steps. Read before executing.
 
 ## How to Use This Runbook
 
-**THE ONLY PASS IS A POSITIVE COMPLETE AFFIRMATION OF SUCCESS. ALL ELSE IS A FAIL.**
+**THE ONLY PASS IS A POSITIVE COMPLETE AFFIRMATION OF SUCCESS. ALL ELSE IS A FAIL. SKIP IS FORBIDDEN.**
 
 A test result of "unknown", "empty", "0", "null", "not found", "expected behavior", "will populate later", or any non-positive outcome is a **FAIL**. If the user would see something broken, blank, missing, or wrong — it is a FAIL. There are no partial passes. There is no "works but shows wrong data." There is no "expected on first load." If it doesn't show the correct value, it failed.
+
+**SKIP is not a valid outcome.** Every test in this runbook is runnable on the standard Blueprint executor (Playwright MCP for UI, curl for API, ssh + docker exec for infra, real CLI sessions for terminal flows, Hymie Firefox if a headed browser is required). If a test appears unrunnable: investigate why, file an issue, and mark the test FAIL — never SKIP. "I don't have the tool" is wrong: you do. "It's blocked by a prior failure" means fix the blocker (or fail the blocker test and the dependent ones). The only outcomes are PASS and FAIL.
 
 1. Execute tests in phase order. Phase 1 (Smoke) must fully pass before proceeding.
 2. For each test, follow the **Steps** exactly using Playwright MCP tools.
 3. After each verification step, mark the **Result** as PASS or FAIL. Nothing else.
 4. On FAIL: capture a screenshot (`browser_screenshot`), note the failure details, and file a GitHub issue per the protocol below. Continue to the next test unless the failure blocks downstream tests.
-5. On SKIP: only if physically impossible to run (e.g., blocked by prior failure). Record the reason.
-6. State reset: before each test (unless grouped), create fresh test sessions with unique names (e.g., prefixed with `test-YYYYMMDD-`). After tests complete, archive test sessions via `PUT /api/sessions/:id/config` with `{state:'archived'}`. Do NOT use `DELETE /api/sessions` (AD-004: deleteSession is permanently disabled). Tests should not depend on state from prior tests.
-7. Terminal I/O pattern (ALL terminal tests MUST use this):
+5. State reset: before each test (unless grouped), create fresh test sessions with unique names (e.g., prefixed with `test-YYYYMMDD-`). After tests complete, archive test sessions via `PUT /api/sessions/:id/config` with `{state:'archived'}`. Do NOT use `DELETE /api/sessions` (AD-004: deleteSession is permanently disabled). Tests should not depend on state from prior tests.
+6. Terminal I/O pattern (ALL terminal tests MUST use this):
    - **Send input** via WebSocket (reliable, does not need xterm focus):
      `browser_evaluate`: `tabs.get(activeTabId).ws.send('/help\r')`
    - **Read output** from terminal buffer (wait 2-3s first, then read):
@@ -92,7 +93,7 @@ A test result of "unknown", "empty", "0", "null", "not found", "expected behavio
      })()
      ```
    - Single-line buffer read: `tabs.get(activeTabId).term.buffer.active.getLine(N)?.translateToString(true)` where N is the line index.
-8. DOM checks use: `browser_evaluate` with `document.querySelector(selector).textContent` or `.innerText`.
+7. DOM checks use: `browser_evaluate` with `document.querySelector(selector).textContent` or `.innerText`.
 9. Baseline reset (browser-side, use when needed between tests):
    ```javascript
    // Create a fresh test project (if needed)
@@ -181,7 +182,7 @@ cat ~/.claude/credentials.json
 echo '<paste credentials JSON>' > ~/.claude/credentials.json
 ```
 
-Ask the user which option to use. If neither is available, skip Phase 5 CLI tests and document the skip reason.
+Ask the user which option to use. If neither is available — fix the auth path; do NOT skip Phase 5. set up auth (one of the options above) before Phase 5. Do NOT proceed without auth — Phase 5 tests will FAIL.
 
 ---
 
@@ -451,7 +452,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 - Counts are consistent
 - `browser_evaluate`: `document.getElementById('session-filter').tagName === 'SELECT'`
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 **Notes:**
 
 ---
@@ -584,7 +585,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 **Verify:**
 - Session reappears in active filter
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 **Notes:**
 
 ---
@@ -617,7 +618,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 - `browser_evaluate`: `document.querySelector('#right-panel').offsetWidth` -- should be ~320 when open, 0 when closed
 - Screenshot shows panel open with tabs (Files, Notes, Tasks, Messages)
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Panel toggles to 320px when open; closed state shows 1px (border artifact, not functional issue). Toggle works correctly.
 
 ---
@@ -644,7 +645,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 - File tree has children (directories/files listed)
 - Screenshot shows file browser
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Files tab active, #panel-files visible, file tree has 1 root child (container root /). NOTE: `#file-browser-tree a` selector in steps is wrong — tree uses ul/li elements, not anchors; navigate via `#file-browser-tree li`.
 
 ---
@@ -683,7 +684,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 - `.task-node` elements show task title and checkbox
 - API confirms task status changes
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 **Notes:**
 
 ---
@@ -716,7 +717,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 - `.visible` class toggles correctly
 - Screenshot shows settings with General tab
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Originally FAIL (issue #40). Fix applied: added `switchSettingsTab('general')` call at start of `openSettings()` in `index.html:2101`. Verified via Malory: navigate to Prompts tab, close modal, reopen — General tab now has `.active` class. Fix deployed to container via `docker cp`. rmdevpro/blueprint#40 resolved.
 
 ---
@@ -745,7 +746,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 - Background color is light when light theme active
 - Screenshot confirms visual change
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Light theme: body background = rgb(245,245,245). Dark theme restored correctly.
 
 ---
@@ -771,7 +772,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 **Verify:**
 - API returns font_size: 18 (or string "18")
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** font_size=18 saved via API confirmed. Terminal font updated visually.
 
 ---
@@ -794,7 +795,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 **Verify:**
 - API returns the selected font family
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Font family selection persisted via API. Restored to original after test.
 
 ---
@@ -818,7 +819,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 **Verify:**
 - API returns selected model value
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Model selection persists to API (default_model field). Confirmed via API response.
 
 ---
@@ -842,7 +843,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 **Verify:**
 - API returns "high"
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** thinking_level="high" saved and confirmed via API. Restored to original after test.
 
 ---
@@ -866,7 +867,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 **Verify:**
 - Elements exist and tab is visible
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Prompts tab visible, #setting-global-claude-md and #setting-project-template both present.
 
 ---
@@ -888,7 +889,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 **Verify:**
 - Elements present in DOM
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** #mcp-server-list present, 1 .mcp-server-item, #mcp-name input present.
 
 ---
@@ -919,7 +920,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 - All three fields present
 - State options include expected values
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Config dialog has #cfg-name, #cfg-state, #cfg-notes. State dropdown options: ["active","archived","hidden"]. All correct.
 
 ---
@@ -938,7 +939,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 5. `browser_screenshot`
 6. Poll for summary completion (up to 30s, check every 3s):
    `browser_evaluate`: `document.querySelector('#summary-content')?.textContent?.length > 50`
-   Repeat with `browser_wait` 3000 between polls, up to 10 attempts. If still spinner after 30s, mark as SKIP with note "summary generation timed out".
+   Repeat with `browser_wait` 3000 between polls, up to 10 attempts. If still spinner after 30s, mark as FAIL with note "summary generation timed out after 30s" and file an issue.
 7. Record summary text: `browser_evaluate`: `document.querySelector('#summary-content')?.textContent?.substring(0, 200)`
 8. Close the summary overlay: `browser_click` on the close button within the summary overlay (look for a button with X or close text inside `[id^="summary-overlay-"]`)
 9. Verify overlay removed: `browser_evaluate`: `document.querySelector('[id^="summary-overlay-"]') === null`
@@ -953,7 +954,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 - Summary text is present and meaningful (length > 50)
 - Overlay is removed after close
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Summary generated (241 chars). Spinner shown briefly then summary content appeared. Overlay closed via close button, removed from DOM.
 
 ---
@@ -979,7 +980,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 - `#jqft-tree` has children
 - Screenshot shows file picker
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** File picker opens with #jqft-tree rendered. #picker-path and #picker-name both present. NOTE: Bug #30 (no folder creation in picker) still open but picker itself works for selecting existing dirs.
 
 ---
@@ -1004,7 +1005,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 - Status bar contains ".status-item" elements
 - Text includes model name and context info
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Status bar shows 4 items: model (Sonnet), mode (bypass), context (17k/200k 8%), connection status (connected). All correct.
 
 ---
@@ -1028,7 +1029,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 **Verify:**
 - Fill class and width are present and reasonable
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** context-fill-green class present (session at 8% usage). Width=8.4% matches context bar display.
 
 ---
@@ -1078,7 +1079,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 - Response has `.results` array
 - Results have expected fields (`name`, `matchCount`, `project`, `sessionId`)
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Search returned results with session_id/sessionId/project/name/matchCount fields. NOTE: API returns duplicate snake_case + camelCase field names (both session_id and sessionId). Not a failure but worth noting.
 
 ---
@@ -1102,7 +1103,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 **Verify:**
 - Values present and API responds
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** keepalive-mode dropdown present (value="always"), idle-minutes input present (value=30). API /api/keepalive/status returned running status.
 
 ---
@@ -1130,7 +1131,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 - readyState returns to 1 for the active tab
 - API calls still work from the page
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** WS close → reconnect confirmed. readyState=1 within 3s. API fetch /api/state still returned valid data.
 
 ---
@@ -1166,7 +1167,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 - Exactly 1 active tab
 - activeTabId is set
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Exactly 1 active tab after 5 rapid clicks across 3 tabs. activeTabId set correctly.
 
 ---
@@ -1195,7 +1196,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 - scrollWidth > clientWidth for the long name element
 - Screenshot shows ellipsis
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Long name session: scrollWidth=398 > clientWidth=233. Ellipsis visible in sidebar.
 
 ---
@@ -1219,7 +1220,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 **Verify:**
 - Empty state visible, correct text
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Verified in CORE-04. #empty-state reappears after last tab closed. NOTE: `#empty-state` is removed from DOM when session opens (not just hidden); `?.offsetParent === null` check in runbook steps is wrong — use `getElementById('empty-state') === null` to detect removal.
 
 ---
@@ -1242,7 +1243,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 **Verify:**
 - All elements exist in DOM
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** All auth modal elements present: #auth-modal, #auth-link, #auth-code-input, #auth-code-submit, .modal-close.
 
 ---
@@ -1270,7 +1271,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 **Verify:**
 - Tab count increased by at most 1
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Double-click on session item opened exactly 1 tab (not 2). Tab dedup logic working.
 
 ---
@@ -1320,7 +1321,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 **Verify:**
 - Tab count increases then returns to original
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** >_ button opened raw terminal tab (tab count 0→1). Closing removed it (1→0). Tab lifecycle clean.
 
 ---
@@ -1346,7 +1347,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 **Verify:**
 - File browser content changes
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Panel switches project context correctly. Notes panel showed "Notes for A" vs "Notes for B" per project. File tree length same (both projects share container root /workspace). Used my-project and test-project-2 (created via SSH mkdir + API POST during test).
 
 ---
@@ -1374,7 +1375,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 **Verify:**
 - Screenshot shows which modal is on top; at most 1 should be interactable
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Settings modal z-index=999, auth modal z-index=1000. When both visible, auth overlaps settings (correct stacking). Only 1 modal interactable at a time.
 
 ---
@@ -1406,7 +1407,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 **Verify:**
 - Status changes and resume returns a response
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Killed tmux session via `tmux kill-session`. Tab auto-closed, activeTabId→null. Resume POST returned 410 Gone. App remained functional.
 
 ---
@@ -1445,7 +1446,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 **Verify:**
 - Session visibility changes with filter
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Hidden session: not in active filter, visible in hidden filter. Restored to active state. Filter switching works correctly.
 
 ---
@@ -1472,7 +1473,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 **Verify:**
 - Dropdown value matches what was set via API
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** API PUT /api/settings {key:'default_model', value:'claude-opus-4-6'} saved. After refresh, settings modal showed claude-opus-4-6 in dropdown. NOTE: UI verification partially blocked by #41 (Malory multi-page drift) — API confirmation used as primary verification.
 
 ---
@@ -1496,7 +1497,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 **Verify:**
 - `.collapsed` class toggles on header and session list
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** .collapsed class toggles on project header on click. Expand/collapse works. NOTE: `.session-list:first-of-type` selector in runbook steps not found in actual DOM — actual selector is `.project-sessions` or similar; header .collapsed class is the reliable check.
 
 ---
@@ -1532,7 +1533,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 - `tabs.get(activeTabId)?.ws?.readyState` returns 1 (OPEN) after reconnection
 - API returns valid data
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Same mechanism as EDGE-01. WS close with code 1001 → reconnect within 5s. readyState=1. API functional after recovery.
 
 ---
@@ -1562,7 +1563,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 - Columns after panel open < initial columns
 - Columns after panel close === initial columns (within 1 col tolerance)
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Initial cols=115. Panel open → cols=77 (decreased ✓). Panel close → cols=115 (restored ✓). xterm refit working correctly.
 
 ---
@@ -1594,7 +1595,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 - All auth modal elements present
 - Warning color applied to heading
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** All elements present. Heading "Authentication Required", color=rgb(210,153,34) (warning amber). show/hide via .visible class works. Modal hidden by default.
 
 ---
@@ -1626,7 +1627,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 - Input value matches what was typed
 - Modal hides after close
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Modal shown, auth-link has href, submit button present. Input accepted "test-auth-code-12345". .modal-close click dismissed modal. All lifecycle steps confirmed.
 
 ---
@@ -1668,7 +1669,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 **Verify:**
 - `drag-over` class toggles correctly
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** #terminal-area exists. dragover event → drag-over class applied. dragleave event → drag-over class removed. Visual feedback working.
 
 ---
@@ -1704,7 +1705,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 - Project names match expected values
 - Project B terminal unaffected after closing A
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** tabA=t_1776188134198 (my-project), tabB=t_1776188141891 (test-project-2). Distinct IDs ✓, correct project associations ✓. After closing A, tabB ws.readyState=1 (alive) ✓.
 
 ---
@@ -1741,7 +1742,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 - Status bar innerHTML contains "opus" or the configured model name
 - `browser_evaluate`: `fetch('/api/settings').then(r=>r.json()).then(d=>d.default_model)` matches what was set
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** API confirmed default_model=claude-opus-4-6 ✓, thinking_level=high ✓. Status bar showed "Thinking: high" (propagated ✓) and "Model: unknown" (expected — model is unknown until session sends first message). Settings restored to sonnet/none after test. Test session archived.
 
 ---
@@ -1771,7 +1772,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 - Buffer lines array contains at least one entry matching `/help|commands|Available/i`
 - `browser_evaluate`: `(() => { const buf = tabs.get(activeTabId).term.buffer.active; for (let i = 0; i < buf.length; i++) { const l = buf.getLine(i)?.translateToString(true) || ''; if (/help|commands|available/i.test(l)) return true; } return false; })()`
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** /help overlay appeared with Claude Code v2.1.105, slash command shortcuts, and help text. Buffer matched /help|commands|available/.
 
 ---
@@ -1796,7 +1797,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 **Verify:**
 - Buffer contains at least one line matching `/model|context|status/i`
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** /status showed: Version 2.1.105, Session ID b11210a2, cwd /data/projects/my-project, Login: Claude Max, Org: j@rmdev.pro's Organization, Model: Default Opus 4.6 with 1M context, MCP servers: 2 need auth.
 
 ---
@@ -1821,7 +1822,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 **Verify:**
 - Buffer has fewer non-empty lines than before the command, or contains "clear" confirmation text
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** /clear ran. Terminal visible area cleared (only tmux status bar line remained). xterm.js scrollback buffer count increased (old lines pushed to history) which is expected behavior — /clear clears the visible screen, not scrollback.
 
 ---
@@ -1846,7 +1847,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 **Verify:**
 - Buffer contains compaction-related output or acknowledgment (match `/compact|context|summar/i`)
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** /compact ran and showed "Conversation compacted (ctrl+o for history)" and "Compacted (ctrl+o to see full summary)". INCIDENT: container exited (code 137) during this test run — manual `docker stop` by someone on M5, not OOM (container has no memory limit, host had 224 GiB available). Restarted via `docker start ${WORKBENCH_CONTAINER}`. CLI /compact itself completed successfully before the stop.
 
 ---
@@ -1871,7 +1872,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 **Verify:**
 - Buffer contains model name (match `/claude|sonnet|opus|haiku/i`)
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** /model opened interactive model selection menu: "1. Default (recommended) — Opus 4.6 with 1M context", "2. Sonnet — Sonnet 4.6", "3. Haiku — Haiku 4.5". Model names matched.
 
 ---
@@ -1896,7 +1897,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 **Verify:**
 - Buffer contains "plan" related output (match `/plan/i`)
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** `/plan` → "Enabled plan mode" confirmed in buffer. Status bar showed "plan mode on (shift+tab to cycle)".
 
 ---
@@ -1922,7 +1923,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 **Verify:**
 - Buffer lines array contains at least one entry matching `/\b4\b/`
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Claude responded "4." and "This is a simple arithmetic question, not a coding task that requires a plan. The answer is 4." Buffer matched `/\b4\b/`.
 
 ---
@@ -1949,7 +1950,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 **Verify:**
 - File content contains "hello from runbook"
 
-**Result:** ☐ PASS ☒ FAIL ☐ SKIP
+**Result:** ☐ PASS ☒ FAIL
 **Notes:** Claude unresponsive to file creation tool calls for 10+ minutes across two sessions. ROOT CAUSE CONFIRMED: weekly rate limit at 96% (seen in CLI-11 output "You've used 96% of your weekly limit · resets 11pm UTC") — tool calls were queued/dropped, conversational responses still worked. Not a code bug. File created via SSH for downstream tests. /api/file?path=... confirmed working. NOTE: /api/file returns 400 (not 404) when file doesn't exist.
 
 ---
@@ -1974,7 +1975,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 **Verify:**
 - Buffer contains "blueprint" (the project name from package.json) -- match `/blueprint/i`
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Asked Claude to read test-runbook.txt (package.json doesn't exist in empty test dir). Claude used Read tool ("Read 1 file") and returned "hello from runbook". File reading tool call worked correctly.
 
 ---
@@ -2001,7 +2002,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 - Terminal buffer contains recognizable text, no error lines
 - WebSocket is still open: `browser_evaluate`: `tabs.get(activeTabId).ws.readyState === 1`
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Sent `! echo "test < > & done"` via bash mode. "Bash completed with no output" (echo output suppressed in Claude Code's bash runner display). No crash, no encoding errors. WS remained open (confirmed by CLI-09 working immediately after).
 
 ---
@@ -2030,7 +2031,7 @@ browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type'
 - Buffer shows the response was cut short (less than 5000 words worth of output)
 - WebSocket is still open: `browser_evaluate`: `tabs.get(activeTabId).ws.readyState === 1`
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Claude started streaming essay ("Philosophy, derived from the Greek words..."). Ctrl+C after 5s interrupted it — "Interrupted · What should Claude do instead?" prompt appeared. WS still open (readyState=1). Response was ~4 lines, far less than 5000 words. NOTE: "You've used 96% of your weekly limit · resets 11pm UTC" visible — this explains CLI-08 tool call delays (rate limiting, not a code bug).
 
 ---
@@ -2059,7 +2060,7 @@ For each test below, use the standardized terminal I/O pattern:
 | CLI-20 | `/status\r` | 3s | Buffer contains structured status info |
 | CLI-21 | Open 2 tabs, send different text to each via their respective `tabs.get(tabId).ws.send()` | 5s | Each tab's buffer contains only its own input |
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP (per test)
+**Result:** ☒ PASS ☐ FAIL (per test)
 **Notes:**
 | CLI-12 | PASS | `/model claude-sonnet-4-20250514` → "Set model to Sonnet 4" |
 | CLI-13 | PASS | `line1\nline2\r` sent — both lines appeared in buffer, Claude acknowledged both |
@@ -2129,7 +2130,7 @@ For each test below, use the standardized terminal I/O pattern:
 - 4 screenshots captured at key steps
 - All assertions pass (project load, terminal content, task text, status bar active, archived count, empty state)
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Full lifecycle confirmed: projects loaded (2) ✓, new session created (983c4d5c) ✓, terminal had content (wsReady=1) ✓, panel opened ✓, note "E2E test note" added ✓, task "Review test results" added ✓, status bar active ✓, settings modal opened ✓, light theme bg=rgb(245,245,245) ✓, dark restored ✓, session archived via API ✓, archived filter count ✓, unarchived ✓, tab closed ✓, empty state returned ✓.
 
 ---
@@ -2155,7 +2156,7 @@ For each test below, use the standardized terminal I/O pattern:
 - File API returns hello.py content
 - Terminal buffer shows coding interaction
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Claude used Write tool ("Wrote 1 lines to hello.py": `print("hello world")`). File API confirmed content. Terminal showed full interaction. NOTE: Earlier CLI-08 attempt failed due to 96% weekly rate limit on Opus 4.6. USR-01 succeeded on Sonnet 4.6 (set in CLI-12).
 
 ---
@@ -2181,7 +2182,7 @@ For each test below, use the standardized terminal I/O pattern:
 - Filter counts match expected
 - Sort order changes
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Created 3 sessions (usr02-A/B/C). Archived B, hid C, kept A active. Renamed A to "usr02-renamed". Active filter=1 ✓, Archived=1 ✓, Hidden=1 ✓, renamed name visible ✓. Cleaned up (all archived).
 
 ---
@@ -2206,7 +2207,7 @@ For each test below, use the standardized terminal I/O pattern:
 - Task list shows correct state
 - API confirms task data
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Added Task A, Task B, Task C. Completed Task B (done class). Deleted Task C. 2 tasks remain, Task B done ✓, Task A not done ✓.
 
 ---
@@ -2233,7 +2234,7 @@ For each test below, use the standardized terminal I/O pattern:
 - Screenshots show visual changes
 - Settings API reflects changes
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** 4 themes available: dark/light/blueprint-dark/blueprint-light. Light theme bg=rgb(245,245,245) ✓. Font size 18 set and confirmed. All settings restored to defaults.
 
 ---
@@ -2259,7 +2260,7 @@ For each test below, use the standardized terminal I/O pattern:
 - File content displayed correctly
 - Viewer toggle works
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** File tree uses custom div structure (not ul/li). Expanded root "/" via mount-arrow div, jQueryFileTree loaded container root. Clicked .dockerenv (0-byte file), viewer opened with filename ✓. NOTE: tree content div had display:none even after click — had to set manually; may indicate a CSS/JS timing issue with the expand animation.
 
 ---
@@ -2283,7 +2284,7 @@ For each test below, use the standardized terminal I/O pattern:
 - Summary overlay visible with text content
 - Overlay can be closed
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** Summary generated for "renamed-session" (542 chars): "This was a brief test session where the user said hi and received a greeting, then sent a test identifier string BETA_UNIQUE_TAB_B...". Overlay present, spinner gone, content meaningful. Closed via button ✓.
 
 ---
@@ -2307,7 +2308,7 @@ For each test below, use the standardized terminal I/O pattern:
 **Verify:**
 - Session visible in correct filter at each step
 
-**Result:** ☒ PASS ☐ FAIL ☐ SKIP
+**Result:** ☒ PASS ☐ FAIL
 **Notes:** "Say hello" session hidden via API. Active filter: not visible ✓. Hidden filter: visible ✓. Restored to active: visible in Active ✓. NOTE: #cfg-save button click via JS didn't persist state — state change done via API directly (same outcome, confirmed in FEAT-14 that config dialog fields are correct).
 
 ---
@@ -2887,9 +2888,6 @@ Quick pass/fail checklist for all 139 UI elements. Execute with `browser_evaluat
 | 4 | `#sidebar-header button` | Add project button | ☐ |
 | 5 | `#filter-bar` | Filter button bar | ☐ |
 | 6 | `#session-filter` | Filter dropdown (Active/All/Archived/Hidden) | ☐ |
-| 7 | — | ~~Filter buttons~~ REMOVED — replaced by dropdown | SKIP |
-| 8 | — | ~~Filter buttons~~ REMOVED | SKIP |
-| 9 | — | ~~Filter buttons~~ REMOVED | SKIP |
 | 10 | `#session-sort` | Sort dropdown | ☐ |
 | 11 | `#session-search` | Search input | ☐ |
 | 12 | `#project-list` | Project list container | ☐ |
@@ -2898,7 +2896,6 @@ Quick pass/fail checklist for all 139 UI elements. Execute with `browser_evaluat
 | 15 | `.project-header .arrow` | Collapse arrow | ☐ |
 | 16 | `.project-header .count` | Session count badge | ☐ |
 | 17 | `.project-header .new-btn` | New session + button | ☐ |
-| 18 | ~~`.project-header .term-btn:not(.new-btn)`~~ | ~~Terminal >_ button~~ REMOVED — terminal via + dropdown | ☐ SKIP |
 | 19 | `.session-list` | Session list container | ☐ |
 | 20 | `.session-item` | Session item (at least 1) | ☐ |
 | 21 | `.session-name` | Session name text | ☐ |
@@ -2956,26 +2953,20 @@ Quick pass/fail checklist for all 139 UI elements. Execute with `browser_evaluat
 | 1 | `#right-panel` | Panel container | ☐ |
 | 2 | `#panel-header` | Panel header with tabs | ☐ |
 | 3 | `[data-panel="files"]` | Files tab button | ☐ |
-| 4 | ~~`[data-panel="notes"]`~~ | ~~Notes tab button~~ REMOVED | SKIP |
 | 5 | `[data-panel="tasks"]` | Tasks tab button | ☐ |
-| 6 | ~~`[data-panel="messages"]`~~ | ~~Messages tab button~~ REMOVED | SKIP |
 | 7 | `#panel-content` | Panel content area | ☐ |
 | 8 | `#panel-files` | Files section | ☐ |
-| 9 | ~~`#panel-notes`~~ | ~~Notes section~~ REMOVED | SKIP |
 | 10 | `#panel-tasks` | Tasks section | ☐ |
-| 11 | ~~`#panel-messages`~~ | ~~Messages section~~ REMOVED | SKIP |
 | 12 | `#file-browser-tree` | File browser tree | ☐ |
 | 13 | `#file-viewer` | File viewer container | ☐ |
 | 14 | `#file-viewer-name` | File name display | ☐ |
 | 15 | `#file-viewer-content` | File content textarea | ☐ |
-| 16 | ~~`#notes-editor`~~ | ~~Notes textarea~~ REMOVED (notes in config modal) | SKIP |
 | 17 | `#task-list` | Task list container | ☐ |
 | 18 | `#add-task-input` | Add task input | ☐ |
 | 19 | `.task-item` | Task item (when tasks exist) | ☐ |
 | 20 | `.task-checkbox` | Task checkbox | ☐ |
 | 21 | `.task-text` | Task text | ☐ |
 | 22 | `.task-delete` | Task delete button | ☐ |
-| 23 | ~~`#message-list`~~ | ~~Message list~~ REMOVED | SKIP |
 | 24 | `.panel-section h3` | Section headers | ☐ |
 | 25 | `.panel-tab.active` | Active panel tab | ☐ |
 
@@ -3000,10 +2991,6 @@ Quick pass/fail checklist for all 139 UI elements. Execute with `browser_evaluat
 | 11 | `#setting-thinking` | Thinking level dropdown | ☐ |
 | 12 | `#setting-keepalive-mode` | Keepalive mode dropdown | ☐ |
 | 13 | `#setting-idle-minutes` | Idle minutes input | ☐ |
-| 14 | ~~`#setting-quorum-lead`~~ | ~~Quorum lead model~~ REMOVED | SKIP |
-| 15 | ~~`#setting-quorum-fixed`~~ | ~~Quorum fixed junior~~ REMOVED | SKIP |
-| 16 | ~~`#setting-quorum-additional`~~ | ~~Quorum additional textarea~~ REMOVED | SKIP |
-| 17 | ~~`#setting-tasks`~~ | ~~Tasks checkbox~~ REMOVED | SKIP |
 | 18 | `#mcp-server-list` | MCP server list | ☐ |
 | 19 | `#mcp-name` | MCP name input | ☐ |
 | 20 | `#mcp-command` | MCP command input | ☐ |
@@ -3033,7 +3020,6 @@ Quick pass/fail checklist for all 139 UI elements. Execute with `browser_evaluat
 | # | Selector/Check | Description | Result |
 |---|---------------|-------------|--------|
 | 1 | New session dialog (on + click) | Session creation form | ☐ |
-| 2 | ~~`#new-session-name`~~ N/A | Session name input does NOT exist; name is derived from prompt | ☐ SKIP |
 | 3 | `#new-session-prompt` | Session prompt textarea | ☐ |
 | 4 | `#new-session-submit` | Submit button | ☐ |
 | 5 | Config dialog (on rename click) | Session config overlay | ☐ |
@@ -3105,7 +3091,7 @@ Tests for all fixes applied in the canonical branch. Every test uses Playwright 
 
 **Failure Criteria:** All 3 CLI types must successfully resume. Failure for any one CLI is a test failure.
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3124,7 +3110,7 @@ Tests for all fixes applied in the canonical branch. Every test uses Playwright 
 - Codex sessions with history show messageCount > 0
 - Sidebar badges display the counts for all CLI types
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3143,7 +3129,7 @@ Tests for all fixes applied in the canonical branch. Every test uses Playwright 
 - Codex: Model shows a GPT model name (e.g., "gpt-5.4")
 - No CLI shows the wrong model (e.g., Gemini must NOT show "Sonnet")
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3168,7 +3154,7 @@ Tests for all fixes applied in the canonical branch. Every test uses Playwright 
 - Codex: "Thinking" is NOT shown
 - Claude: "Thinking" may or may not be shown (it's a Claude-only feature)
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3189,7 +3175,7 @@ Tests for all fixes applied in the canonical branch. Every test uses Playwright 
 - Gemini: Dialog says "Gemini session will be preserved"
 - Codex: Dialog says "Codex session will be preserved"
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3240,7 +3226,7 @@ After all 5 rounds:
 
 All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 401, a blank response, a crash, piled-up input, a login screen, or any inability to chat is a FAIL — not a "config issue", not a "but Blueprint worked", not "expected behavior". If you cannot chat with it and get a correct reply, the test failed.
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 **Notes:** Record which round and which CLI fails, if any.
 
 ---
@@ -3266,7 +3252,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - If CLI cannot restart: stops after 3 attempts with "Click the session in the sidebar to retry"
 - No infinite reconnect loop
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3290,7 +3276,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - Tab name and close button present on all tabs
 - Active tab has `.active` class, others do not
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3315,7 +3301,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - Sidebar session name updates to match
 - No stale name shown in either location
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3338,7 +3324,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - Active sessions have bright icon color, inactive have dimmed color
 - No CLI type shows another CLI's icon or model
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3353,7 +3339,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - Favicon link element exists in DOM
 - Favicon URL returns 200
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3367,7 +3353,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 **Expected:**
 - REFRESH_MS is 10000 (10 seconds), not 30000
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3391,7 +3377,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 
 **Failure Criteria:** If any CLI's context bar does not update after a chat message, the test fails.
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3410,7 +3396,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - Codex: Shows mode value (e.g., "bypass")
 - Mode field is present and not empty for all 3
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3429,7 +3415,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - Search results include Gemini and Codex sessions matching the query
 - CLI type indicators (G/X) visible in results
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3449,7 +3435,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - Codex returns `max_tokens: 200000`
 - Neither returns an error
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3471,7 +3457,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - No crash, no 500 error
 - Summary overlay opens and can be closed
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3486,7 +3472,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - docker-compose.yml has generic paths like `/path/to/your/data:/data`
 - Does NOT have `/mnt/workspace/blueprint:/data`
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3498,7 +3484,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 
 **Expected:** No mic button in status bar.
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3518,7 +3504,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - Codex off by default
 - Changes persist across page reload
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3535,7 +3521,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - Gemini: settings.json has blueprint MCP server
 - Codex: config.toml has blueprint MCP server
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3552,7 +3538,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - Hidden sessions not visible in Active filter
 - Hidden sessions visible in Hidden filter
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3571,7 +3557,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - Refresh button exists and is sticky (doesn't scroll away)
 - After clicking refresh, new files appear in tree
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3589,7 +3575,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - Switching to Files panel triggers automatic refresh
 - New files appear without manual action
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3610,7 +3596,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - Workspace directory created with correct permissions (not root)
 - Entrypoint seeds docs, CLAUDE.md, GEMINI.md, AGENTS.md
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3640,7 +3626,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - All filter: shows everything except hidden projects
 - Changing a project's state immediately updates the sidebar
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3662,7 +3648,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - Archived sessions only in Archived view
 - Hidden sessions only in Hidden view
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3744,7 +3730,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - Reindex completes; `claude_sessions` collection has new points (`POST /api/qdrant/status`).
 - Negative case reindex also succeeds (proves env fallback path).
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3762,7 +3748,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - Synthetic-chunk search returns clean results (no boilerplate dominating top-K).
 - Legit chunks still indexed (point count > 0; spot-check by searching for a known phrase from a real session).
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3780,7 +3766,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - All three error paths surface the actual root cause in their respective logs/responses.
 - No truncation at 100 or 200 chars; full error message visible up to 1000 chars.
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3802,7 +3788,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - Horizontal scroll appears + works when content overflows.
 - Vertical scroll continues to work.
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3820,7 +3806,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - Internal log has raw URL for operator debugging.
 - Both are bounded at 1000 chars.
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3838,7 +3824,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - Background recovery: sync starts on its own after qdrant comes back, no manual restart needed.
 - Clean shutdown: no leftover interval timer after `stop()`.
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3857,7 +3843,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - Files with mixed empty + non-empty chunks: only non-empty get indexed.
 - Files entirely empty: silent skip (return 0).
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3875,7 +3861,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - No `at most 100 requests` errors regardless of chunk count.
 - Large files complete indexing in ~N/100 round-trips with small inter-batch delays.
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3894,7 +3880,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - Filesystem paths still get normalized.
 - A successful clone creates the project as expected.
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3914,7 +3900,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 - Status bar Model field shows correct model on first response, not on second.
 - Behavior consistent across Claude / Gemini / Codex.
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3958,7 +3944,7 @@ console.log(safe.sanitizeErrorForClient('Author: alice@example.com'));
 ```
 Should print the input unchanged — author lines / non-URL `@` patterns are NOT touched.
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -3992,7 +3978,7 @@ Should print the input unchanged — author lines / non-URL `@` patterns are NOT
 
 **Failure signature (pre-fix):** Modal closes, CLI sits at `Paste code here if prompted >` indefinitely until user manually pastes via Ctrl+Shift+V + Enter in the terminal pane.
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -4038,7 +4024,7 @@ Then measure:
 - Horizontal scrollbar reachable at the bottom of the visible panel area.
 - Outer page never scrolls — body remains at scrollHeight = innerHeight.
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -4058,7 +4044,7 @@ Then measure:
 - `codex --version` prints version (no TOML parse error).
 - Multiple Blueprint restarts produce no duplicate registrations.
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -4084,7 +4070,7 @@ Then measure:
 **Watch for regression:**
 - High CPU during long Claude streams (every chunk triggers a `term.refresh()`). If observed, file follow-up to add rAF debounce.
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -4106,7 +4092,7 @@ Then measure:
 - After killing the claude process and waiting, no `<defunct>` entries appear (or any that briefly existed are reaped within 1-2s).
 - Pre-fix baseline (M5 prod 2026-04-24): `[claude] <defunct>` persisted 3+ hours.
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -4137,7 +4123,7 @@ Then measure:
 - Newly-created non-Claude sessions: file metadata may take 1 sidebar render to appear (disambiguation pre-pass writes cli_session_id, next render sees file). This was the same behavior pre-refactor.
 - Cache staleness after rename/archive: up to 2s lag before user-visible UI updates. Acceptable.
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -4172,7 +4158,7 @@ Then measure:
 - Modal lists rows ordered DESC by ts.
 - Disk: hourly cleanup deletes rows older than `LOG_RETENTION` env var (default 7 days).
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -4196,7 +4182,7 @@ Then measure:
 - Provider switch with missing key → `400`, provider remains unchanged.
 - Per-validation latency: ~50-200ms (one tiny embed call per validated PUT).
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -4217,7 +4203,7 @@ Then measure:
 - No duplicate entries in `/api/state` at any moment.
 - Sidebar shows one entry per session throughout the resolution.
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -4246,7 +4232,7 @@ Then measure:
 - Tab reconnects with the right CLI type (claude/gemini/codex matches the original session).
 - New session content reflects a fresh CLI launch (the prior conversation is gone — that's the trade-off; we recover the tab, not the in-memory state).
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 
@@ -4278,7 +4264,7 @@ Then measure:
 - Other settings (theme, font_size, OAuth toggles) all use saveSetting too — they should still save successfully (no false-positive errors).
 - Banner does not stack: opening modal again with a still-bad value should not duplicate the banner.
 
-**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+**Result:** ☐ PASS ☐ FAIL
 
 ---
 ## Troubleshooting
