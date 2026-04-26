@@ -2456,14 +2456,6 @@ Context threshold, compaction cycle, and autocompaction stress tests.
 **Action:** Save all three keys via API. Open settings modal.
 **Verify:** All three fields are pre-populated with saved values.
 
-### NF-25: Mic Button in Status Bar
-**Action:** Open a session tab (so status bar is active).
-**Verify:** Mic button (🎤) is visible in the status bar.
-
-### NF-26: Voice WebSocket Connects
-**Action:** Open a WebSocket to `ws://host/ws/voice`.
-**Verify:** Connection opens or returns a "no key" error (both prove the endpoint works).
-
 ### NF-27: Session Endpoint Info
 **Action:** `fetch('/api/sessions/test/session', {method:'POST', body:JSON.stringify({mode:'info'})})`
 **Verify:** Returns sessionId and sessionFile path.

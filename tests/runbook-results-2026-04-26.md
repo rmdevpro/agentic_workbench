@@ -1332,11 +1332,11 @@ _Phase breakdown reflects initial-run values; final totals updated after full ex
 | #197 | PROMPT-01..04 | System prompt files (CLAUDE.md, GEMINI.md, AGENTS.md) empty or missing on M5 dev |
 | #198 | REG-META-04a/b/c | blueprint_sessions config action returns saved-only response, no session metadata |
 | #199 | CLI-08 | Plan-mode side effect from CLI-06 prevents Claude file creation in next test |
-| #200 | NF-25 | Mic button missing from status bar (#mic-btn not in DOM) |
-| #201 | EDGE-23 | Multi-project terminal isolation test couldn't open second project's + dropdown via scripted automation |
+| #200 | EDGE-23 | Multi-project terminal isolation test couldn't open second project's + dropdown via scripted automation |
 | #202 | REG-FRESH-01 | Fresh-install test cannot run on shared M5 dev — needs dedicated test container |
-| #203 | REG-148-01 | Codex trust dialog appears on every new tmux session — trust not persisted between sessions |
-| #204 | REG-REFRESH-02 | File tree poll-on-focus not implemented — runbook expects it but loadFiles() short-circuits |
+| #203 | REG-REFRESH-02 | File tree poll-on-focus not implemented — runbook expects it but loadFiles() short-circuits |
+| #204 | REG-148-01 | Codex trust dialog appears on every new tmux session — trust not persisted between sessions |
+| ~~#201~~ | NF-25 | Closed — voice/mic feature was deliberately removed; correct test is REG-VOICE-01. NF-25 + NF-26 removed from runbook. |
 
 ---
 
