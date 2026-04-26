@@ -1135,12 +1135,13 @@ function registerCoreRoutes(
     if (!key) return res.status(400).json({ error: 'key required' });
 
     // #180: validate API key / provider changes synchronously before persisting,
-    // so a bad key doesn't leave the runtime silently broken.
+    // so a bad key doesn't leave the runtime silently broken. Skip validation when
+    // the user is clearing the setting (empty value) — that's a deliberate reset.
     const VALIDATED_KEYS = new Set([
       'gemini_api_key', 'codex_api_key', 'vector_embedding_provider',
       'vector_custom_url', 'vector_custom_key',
     ]);
-    if (VALIDATED_KEYS.has(key)) {
+    if (VALIDATED_KEYS.has(key) && value) {
       const qdrant = require('./qdrant-sync');
       const cfg = qdrant.buildCandidateConfig(key, value);
       const result = await qdrant.validateProviderConfig(cfg);
