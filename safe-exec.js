@@ -272,6 +272,10 @@ function findSessionsDir(projectPath) {
 // Order matters: user:pass@ runs first (more specific), then bare token@.
 // Query-string secret params get their value redacted but param name kept
 // so users can still see the structure of the failing URL.
+// NOTE: regex uses `g` flag — only used with String.replace() which resets
+// lastIndex; do NOT reuse with .test()/.exec() without resetting first.
+// `m` flag enables ^ matching start-of-line in multi-line error messages.
+// Known scope limitation: URL fragments (#access_token=...) not redacted.
 const _SECRET_QUERY_PARAMS = /(^|[?&])(api_key|token|auth|key|secret|password|access_token|refresh_token|api-key|x-api-key|apikey)=([^&\s]*)/gim;
 function sanitizeErrorForClient(msg, maxLen = 1000) {
   if (typeof msg !== 'string') return '';
