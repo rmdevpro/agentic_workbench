@@ -3880,6 +3880,13 @@ build/**</textarea>
     }
 
     async function saveSetting(key, value) {
+      // #180 (UI follow-up): every save is optimistic — _settingsCache and any
+      // bound input field are already showing the new value by the time we get
+      // here. If the server rejects, we must roll BOTH back, otherwise the UI
+      // continues to show a value the server doesn't actually have. 3-CLI RCA
+      // consensus: previous optimistic-write-then-blind-await pattern made the
+      // UI lie about persisted state on every validation failure.
+      const previousValue = _settingsCache[key];
       _settingsCache[key] = value;
       let res;
       try {
@@ -3889,12 +3896,14 @@ build/**</textarea>
           body: JSON.stringify({ key, value }),
         });
       } catch (err) {
+        _settingsCache[key] = previousValue;
         showSettingsError(`Save failed: ${err.message}`);
         return false;
       }
       if (!res.ok) {
-        // #180: backend rejects bad API keys / unreachable provider configs with
-        // 400 + an error string. Surface it to the user instead of silently failing.
+        // Backend rejects bad API keys / unreachable provider configs with
+        // 400 + an error string. Surface it to the user; roll the cache back.
+        _settingsCache[key] = previousValue;
         let errMsg = `Save failed (HTTP ${res.status})`;
         try {
           const data = await res.json();

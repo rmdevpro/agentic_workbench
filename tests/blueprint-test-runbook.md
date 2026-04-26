@@ -4220,6 +4220,39 @@ Then measure:
 
 ---
 
+### HOTFIX-180-UI: Settings UI surfaces validation errors + rolls back optimistic cache
+**Issue:** #180 follow-up — original backend validation worked, but `saveSetting` in public/index.html was fire-and-forget (no `res.ok` check, no error surface, no rollback of `_settingsCache[key]`). User typed bad key, saw nothing, assumed save succeeded.
+**Fix:** `saveSetting` now: (a) snapshots previousValue before optimistic write, (b) checks res.ok, (c) on failure rolls `_settingsCache[key]` back AND shows red dismissible banner inside Settings modal with the actual provider error string, (d) clears banner on next successful save. Network error and HTTP non-OK both handled.
+**Surface:** UI — REQUIRES Playwright (or Hymie) verification. Backend curl alone is insufficient.
+
+**Setup:** Deploy to M5 dev. Have a known-valid Gemini API key already saved (so you can confirm rollback).
+
+**Steps (Playwright):**
+1. Navigate to M5 dev workbench. Click Settings (bottom of sidebar) → Settings modal opens.
+2. Snapshot the current Gemini API Key field (it should be the masked existing key).
+3. Type a deliberately invalid value into `#setting-gemini-key` and dispatch a `change` event.
+4. Wait ~2.5s for the validation round-trip.
+5. Assert: `document.getElementById('settings-error-banner')` exists and contains "API key validation failed: ..." with the real provider error.
+6. Assert: `_settingsCache.gemini_api_key` matches the previous (valid) value, NOT the bad one typed.
+7. Confirm via `curl http://m5:7860/api/settings | jq .gemini_api_key` that the DB still has the original key.
+8. Now type the original valid value back (or any valid value) → banner disappears, save succeeds.
+9. Click the X on the banner → banner dismisses without affecting state.
+
+**Expected:**
+- Bad value → red banner with provider error visible at top of Settings modal.
+- `_settingsCache` rolled back to previous value (no UI lying about persisted state).
+- DB unchanged (backend already prevents that, but verify).
+- Successful save clears the banner automatically.
+- Network error (e.g., container restart mid-PUT) shows "Save failed: <network error>" and also rolls back.
+
+**Watch for regressions:**
+- Other settings (theme, font_size, OAuth toggles) all use saveSetting too — they should still save successfully (no false-positive errors).
+- Banner does not stack: opening modal again with a still-bad value should not duplicate the banner.
+
+**Result:** ☐ PASS ☐ FAIL ☐ SKIP
+
+---
+
 ## Troubleshooting
 
 | Symptom | Likely Cause | Action |
