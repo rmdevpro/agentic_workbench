@@ -4,7 +4,7 @@
 
 **When to use this guide:** When the feature is small enough to design, implement, and verify in a single cycle. For features requiring multiple phases or cross-cutting architectural changes, break them into multiple small features and run each through this cycle.
 
-**Applies to:** All CLI agents (Claude, Gemini, Codex) working in any Blueprint workspace.
+**Applies to:** All CLI agents (Claude, Gemini, Codex) working in any Workbench workspace.
 
 ***
 
@@ -115,7 +115,7 @@ Session names must include the GitHub issue number to avoid collisions.
 Pattern: `[cli]-[issue#]-[step]` e.g. `claude-42-design`, `gemini-42-design`, `codex-42-design`.
 
 ```bash
-# Via Blueprint MCP tools (preferred):
+# Via Workbench MCP tools (preferred):
 blueprint_sessions action:new cli:claude project:<project> prompt:"Design review for #42"
 blueprint_sessions action:new cli:gemini project:<project> prompt:"Design review for #42"
 blueprint_sessions action:new cli:codex  project:<project> prompt:"Design review for #42"

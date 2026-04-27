@@ -29,13 +29,13 @@
 
 ### SMOKE-01: Page Load and Empty State
 **Result:** PASS  
-**Notes:** Title="Blueprint", sidebar present, #empty-state visible with text "Select a session or create a new one / Pick a project from the sidebar to get started", settings modal hidden, status bar inactive, API returns 8 projects.
+**Notes:** Title="Workbench", sidebar present, #empty-state visible with text "Select a session or create a new one / Pick a project from the sidebar to get started", settings modal hidden, status bar inactive, API returns 8 projects.
 
 ---
 
 ### SMOKE-02: Sidebar Projects Render
 **Result:** PASS  
-**Notes:** 8 .project-group elements match API project count (8). First project "Blueprint" with 11 sessions. Filter dropdown defaults to "active". 21 session items visible.
+**Notes:** 8 .project-group elements match API project count (8). First project "Workbench" with 11 sessions. Filter dropdown defaults to "active". 21 session items visible.
 
 ---
 
@@ -49,7 +49,7 @@
 
 ### CORE-01: Create Session
 **Result:** PASS  
-**Notes:** Clicked + on Blueprint project, dropdown appeared (C Claude, G Gemini, X Codex, Terminal), selected Claude. Dialog appeared with prompt textarea. Typed "Say hello", clicked "Start Session". Tab created with name "Say hello", #empty-state removed from DOM.
+**Notes:** Clicked + on Workbench project, dropdown appeared (C Claude, G Gemini, X Codex, Terminal), selected Claude. Dialog appeared with prompt textarea. Typed "Say hello", clicked "Start Session". Tab created with name "Say hello", #empty-state removed from DOM.
 
 ---
 
@@ -229,7 +229,7 @@
 
 ### FEAT-20: Search API (Global Search)
 **Result:** PASS  
-**Notes:** `/api/search?q=test` returned `{results: [...]}` with 20 results. Sample: `{name:"hugging face deploy", matchCount:756, project:"Blueprint"}`. All required fields present.
+**Notes:** `/api/search?q=test` returned `{results: [...]}` with 20 results. Sample: `{name:"hugging face deploy", matchCount:756, project:"Workbench"}`. All required fields present.
 
 ---
 
@@ -255,7 +255,7 @@
 
 ### EDGE-03: Long Session Name
 **Result:** PASS  
-**Notes:** Session with 91-char name created. scrollWidth=351 > clientWidth=233 — ellipsis confirmed. NOTE: Blueprint project must be expanded (was collapsed) to get non-zero dimensions.
+**Notes:** Session with 91-char name created. scrollWidth=351 > clientWidth=233 — ellipsis confirmed. NOTE: Workbench project must be expanded (was collapsed) to get non-zero dimensions.
 
 ---
 
@@ -491,25 +491,25 @@
 
 ### NF-02: Sidebar Expand Persistence
 **Result:** PASS  
-**Notes:** Expanded muybridge (click added it back to `expandedProjects`). After reload, still expanded. localStorage = `["Blueprint","muybridge"]`.
+**Notes:** Expanded muybridge (click added it back to `expandedProjects`). After reload, still expanded. localStorage = `["Workbench","muybridge"]`.
 
 ---
 
 ### NF-03: Sidebar localStorage Written
 **Result:** PASS  
-**Notes:** `localStorage.getItem('expandedProjects')` updated on every collapse/expand toggle. Initially `["Blueprint"]`, after expand muybridge = `["Blueprint","muybridge"]`.
+**Notes:** `localStorage.getItem('expandedProjects')` updated on every collapse/expand toggle. Initially `["Workbench"]`, after expand muybridge = `["Workbench","muybridge"]`.
 
 ---
 
 ### NF-04: Project Config Modal Opens
 **Result:** PASS  
-**Notes:** Clicked `.proj-config-btn` (pencil icon) on Blueprint. Modal `#proj-config-{id}` opened. `#proj-cfg-name` (value="Blueprint"), `#proj-cfg-state` (value="active"), `#proj-cfg-notes` (textarea) all present and populated.
+**Notes:** Clicked `.proj-config-btn` (pencil icon) on Workbench. Modal `#proj-config-{id}` opened. `#proj-cfg-name` (value="Workbench"), `#proj-cfg-state` (value="active"), `#proj-cfg-notes` (textarea) all present and populated.
 
 ---
 
 ### NF-05: Project Config Save Name
 **Result:** PASS  
-**Notes:** Changed name to "Blueprint-cfg-test", saved. `/api/state` confirmed `projects[0].name = "Blueprint-cfg-test"`. Modal closed. Restored to "Blueprint".
+**Notes:** Changed name to "Workbench-cfg-test", saved. `/api/state` confirmed `projects[0].name = "Workbench-cfg-test"`. Modal closed. Restored to "Workbench".
 
 ---
 
@@ -521,7 +521,7 @@
 
 ### NF-07: Project Config Save Notes
 **Result:** PASS  
-**Notes:** Saved "Gate C test notes - NF-07" to Blueprint notes. Reopened modal — notes still present. API confirmed.
+**Notes:** Saved "Gate C test notes - NF-07" to Workbench notes. Reopened modal — notes still present. API confirmed.
 
 ---
 
@@ -807,7 +807,7 @@
 
 ### NF-60: Connect to Session by Name
 **Result:** PASS  
-**Notes:** `action:'connect', query:'NF-56 test session'` → `{result: {session_id: "e3d55c51...", name: "NF-56 test session", project: "Blueprint", cli: "claude", tmux: "bp_e3d55c51-f6b"}}`.
+**Notes:** `action:'connect', query:'NF-56 test session'` → `{result: {session_id: "e3d55c51...", name: "NF-56 test session", project: "Workbench", cli: "claude", tmux: "bp_e3d55c51-f6b"}}`.
 
 ---
 
@@ -831,19 +831,19 @@
 
 ### NF-64: MCP Enable for Project
 **Result:** PASS  
-**Notes:** `action:'mcp_enable', mcp_name:'test-mcp', project:'Blueprint'` → `{result: {enabled: "test-mcp", project: "Blueprint"}}`.
+**Notes:** `action:'mcp_enable', mcp_name:'test-mcp', project:'Workbench'` → `{result: {enabled: "test-mcp", project: "Workbench"}}`.
 
 ---
 
 ### NF-65: MCP List Enabled
 **Result:** PASS  
-**Notes:** `action:'mcp_list_enabled', project:'Blueprint'` → servers array containing test-mcp with full config.
+**Notes:** `action:'mcp_list_enabled', project:'Workbench'` → servers array containing test-mcp with full config.
 
 ---
 
 ### NF-66: MCP Disable
 **Result:** PASS  
-**Notes:** `action:'mcp_disable', mcp_name:'test-mcp', project:'Blueprint'` → `{result: {disabled: "test-mcp", project: "Blueprint"}}`.
+**Notes:** `action:'mcp_disable', mcp_name:'test-mcp', project:'Workbench'` → `{result: {disabled: "test-mcp", project: "Workbench"}}`.
 
 ---
 

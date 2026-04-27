@@ -216,7 +216,7 @@ Checked `#status-bar` element when both Gemini and Codex tabs were active:
 - Gemini: `"Model: 3-flash-preview | Mode: bypass | Context: 0 / 1000k | 0% | connected"` — no "bypass permissions", no "shift+tab", no "thinking"
 - Codex: `"Model: gpt-5.4 | Mode: bypass | Context: 0 / 200k | 0% | connected"` — same, no Claude-specific text
 
-The previous failure was reading text from inside the terminal pane (the CLI's own tmux status line). Blueprint's `#status-bar` element shows only Model/Mode/Context for non-Claude sessions. No Claude-specific text present.
+The previous failure was reading text from inside the terminal pane (the CLI's own tmux status line). Workbench's `#status-bar` element shows only Model/Mode/Context for non-Claude sessions. No Claude-specific text present.
 
 ---
 

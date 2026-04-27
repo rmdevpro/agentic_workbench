@@ -2,7 +2,7 @@
 
 **Purpose:** Standard process for identifying, investigating, fixing, and verifying bugs. This is the required workflow — not optional, not approximate.
 
-**Applies to:** All CLI agents (Claude, Gemini, Codex) working in any Blueprint workspace.
+**Applies to:** All CLI agents (Claude, Gemini, Codex) working in any Workbench workspace.
 
 ***
 
@@ -125,7 +125,7 @@ Pattern: `[cli]-[issue#]-[step]` e.g. `claude-123-rca`, `gemini-123-rca`, `codex
 
 ```bash
 # Create sessions for all 3 CLIs
-# Via Blueprint MCP tools (preferred):
+# Via Workbench MCP tools (preferred):
 blueprint_sessions action:new cli:claude project:<project> prompt:"RCA for issue #123"
 blueprint_sessions action:new cli:gemini project:<project> prompt:"RCA for issue #123"
 blueprint_sessions action:new cli:codex  project:<project> prompt:"RCA for issue #123"

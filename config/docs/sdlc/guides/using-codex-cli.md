@@ -1,10 +1,10 @@
 # Using the Codex CLI
 
-Codex CLI (OpenAI) is available in the Blueprint container for code reviews, debugging, and second opinions.
+Codex CLI (OpenAI) is available in the Workbench container for code reviews, debugging, and second opinions.
 
 ## Setup
 
-Configure your API key in Blueprint Settings > API Keys (OpenAI / Codex API Key). The key is exported as `OPENAI_API_KEY` at container startup.
+Configure your API key in Workbench Settings > API Keys (OpenAI / Codex API Key). The key is exported as `OPENAI_API_KEY` at container startup.
 
 ## Recommended: Tmux Sessions
 

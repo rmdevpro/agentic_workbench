@@ -1,13 +1,13 @@
-# Blueprint UI Test Runbook — Execution Guide
+# Workbench UI Test Runbook — Execution Guide
 
-This guide is for the **orchestrator** who runs the master UI test runbook (`tests/blueprint-test-runbook.md`) against a Blueprint deployment. It covers spawning an executor, briefing it, monitoring it, recovering from common failure modes, and triaging the results.
+This guide is for the **orchestrator** who runs the master UI test runbook (`tests/blueprint-test-runbook.md`) against a Workbench deployment. It covers spawning an executor, briefing it, monitoring it, recovering from common failure modes, and triaging the results.
 
 The runbook itself is a test catalog — what to test. This guide is the procedure — how to drive it to completion.
 
 ## Roles
 
 - **Orchestrator** — you. Decides target, spawns the executor, monitors, intervenes, triages results, files issues, applies fixes.
-- **Executor** — a separate Claude session (typically Sonnet 4.6 in a tmux pane within Blueprint). Reads the runbook, runs each test using its tools, writes results to a separate file. Has no decision-making authority over what to skip.
+- **Executor** — a separate Claude session (typically Sonnet 4.6 in a tmux pane within Workbench). Reads the runbook, runs each test using its tools, writes results to a separate file. Has no decision-making authority over what to skip.
 
 Two distinct conversations. Don't conflate them. Never use a subagent (`Agent` tool) — the executor must be a real session with full Playwright + Bash + filesystem access.
 
@@ -27,10 +27,10 @@ Pick orchestrator-directed SKIPs in advance. The executor is forbidden from choo
 
 ## Phase 2 — Spawn the executor
 
-Create a new Claude session inside the Blueprint deployment. The executor session gets the same tools any Blueprint Claude session has: Playwright MCP, Bash, filesystem access. It runs in a tmux pane on the same host as Blueprint.
+Create a new Claude session inside the Workbench deployment. The executor session gets the same tools any Workbench Claude session has: Playwright MCP, Bash, filesystem access. It runs in a tmux pane on the same host as Workbench.
 
 ```bash
-# From an orchestrator shell with curl access to the Blueprint API
+# From an orchestrator shell with curl access to the Workbench API
 PROMPT_JSON=$(python3 -c "import json; print(json.dumps({
   'project': '<a-project-name>',
   'cli_type': 'claude',
@@ -189,5 +189,5 @@ These are recurring failure modes from past runs. State them explicitly in every
 - **Inline-poll only.** Background notifications drift; sync polling forces engagement. The orchestrator's own session must stay alive and attentive throughout
 - **Watch for context saturation early.** By the time the executor hits the auto-compact line, you're already in recovery mode. Catch the climbing token count and `/clear` proactively if the run is long
 - **File issues sequentially.** Parallel `gh issue create` calls race
-- **Don't conflate the executor's machine with the test target.** The executor runs in a tmux pane on Blueprint's host; the test target may be a different deployment reached over HTTP/ssh. Routing your `tmux capture-pane` through `ssh` when the executor is local (or vice versa) wastes time and confuses the picture
+- **Don't conflate the executor's machine with the test target.** The executor runs in a tmux pane on Workbench's host; the test target may be a different deployment reached over HTTP/ssh. Routing your `tmux capture-pane` through `ssh` when the executor is local (or vice versa) wastes time and confuses the picture
 - **The runbook is the regression suite, not a one-shot checklist.** Every fix lands a permanent REG-* test, not a HOTFIX-* entry that becomes dead weight

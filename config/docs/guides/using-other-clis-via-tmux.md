@@ -1,6 +1,6 @@
 # Using Other CLIs via Tmux
 
-Blueprint containers include multiple AI CLIs: Claude, Gemini, and Codex. This guide covers how to interact with them from within a Claude session.
+Workbench containers include multiple AI CLIs: Claude, Gemini, and Codex. This guide covers how to interact with them from within a Claude session.
 
 ## Why Tmux
 
@@ -91,7 +91,7 @@ Interactive CLIs have startup prompts that MUST be handled before any real promp
 
 ## Important: Hide Sub-Sessions
 
-When you launch a Claude sub-session via tmux, it will appear in Blueprint's session list in the left sidebar automatically. After launching, update the sub-session to hidden status so it does not clutter the user's session list:
+When you launch a Claude sub-session via tmux, it will appear in Workbench's session list in the left sidebar automatically. After launching, update the sub-session to hidden status so it does not clutter the user's session list:
 
 ```
 Use blueprint_set_session_config with session_id="<sub-session-id>" and state="hidden"
@@ -99,7 +99,7 @@ Use blueprint_set_session_config with session_id="<sub-session-id>" and state="h
 
 ## Gemini
 
-Requires `GEMINI_API_KEY` (Blueprint sets this from Settings > API Keys; Gemini CLI also accepts `GOOGLE_API_KEY` for backwards compat).
+Requires `GEMINI_API_KEY` (Workbench sets this from Settings > API Keys; Gemini CLI also accepts `GOOGLE_API_KEY` for backwards compat).
 
 ```bash
 tmux new-session -d -s gemini -x 200 -y 50
@@ -118,7 +118,7 @@ gemini --approval-mode auto_edit  # auto-approve edits
 
 ## Codex
 
-Requires `OPENAI_API_KEY` — set it in Blueprint Settings > API Keys.
+Requires `OPENAI_API_KEY` — set it in Workbench Settings > API Keys.
 
 ```bash
 tmux new-session -d -s codex -x 200 -y 50

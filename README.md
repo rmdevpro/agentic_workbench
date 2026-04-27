@@ -1,5 +1,5 @@
 ---
-title: Blueprint
+title: Agentic Workbench
 emoji: 🔧
 colorFrom: blue
 colorTo: purple
@@ -8,7 +8,7 @@ app_port: 7860
 fullWidth: true
 ---
 
-# Blueprint
+# Agentic Workbench
 
 Web-based CLI workbench for AI coding agents. Manage Claude Code sessions, projects, and tasks from your browser.
 
@@ -21,7 +21,7 @@ Web-based CLI workbench for AI coding agents. Manage Claude Code sessions, proje
 
 ## Security
 
-Blueprint auto-detects whether it's running on a public or private HF Space:
+Workbench auto-detects whether it's running on a public or private HF Space:
 
 - **Public Space** — all access is blocked with a landing page. No credentials can be entered or stored.
 - **Private Space** — full access. Optionally set `BLUEPRINT_USER` and `BLUEPRINT_PASS` as Space Secrets to add password protection.
@@ -29,7 +29,7 @@ Blueprint auto-detects whether it's running on a public or private HF Space:
 
 ## Persistent Storage
 
-Blueprint stores all data (database, sessions, workspace) under `/data`. To persist data across Space rebuilds, enable persistent storage in your Space settings. Without it, all data is lost on every rebuild.
+Workbench stores all data (database, sessions, workspace) under `/data`. To persist data across Space rebuilds, enable persistent storage in your Space settings. Without it, all data is lost on every rebuild.
 
 ## Notes
 
@@ -131,7 +131,7 @@ All API endpoints validate inputs:
 
 ## MCP Server Registration
 
-On startup, `watchers.js` registers a Blueprint MCP server in Claude's `settings.json`. Registration checks both presence and correctness of the `args` path — if the server has moved, the registration is updated. The MCP server (`mcp-server.js`) runs as a standalone subprocess spawned by Claude, providing tools via JSON-RPC over stdio.
+On startup, `watchers.js` registers a Workbench MCP server in Claude's `settings.json`. Registration checks both presence and correctness of the `args` path — if the server has moved, the registration is updated. The MCP server (`mcp-server.js`) runs as a standalone subprocess spawned by Claude, providing tools via JSON-RPC over stdio.
 
 ## Health Endpoint
 
@@ -145,7 +145,7 @@ Auth status is informational only — it does not affect the overall healthy/deg
 
 ## Filesystem Access
 
-Blueprint is a single-user, Docker-containerized IDE. Per AD-001, it intentionally provides full filesystem access to the user through `/api/browse`, `/api/file`, and the jqueryfiletree connector. No path containment checks are applied to these endpoints to support external file mounts (NFS, bind mounts) that may reside outside the workspace directory.
+Workbench is a single-user, Docker-containerized IDE. Per AD-001, it intentionally provides full filesystem access to the user through `/api/browse`, `/api/file`, and the jqueryfiletree connector. No path containment checks are applied to these endpoints to support external file mounts (NFS, bind mounts) that may reside outside the workspace directory.
 
 Plan file operations (`blueprint_read_plan`, `blueprint_update_plan`) do enforce path containment within `BLUEPRINT_DATA/plans` using symlink-aware async validation, as these are internal data structures.
 

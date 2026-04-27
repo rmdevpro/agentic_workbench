@@ -1,6 +1,6 @@
-# Blueprint Production Upgrade Guide
+# Workbench Production Upgrade Guide
 
-Standard procedure for upgrading a Blueprint production instance. Follow every step in order.
+Standard procedure for upgrading a Workbench production instance. Follow every step in order.
 
 ---
 

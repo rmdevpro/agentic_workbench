@@ -1,10 +1,10 @@
-# Blueprint Test Plan (Backend — Gates A & B)
+# Workbench Test Plan (Backend — Gates A & B)
 
 **Status:** Active — Updated 2026-04-18
 **Original Date:** 2026-04-10
 **Revision:** 7.0 (updated for feature changes: removed quorum, openai-compat, smart compaction, messages, notes endpoints, plan tools; added multi-CLI, Qdrant vector search, MCP management, session lifecycle)
 **Standard:** WPR-103 (State 4 Test Plan Work Product Standard)
-**Application:** Blueprint -- Agentic Workbench managing Claude/Gemini/Codex CLI sessions in tmux/Docker
+**Application:** Workbench -- Agentic Workbench managing Claude/Gemini/Codex CLI sessions in tmux/Docker
 **Engineering Requirements:** ERQ-001
 **Synthesized from:** Independent plans by Claude, Gemini, Grok, GPT
 
@@ -47,7 +47,7 @@
 
 ## 0. Executive Summary
 
-Blueprint is a UI-first agentic workbench that manages Claude, Gemini, and Codex CLI sessions through tmux, WebSockets, SQLite persistence, file watchers, MCP tooling (3 consolidated tools), Qdrant vector search, keepalive token management, health monitoring, and project-scoped MCP server management.
+Workbench is a UI-first agentic workbench that manages Claude, Gemini, and Codex CLI sessions through tmux, WebSockets, SQLite persistence, file watchers, MCP tooling (3 consolidated tools), Qdrant vector search, keepalive token management, health monitoring, and project-scoped MCP server management.
 
 This test plan is built to satisfy WPR-103 and explicitly addresses the systemic failures documented in the review findings -- a prior 785-test suite with 98.3% pass rate that caught zero of 38 filed bugs. The root causes were: tests reimplementing application logic locally instead of importing real code, browser tests verifying DOM presence instead of behavior, multi-stage pipelines never exercised end-to-end, and silent error swallowing in 22 bare `catch {}` blocks.
 
@@ -67,7 +67,7 @@ This plan enforces:
 - Regression validation: intentionally broken code must cause test failures (Guidepost #12)
 - Test data from shared fixtures, not hardcoded inline (Guidepost #13)
 
-Because Blueprint is a UI-first system, **browser tests are the primary acceptance gate**, supported by mock/unit tests and live integration tests.
+Because Workbench is a UI-first system, **browser tests are the primary acceptance gate**, supported by mock/unit tests and live integration tests.
 
 Coverage completeness is verified by structural coverage tooling (`c8`) per WPR-103 §2.6, which measures line and branch coverage across the mock test suite. This replaces the former manual capability audit process.
 
@@ -193,7 +193,7 @@ Per WPR-103 §2, the test plan defines a two-layer strategy. Each layer has sub-
 
 **Framework:** Custom Node.js test harness for API tests, Playwright for browser tests.
 
-**"Deployed" means:** Blueprint running inside its Docker container (`docker-compose.test.yml`), with:
+**"Deployed" means:** Workbench running inside its Docker container (`docker-compose.test.yml`), with:
 - Real SQLite database (fresh per gating run)
 - Real filesystem (workspace volume)
 - Real tmux sessions
@@ -346,8 +346,8 @@ For every gating run:
 
 The MCP stdio server (`mcp-server.js`) communicates via stdin/stdout, not HTTP. Tests are structured as follows:
 
-- **Mock tests:** Import `mcp-server.js` functions directly, mock the HTTP fetch calls to Blueprint's internal API
-- **Live tests:** Spawn `mcp-server.js` as a child process via `child_process.spawn` inside the test container using `docker exec`. Write JSON-RPC messages to stdin, read responses from stdout. The stdio server calls Blueprint's HTTP API internally, so the live Blueprint container must be running
+- **Mock tests:** Import `mcp-server.js` functions directly, mock the HTTP fetch calls to Workbench's internal API
+- **Live tests:** Spawn `mcp-server.js` as a child process via `child_process.spawn` inside the test container using `docker exec`. Write JSON-RPC messages to stdin, read responses from stdout. The stdio server calls Workbench's HTTP API internally, so the live Workbench container must be running
 
 ### 3.7 prime-test-session.js Self-Test
 
@@ -896,7 +896,7 @@ This is the highest-risk subsystem. It requires both granular stage tests and fu
 |----|-----------|-------|--------|
 | MCS-01 | JSON-RPC `initialize` returns protocol version | Mock + Live | NONE |
 | MCS-02 | `tools/list` returns all 3 tools (blueprint_files, blueprint_sessions, blueprint_tasks) | Mock | NONE |
-| MCS-03 | `tools/call` delegates to Blueprint HTTP API | Live | NONE |
+| MCS-03 | `tools/call` delegates to Workbench HTTP API | Live | NONE |
 | MCS-04a | `blueprint_files action=list` | Live | PASS |
 | MCS-04b | `blueprint_files action=read` | Live | PASS |
 | MCS-04c | `blueprint_files action=grep` | Live | PASS |
@@ -1005,7 +1005,7 @@ Previously in this section:
 | ENT-03 | Data directory creation | Live | NONE |
 | ENT-04 | CLAUDE_HOME symlink setup | Live | NONE |
 | ENT-05 | Settings.json creation with defaults | Live | NONE |
-| ENT-06 | MCP server registration (Blueprint + Playwright) | Live | NONE |
+| ENT-06 | MCP server registration (Workbench + Playwright) | Live | NONE |
 | ENT-07 | Skill installation from config/skills | Live | NONE |
 | ENT-08 | Credential verification | Live | NONE |
 | ENT-09 | Onboarding flags set | Live | NONE |
@@ -1520,8 +1520,8 @@ These tests verify that the threshold if-else-if chain does not trigger actions 
 | OAI-02 | Non-streaming completion | 200 with choices | Live |
 | OAI-03 | Streaming completion | SSE events + `[DONE]` | Live |
 | OAI-04 | `bp:session-id` model | Routed to session | Live |
-| OAI-05 | `X-Blueprint-Session` header | Routed to session | Live |
-| OAI-06 | `X-Blueprint-Project` header | Uses project | Live |
+| OAI-05 | `X-Workbench-Session` header | Routed to session | Live |
+| OAI-06 | `X-Workbench-Project` header | Uses project | Live |
 | OAI-07 | Prompt > 100KB | 400 | Mock |
 | OAI-08 | Invalid model name | Error/default | Mock |
 | OAI-09 | Empty/no-user messages | 400 | Live |
@@ -1669,7 +1669,7 @@ See §3.6 for methodology. Mock tests import functions; live tests use `child_pr
 | ENT-03 | Fresh container | Dirs created | Live | `ls -la` |
 | ENT-04 | Fresh container | `$CLAUDE_HOME` points to symlinked location | Live | `readlink $CLAUDE_HOME` or `ls -la` shows symlink |
 | ENT-05 | No prior settings | `settings.json` defaults | Live | Read + verify |
-| ENT-06 | Fresh container | Blueprint and Playwright MCP servers registered in `settings.json` `mcpServers` | Live | Read `settings.json`, verify both server entries with correct command/args |
+| ENT-06 | Fresh container | Workbench and Playwright MCP servers registered in `settings.json` `mcpServers` | Live | Read `settings.json`, verify both server entries with correct command/args |
 | ENT-07 | `config/skills` directory contains skill files | Skills installed into `$CLAUDE_HOME` | Live | Verify skill files exist in expected location after startup |
 | ENT-08 | Fresh container with credentials mounted | Credential file exists and is valid | Live | `docker exec` reads credential file, verifies JSON structure |
 | ENT-09 | Fresh container | Onboarding flags set | Live | Read `.claude.json` |
@@ -2030,7 +2030,7 @@ Body: scenario, expected, actual, evidence, hypothesis, reproduction steps
 
 ### 12.1 UI-First Gate Criteria
 
-Blueprint is UI-first. The gate **must not pass** on backend tests alone. Gate C (Browser Acceptance) is **authoritative for release readiness**.
+Workbench is UI-first. The gate **must not pass** on backend tests alone. Gate C (Browser Acceptance) is **authoritative for release readiness**.
 
 ### 12.2 Multi-Model UI Audit
 
@@ -2221,7 +2221,7 @@ Every error handling path in the application code (catch blocks, error callbacks
 | Playwright MCP server (`@playwright/mcp@latest`) | Third-party MCP server; registration is tested (ENT-06) but internal behavior is out of scope |
 | `shared-state.js` standalone | Leaf module managing WS client maps and browser count. Covered implicitly by WS-07, WS-11, KA-08 which exercise its API through the modules that consume it. No standalone scenarios required |
 | Prometheus/metrics endpoint | Application does not expose a `/metrics` endpoint. Application-level performance is measured via log parsing (§7.1.3) |
-| Route authentication (bearer tokens, API keys) | Blueprint is a single-user local workbench; HTTP routes do not enforce bearer token authentication. Auth state is managed via CLI credentials and the keepalive system (§4.1.11). No API key or session token is required for HTTP route access |
+| Route authentication (bearer tokens, API keys) | Workbench is a single-user local workbench; HTTP routes do not enforce bearer token authentication. Auth state is managed via CLI credentials and the keepalive system (§4.1.11). No API key or session token is required for HTTP route access |
 
 **Implementation note — `lockedAppend` (RTE-01):** Review of the application code reveals that `lockedAppend` is defined in `routes.js` but may not be called on all write paths (some paths use raw `appendFile`). The test author must verify during implementation that `lockedAppend` is actually invoked on the path under test. If the application code contains an unused `lockedAppend` with an unprotected `appendFile` call on the same path, this is an application bug — file it as a GitHub Issue and fix the application code before the concurrency test can pass. This does not block test plan acceptance.
 
@@ -2967,7 +2967,7 @@ Numbered from most foundational to most complex. Dependencies noted.
 | **Gate B: Live Integration** | All live test files in `tests/live/` | All tests pass, zero skips | Promotion to production |
 | **Gate C: Browser Acceptance** | All browser test files in `tests/browser/` | All tests pass, zero skips, no visual PROBLEM findings (§3.12), browser console clean | Promotion to production |
 
-Gate A must pass before Gate B and C are attempted. Gate B and Gate C run against the same deployed test container. All three gates must pass before promotion. **Gate C is authoritative for release readiness** because Blueprint is UI-first.
+Gate A must pass before Gate B and C are attempted. Gate B and Gate C run against the same deployed test container. All three gates must pass before promotion. **Gate C is authoritative for release readiness** because Workbench is UI-first.
 
 ### 18.2 Non-Blocking Suites
 
@@ -2986,7 +2986,7 @@ Gate A must pass before Gate B and C are attempted. Gate B and Gate C run agains
 
 ### 19.1 Smart Compaction Pipeline
 
-- **Why high risk:** Most stateful subsystem in Blueprint. Multi-stage pipeline (PREP → COMPACT → RECOVERY) with an 8-element checklist, lock management, threshold state maps, timer scheduling, non-deterministic checker output, and file lifecycle (tail files, plan copies). A bug here can silently corrupt a user's session context or leave compaction stuck indefinitely.
+- **Why high risk:** Most stateful subsystem in Workbench. Multi-stage pipeline (PREP → COMPACT → RECOVERY) with an 8-element checklist, lock management, threshold state maps, timer scheduling, non-deterministic checker output, and file lifecycle (tail files, plan copies). A bug here can silently corrupt a user's session context or leave compaction stuck indefinitely.
 - **Test scenarios:** CMP-01 through CMP-50 (51 scenarios including CMP-03a), CST-01 through CST-10 (10 scenarios). 61 total — the largest single-component allocation.
 - **Additional verification:** 3 full fill→compact→verify cycles (CST-06). Stage-by-stage gray-box verification of all 8 checklist elements (§5.10.1). Lock leak detection (CST-07). Nudge flag reset verification (CST-08). Cold recall quality evaluation via LLM judge (CST-09). Below-threshold boundary tests (CMP-47..50). Stateful mock sequences for `capturePaneAsync` to exercise the state machine (CMP-42). User-visible compaction workflow in browser (BRW-31).
 
@@ -3016,7 +3016,7 @@ Gate A must pass before Gate B and C are attempted. Gate B and Gate C run agains
 
 ### 19.6 MCP and OpenAI Integration Contracts
 
-- **Why high risk:** External integration surfaces. MCP tools are the programmatic API for Claude sessions inside Blueprint. OpenAI-compat routes are the API for external clients. Contract violations break all downstream consumers silently.
+- **Why high risk:** External integration surfaces. MCP tools are the programmatic API for Claude sessions inside Workbench. OpenAI-compat routes are the API for external clients. Contract violations break all downstream consumers silently.
 - **Test scenarios:** MCP-01 through MCP-10 + MCP-06a..q (27 scenarios), MCX-01 through MCX-11 (11 scenarios), MCS-01 through MCS-07 + MCS-04a..n (21 scenarios), OAI-01 through OAI-11 (11 scenarios). 70 total.
 - **Additional verification:** Per-tool decomposition (MCP-06a..q, MCS-04a..n) ensures no tool is tested only as part of a list. Side-effect verification via count-before/count-after (§8.3). Stdio server tested via child process spawn (§3.6).
 

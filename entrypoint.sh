@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Blueprint entrypoint — runs as non-root blueprint user (UID 1000)
+# Workbench entrypoint — runs as non-root blueprint user (UID 1000)
 # All persistent data lives under /data (mounted volume)
 
 CLAUDE="/data/.claude"
@@ -57,14 +57,14 @@ if [ ! -f "$CLAUDE/settings.json" ]; then
   echo "[entrypoint] Created settings.json"
 fi
 
-# Register Blueprint MCP server globally
+# Register Workbench MCP server globally
 claude mcp add-json --scope user blueprint '{"command":"node","args":["/app/mcp-server.js"]}' 2>/dev/null || true
 
-# Install Blueprint slash commands as global skills
+# Install Workbench slash commands as global skills
 if [ -d /app/config/skills ]; then
   mkdir -p "$CLAUDE/skills"
   cp -r /app/config/skills/* "$CLAUDE/skills/"
-  echo "[entrypoint] Installed Blueprint skills to $CLAUDE/skills/"
+  echo "[entrypoint] Installed Workbench skills to $CLAUDE/skills/"
 fi
 
 # Mark onboarding as completed
@@ -104,5 +104,5 @@ if command -v qdrant &>/dev/null; then
   echo "[entrypoint] Qdrant started on port 6333 (storage: $QDRANT_STORAGE)"
 fi
 
-echo "[entrypoint] Blueprint starting on port ${PORT:-7860}"
+echo "[entrypoint] Workbench starting on port ${PORT:-7860}"
 exec "$@"

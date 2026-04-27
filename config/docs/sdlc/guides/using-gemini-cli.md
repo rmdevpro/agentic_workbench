@@ -1,10 +1,10 @@
 # Using the Gemini CLI
 
-Gemini CLI is available in the Blueprint container for code reviews, architectural critiques, and second opinions.
+Gemini CLI is available in the Workbench container for code reviews, architectural critiques, and second opinions.
 
 ## Setup
 
-Configure your API key in Blueprint Settings > API Keys. The key is exported as `GEMINI_API_KEY` to spawned tmux sessions (Gemini CLI accepts either `GEMINI_API_KEY` or `GOOGLE_API_KEY` — Blueprint standardizes on the former per #178).
+Configure your API key in Workbench Settings > API Keys. The key is exported as `GEMINI_API_KEY` to spawned tmux sessions (Gemini CLI accepts either `GEMINI_API_KEY` or `GOOGLE_API_KEY` — Workbench standardizes on the former per #178).
 
 ## Recommended: Tmux Sessions
 

@@ -1,4 +1,4 @@
-# Blueprint Traceability Matrix: Runbook ↔ Test Plans
+# Workbench Traceability Matrix: Runbook ↔ Test Plans
 
 **Date:** 2026-04-18
 **Issue:** #80 — Audit runbook coverage against test plan

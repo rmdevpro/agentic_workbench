@@ -20,8 +20,8 @@
 | Session | Project | Response to "hello" | Result |
 |---------|---------|---------------------|--------|
 | LinkedIn Job List | JobSearch | Full contextual response | PASS |
-| BP Dev | Blueprint | Full contextual response | PASS |
-| Youtube videos for BP | Blueprint | Full contextual response | PASS |
+| BP Dev | Workbench | Full contextual response | PASS |
+| Youtube videos for BP | Workbench | Full contextual response | PASS |
 
 ---
 
@@ -37,7 +37,7 @@
 
 ## Test 4: Sidebar Rendering
 
-Projects visible with session counts: muybridge (4), Blueprint (5), JobSearch (8), upgrade-test (13), emad-host (3), hymie (1), sutherland (1). Session lists expand and show individual sessions with CLI type, timestamp, message count, and model.
+Projects visible with session counts: muybridge (4), Workbench (5), JobSearch (8), upgrade-test (13), emad-host (3), hymie (1), sutherland (1). Session lists expand and show individual sessions with CLI type, timestamp, message count, and model.
 
 **Result: PASS**
 

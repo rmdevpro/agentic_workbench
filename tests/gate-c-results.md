@@ -29,7 +29,7 @@
 
 ### SMOKE-01: Page Load and Empty State
 **Result:** PASS  
-**Notes:** Title="Blueprint", sidebar present, `#empty-state` visible with correct text ("Select a session or create a new one"), settings modal hidden, status bar inactive, API returns projects array (length 0 — fresh state).
+**Notes:** Title="Workbench", sidebar present, `#empty-state` visible with correct text ("Select a session or create a new one"), settings modal hidden, status bar inactive, API returns projects array (length 0 — fresh state).
 
 ---
 

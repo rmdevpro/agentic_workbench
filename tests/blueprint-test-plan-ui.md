@@ -1,9 +1,9 @@
-# Blueprint UI Test Plan (Master)
+# Workbench UI Test Plan (Master)
 
 **Status:** Active — Updated 2026-04-18
 **Original Date:** 2026-04-13 (synthesized from Phase 6c multi-model review)
 **Standard:** WPR-103 (Test Plan Standard) + WPR-105 (Test Code Standard)
-**Application:** Blueprint -- Agentic Workbench managing Claude/Gemini/Codex CLI sessions in tmux/Docker
+**Application:** Workbench -- Agentic Workbench managing Claude/Gemini/Codex CLI sessions in tmux/Docker
 **Scope:** UI/Browser testing (Gate C). Comprehensive coverage of every DOM element, every user interaction, every JS function, every terminal-mediated CLI function category.
 **Tool:** Playwright (Chromium), headless
 **Base URL:** `https://aristotle9-agentic-workbench.hf.space` (HF Space with password auth)
@@ -40,7 +40,7 @@ This plan was originally written for a single-CLI (Claude) system with notes, me
 
 ## 0. Executive Summary
 
-Blueprint is a **UI-first system** (WPR-103 §12.1). Browser tests are the primary acceptance gate -- not backend API tests. The UI IS the product.
+Workbench is a **UI-first system** (WPR-103 §12.1). Browser tests are the primary acceptance gate -- not backend API tests. The UI IS the product.
 
 This plan targets comprehensive UI coverage through four interlocking inventories that make gaps structurally detectable:
 
@@ -100,7 +100,7 @@ Before context threshold or autocompaction scenarios:
 
 ### 2.1 Principle
 
-Blueprint is a UI-first IDE/workbench. Browser tests are the primary acceptance layer. Backend tests verify plumbing; UI tests verify the product works.
+Workbench is a UI-first IDE/workbench. Browser tests are the primary acceptance layer. Backend tests verify plumbing; UI tests verify the product works.
 
 ### 2.2 Three UI Testing Layers
 
@@ -111,7 +111,7 @@ Verify every visible control exists, is interactable, and performs its declared 
 Verify realistic end-to-end user tasks through the UI against the live container. Gray-box verification confirms mutations reached the backend (database queries, API checks, container log inspection). Tests in this layer hit the real backend without route interception.
 
 **Layer U3: Terminal-Mediated Functional Tests (Live)**
-Verify CLI functions reachable through the Blueprint terminal: slash commands, MCP tools, file operations, plan mode, compaction. Tests type commands into the terminal and assert observable outcomes (UI update, file creation, DB change, status bar change). Requires live container with real or stub Claude CLI.
+Verify CLI functions reachable through the Workbench terminal: slash commands, MCP tools, file operations, plan mode, compaction. Tests type commands into the terminal and assert observable outcomes (UI update, file creation, DB change, status bar change). Requires live container with real or stub Claude CLI.
 
 ### 2.3 Standing Requirements (All Browser Tests)
 
@@ -265,7 +265,7 @@ Every DOM element with an `id`, semantic role, or interactive behavior. Each map
 |----|---------|------|-------|
 | UI-E01 | `#sidebar` | Container | SB-01 |
 | UI-E02 | `#sidebar-header` | Container | SB-01 |
-| UI-E03 | `#sidebar-header h1` "Blueprint" | Text | SB-01 |
+| UI-E03 | `#sidebar-header h1` "Workbench" | Text | SB-01 |
 | UI-E04 | `#sidebar-header` Add Project (+) button | Button | SB-02, AP-01..09 |
 | UI-E05 | `#sidebar-header` Refresh button | Button | SB-03 |
 | UI-E06 | `#filter-bar` | Container | FLT-01 |
@@ -593,7 +593,7 @@ Note: Functions from server-side files (`mcp-server.js`, `server.js`, `scripts/p
 | LAY-02 | Sidebar has correct min-width | Live | Load page | `#sidebar` computed width equals 280px |
 | LAY-03 | Main area fills remaining space | Live | Load page | `#main` flex:1 fills horizontal space minus sidebar |
 | LAY-04 | Body has no scroll | Live | Load page | `document.body` overflow hidden, no scrollbar |
-| LAY-05 | Page title is "Blueprint" | Live | Load page | `document.title === 'Blueprint'` |
+| LAY-05 | Page title is "Workbench" | Live | Load page | `document.title === 'Workbench'` |
 
 ### 7.2 Initialization (`init.spec.js`)
 
@@ -1102,7 +1102,7 @@ Natural workflow testing -- real tasks through the UI as a user would. Per WPR-1
 
 ## 9. Claude Code CLI Function Testing (Terminal-Mediated)
 
-Blueprint wraps Claude Code sessions in tmux. Users interact with Claude through the terminal. This suite tests representative CLI functions from each category through the UI.
+Workbench wraps Claude Code sessions in tmux. Users interact with Claude through the terminal. This suite tests representative CLI functions from each category through the UI.
 
 **Gate classification:** Non-Deterministic Quality suite (requires real API key, excluded from standard gate). Standard gate uses stub CLI for deterministic terminal I/O tests (TIO-01..05, TRM-01..02).
 
@@ -1789,15 +1789,15 @@ This appendix documents how each reviewer finding was dispositioned during revis
 
 | Finding | Rationale for Rejection |
 |---------|------------------------|
-| Exhaustive Claude Code slash command coverage (/login, /agents, /memory, /resume, /extract) | This is a Gate C (UI) plan. These slash commands are Claude Code features, not Blueprint features. Blueprint's responsibility is to pass terminal I/O correctly (tested by TIO-01..05) and to detect specific patterns like auth URLs (AUTH-01..08) and compaction JSON (CLI-21). The slash commands themselves are tested by Claude Code's own test suite. The CLI matrix covers representative categories. |
+| Exhaustive Claude Code slash command coverage (/login, /agents, /memory, /resume, /extract) | This is a Gate C (UI) plan. These slash commands are Claude Code features, not Workbench features. Workbench's responsibility is to pass terminal I/O correctly (tested by TIO-01..05) and to detect specific patterns like auth URLs (AUTH-01..08) and compaction JSON (CLI-21). The slash commands themselves are tested by Claude Code's own test suite. The CLI matrix covers representative categories. |
 | Full MCP tool coverage (all 16+ tools) | Effects of all MCP tools are visible through existing UI tests (sidebar state, task panel, notes panel, file browser). The remaining tools are fully covered by Gate B MCP integration tests. Adding terminal-mediated tests for every tool would duplicate Gate B coverage with significantly higher cost (non-deterministic, API-key dependent). Documented in §15.1. |
-| Terminal fragmentation edge cases (multiline paste, typing while streaming, reconnect with scrollback) | These are xterm.js library behaviors, not Blueprint application code. Blueprint's terminal integration is tested through TIO-01..05 and the buffer API assertion pattern (§2.4). xterm.js's handling of partial lines and concurrent I/O is the library's responsibility. |
+| Terminal fragmentation edge cases (multiline paste, typing while streaming, reconnect with scrollback) | These are xterm.js library behaviors, not Workbench application code. Workbench's terminal integration is tested through TIO-01..05 and the buffer API assertion pattern (§2.4). xterm.js's handling of partial lines and concurrent I/O is the library's responsibility. |
 | Performance/usability edge cases (many open tabs, long sidebar, small viewport) | These are performance testing concerns, not functional test scenarios. The plan covers viewport resize (TIO-03: 1920x1080) and the visual review protocol catches layout issues. Dedicated performance testing is out of scope for Gate C functional acceptance. |
 | All API error paths individually (malformed JSON, every endpoint's 500) | Representative error paths are covered: FAIL-01 (server 500), FAIL-02 (network failure), SES-04 (resume 500), SCH-05 (search 500), SUM-04 (summary error), FIL-05 (mounts empty), FIL-06 (file read error), STB-08 (token poll 500), UI-ERR-01 (create session 500), UI-ERR-02 (summary 500). Testing every endpoint's error individually would produce diminishing returns; the error handling pattern is consistent across call sites. |
 | `timeAgo()` unit-level boundary testing | `timeAgo` is a pure formatting function with no side effects. It is exercised through SB-06 (session metadata display). Unit-level boundary testing (future timestamps, exact thresholds) belongs in Gate A mock tests, not Gate C browser tests. |
 | `db_getSetting()` explicit exercise | This is an internal caching function. It is exercised implicitly by every test that reads settings (SET-05, THM-01..04, FNT-01..04, REF-03). Adding explicit tests for the cache mechanism would test implementation internals, not UI behavior. |
 | State-transition matrix (formal) | The plan covers key states independently and in risk-proportional combinations. A formal state-transition matrix for all lifecycle states (session x tab x panel x modal) would produce hundreds of combinations. The post-code audit (§22) catches important combinations that emerge during implementation. |
-| Browser `alert()` dialog Playwright handling | Playwright captures `dialog` events by default. The plan tests alert-producing paths (SB-11, AP-05, AP-08, SES-04). The `page.on('dialog')` handler is part of the baseline reset protocol (§3.5). Adding dedicated alert-handling tests would test Playwright's dialog API, not Blueprint's behavior. |
+| Browser `alert()` dialog Playwright handling | Playwright captures `dialog` events by default. The plan tests alert-producing paths (SB-11, AP-05, AP-08, SES-04). The `page.on('dialog')` handler is part of the baseline reset protocol (§3.5). Adding dedicated alert-handling tests would test Playwright's dialog API, not Workbench's behavior. |
 | Compaction during auth/reconnect/tab-switch | Extremely unlikely edge cases with enormous test infrastructure cost. Each would require coordinating multiple async state machines simultaneously. The individual paths are thoroughly tested: compaction (CST-01..18), reconnection (RCN-01..10), auth (AUTH-01..08), tab switching (TAB-01..07). Cross-product testing of all combinations is not justified by risk analysis. |
 
 ### Phase 6c: Claude (Sonnet 4.6) Review -- Findings Accepted
@@ -1870,7 +1870,7 @@ No new gaps identified. Plan approved unconditionally. Noted strengths: MOD-02 a
 | All `renderSidebar()` branch combinations (§4.4) | Hash-skip optimization (SB-08), missing project (SB-09, SB-10), open-not-active (SB-12), and empty-after-filter (SB-13) cover the risk-bearing branches. Exhaustive combination testing (archived+missing+hidden class combinations, auto-expand on first load only) produces combinatorial explosion without proportional risk coverage. |
 | Full terminal reachability audit as separate inventory (§9.1) | The CLI Category Matrix (§9) already serves this purpose. It categorizes terminal-reachable functions into slash commands, file operations, MCP tools, planning, and input handling, with representative coverage from each. Creating a second parallel inventory would duplicate the matrix without adding scenarios. The distinction between "UI-visible" and "terminal-only" is already captured by the three-layer strategy (§2.2): U3 is explicitly terminal-mediated. |
 | All MCP tools through terminal (§6.2, §8.2) | This is a Gate C (UI) plan. MCP tools are backend services tested in Gate B. The terminal passes I/O correctly (TIO-01..05); the MCP server processes commands correctly (Gate B). Testing every MCP tool through the terminal would duplicate Gate B with non-deterministic, API-key-dependent tests. The CLI matrix covers representative categories. Effects of all MCP tools are visible through existing UI tests. |
-| All slash commands relevant to product workflows (§6.1, §6.3) | Same rationale as above. `/login`, `/agents`, `/resume`, and other Claude Code commands are Claude Code features, not Blueprint features. Blueprint's responsibility is terminal I/O correctness and pattern detection (auth URLs, compaction JSON). The slash commands themselves are tested by Claude Code's own test suite. |
+| All slash commands relevant to product workflows (§6.1, §6.3) | Same rationale as above. `/login`, `/agents`, `/resume`, and other Claude Code commands are Claude Code features, not Workbench features. Workbench's responsibility is terminal I/O correctness and pattern detection (auth URLs, compaction JSON). The slash commands themselves are tested by Claude Code's own test suite. |
 | Full compaction checker state machine (§6.4: every protocol command, no-output path, cleanup timing, tmux death during compaction) | CST-19 adds `read_plan_file` and `exit_plan_mode` to the tested protocol commands. CST-16..18 cover failure paths (malformed JSON, error status, timeout). CST-20 covers lock contention. The remaining commands (`resume_complete` is implicitly tested by CST-12/CST-15 recovery verification) and edge cases (tmux death during prep, cleanup file delay) are backend pipeline details invisible to the browser. |
 | All race conditions (§7.1: search+refresh, collapse+refresh, session open+modal, notes save+tab close, task add+project switch, summary+archive, reconnect timer+temp ID, auth submit+tab close) | The plan covers the highest-risk race conditions identified by risk analysis: temp ID migration (RACE-01..03), reconnect-during-close (RCN-08), rapid tab switching (TAB-07), double-click prevention (BRW-30), notes save race (NTS-04), and auto-refresh during modal (REF-04). The remaining scenarios are theoretical combinations with no known failure history and would require complex test infrastructure with precise timing control. |
 | All polling×modal interaction combinations (§7.2) | REF-04 tests the principle (loadState during settings modal). The polling mechanism is the same for all modals; the DOM isolation between the sidebar (which refreshes) and modal overlays (which are separate DOM subtrees) is architecturally consistent. Testing every modal type during every poll type would produce 15+ scenarios with identical behavior. |

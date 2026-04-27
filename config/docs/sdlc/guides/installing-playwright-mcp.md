@@ -1,6 +1,6 @@
 # Installing Playwright MCP
 
-This guide walks you through adding Playwright MCP to this Blueprint instance. Playwright provides headless browser automation — navigating pages, clicking elements, filling forms, taking screenshots, and reading page content.
+This guide walks you through adding Playwright MCP to this Workbench instance. Playwright provides headless browser automation — navigating pages, clicking elements, filling forms, taking screenshots, and reading page content.
 
 ## Prerequisites
 

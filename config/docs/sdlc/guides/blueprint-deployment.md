@@ -180,13 +180,13 @@ Use Hymie (or Hymie2) to drive a real Firefox session. Steps (one-time per deplo
 4. **Create a project** (sidebar `+` → pick a folder under `/data/workspace`, e.g. `docs`).
 5. **Create a Claude session** (project header `+` → CLAUDE → enter any prompt like "say hello" → Start Session).
 6. **In the Claude tab, run `/login`** → menu appears → press Enter to select option 1 ("Claude account with subscription"). Two parallel UI channels appear:
-   - The Blueprint **gate modal** ("Authentication Required") — **this is the designed path**.
+   - The Workbench **gate modal** ("Authentication Required") — **this is the designed path**.
    - The CLI's own terminal prompt: `Paste code here if prompted >` — **ignore this entirely**.
 7. **Click "Authenticate with Claude"** in the modal → opens the OAuth tab on `claude.ai`.
 8. **Authorize** → redirected to `platform.claude.com/oauth/code/callback` with the auth code displayed → click "Copy Code".
 9. **Switch back to the test Space tab**, paste the code in the modal's input field, click Submit. Modal closes; the "Not authenticated" warning at top disappears.
 
-**Known bug (#184):** the modal Submit successfully sets up Blueprint-side auth but does NOT advance the running CLI session out of its `/login` prompt — the CLI sits at `Paste code here if prompted >` indefinitely. Until that's fixed, **close and recreate the Claude session after the modal Submit completes.** The new session will pick up the freshly-written `~/.claude/.credentials.json` and start authenticated.
+**Known bug (#184):** the modal Submit successfully sets up Workbench-side auth but does NOT advance the running CLI session out of its `/login` prompt — the CLI sits at `Paste code here if prompted >` indefinitely. Until that's fixed, **close and recreate the Claude session after the modal Submit completes.** The new session will pick up the freshly-written `~/.claude/.credentials.json` and start authenticated.
 
 10. **Confirm Claude is authenticated** by creating a new Claude session — it should show "Welcome back …" and the workbench-top warning should be gone.
 
@@ -221,7 +221,7 @@ If REG-148-01 fails because a CLI shows a login prompt or 401, the per-deploy Hy
 - **Do not split the HF README from the canonical README.** One file with HF frontmatter at the top serves both audiences.
 - **Do not paste the OAuth code into the Claude CLI's `/login` prompt** when the gate modal is also showing. The modal is the designed path; the CLI prompt is a parallel channel that races for the same single-use code. Using both will break one or the other (#184). Modal-only.
 - **Do not assume the modal Submit advances the live CLI.** Per #184, it doesn't. Close + recreate any Claude session that was mid-`/login` when you completed the modal.
-- **Do not OAuth into the wrong Blueprint** when copying the auth code back. If you have multiple Blueprint tabs open in the same Hymie browser (e.g. both irina prod at `192.168.1.110:7860` AND the HF test Space), check the URL bar before pasting — the auth code is single-use and will land wherever you submit it first.
+- **Do not OAuth into the wrong Workbench** when copying the auth code back. If you have multiple Workbench tabs open in the same Hymie browser (e.g. both irina prod at `192.168.1.110:7860` AND the HF test Space), check the URL bar before pasting — the auth code is single-use and will land wherever you submit it first.
 
 ## Seeding a Dev Host from Prod Data
 

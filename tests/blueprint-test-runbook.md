@@ -1,8 +1,8 @@
-# Blueprint UI Test Runbook (Master)
+# Workbench UI Test Runbook (Master)
 
-This is the single master runbook for all Blueprint UI testing. It consolidates the original Phase 1-7 runbook, Phase 8-10 new feature tests, and easy-fixes tests into one document.
+This is the single master runbook for all Workbench UI testing. It consolidates the original Phase 1-7 runbook, Phase 8-10 new feature tests, and easy-fixes tests into one document.
 
-Executed by an AI agent using Playwright MCP against any Blueprint deployment. Output is a pass/fail checklist per test, with GitHub issues filed for each failure.
+Executed by an AI agent using Playwright MCP against any Workbench deployment. Output is a pass/fail checklist per test, with GitHub issues filed for each failure.
 
 ## Target
 
@@ -69,7 +69,7 @@ These changes affect many test steps. Read before executing.
 
 A test result of "unknown", "empty", "0", "null", "not found", "expected behavior", "will populate later", or any non-positive outcome is a **FAIL**. If the user would see something broken, blank, missing, or wrong — it is a FAIL. There are no partial passes. There is no "works but shows wrong data." There is no "expected on first load." If it doesn't show the correct value, it failed.
 
-**The executor must NEVER choose SKIP on its own.** Every test in this runbook is runnable on the standard Blueprint executor (Playwright MCP for UI, curl for API, ssh + docker exec for infra, real CLI sessions for terminal flows, Hymie Firefox if a headed browser is required). If a test appears unrunnable: investigate why, file an issue, and mark the test FAIL — do NOT skip on your own initiative. "I don't have the tool" is wrong: you do. "It's blocked by a prior failure" means fix the blocker (or fail the blocker test and the dependent ones).
+**The executor must NEVER choose SKIP on its own.** Every test in this runbook is runnable on the standard Workbench executor (Playwright MCP for UI, curl for API, ssh + docker exec for infra, real CLI sessions for terminal flows, Hymie Firefox if a headed browser is required). If a test appears unrunnable: investigate why, file an issue, and mark the test FAIL — do NOT skip on your own initiative. "I don't have the tool" is wrong: you do. "It's blocked by a prior failure" means fix the blocker (or fail the blocker test and the dependent ones).
 
 SKIP is reserved for the orchestrator's explicit instruction (e.g., "skip Phase 0 for this run, Claude is already authenticated"). When the orchestrator directs a SKIP, record it as SKIP with the orchestrator's reason verbatim. The executor never decides to SKIP unilaterally.
 
@@ -203,7 +203,7 @@ Copy the credentials file from a machine that already has valid Claude auth into
 cat ~/.claude/credentials.json
 
 # 2. Inject into the container via the terminal
-# Open a terminal session in Blueprint, then:
+# Open a terminal session in Workbench, then:
 echo '<paste credentials JSON>' > ~/.claude/credentials.json
 ```
 
@@ -238,7 +238,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 10. `browser_evaluate`: `fetch('/api/state').then(r=>r.json()).then(d=>d.projects.length)`
 
 **Expected:**
-- Title is "Blueprint"
+- Title is "Workbench"
 - Sidebar is present with `#project-list` containing project groups
 - `#empty-state` is visible with text "Select a session or create a new one"
 - Settings modal is hidden
@@ -249,7 +249,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 - DOM queries return expected values
 
 **Result:** PASS
-**Notes:** Title "Blueprint", sidebar present, empty-state visible with correct text, settings modal hidden, status bar inactive, API returns 1 project.
+**Notes:** Title "Workbench", sidebar present, empty-state visible with correct text, settings modal hidden, status bar inactive, API returns 1 project.
 
 ---
 
@@ -2935,7 +2935,7 @@ Quick pass/fail checklist for all 139 UI elements. Execute with `browser_evaluat
 |---|----------|-------------|--------|
 | 1 | `#sidebar` | Sidebar container | ☐ |
 | 2 | `#sidebar-header` | Header with title and add button | ☐ |
-| 3 | `#sidebar-header h1` | "Blueprint" title | ☐ |
+| 3 | `#sidebar-header h1` | "Workbench" title | ☐ |
 | 4 | `#sidebar-header button` | Add project button | ☐ |
 | 5 | `#filter-bar` | Filter button bar | ☐ |
 | 6 | `#session-filter` | Filter dropdown (Active/All/Archived/Hidden) | ☐ |
@@ -3275,7 +3275,7 @@ After all 5 rounds:
 - The terminal pane shows the wrong CLI's content after a tab switch
 - A response of "unknown", "error", or any non-answer is shown
 
-All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 401, a blank response, a crash, piled-up input, a login screen, or any inability to chat is a FAIL — not a "config issue", not a "but Blueprint worked", not "expected behavior". If you cannot chat with it and get a correct reply, the test failed.
+All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 401, a blank response, a crash, piled-up input, a login screen, or any inability to chat is a FAIL — not a "config issue", not a "but Workbench worked", not "expected behavior". If you cannot chat with it and get a correct reply, the test failed.
 
 **Result:** ☐ PASS ☐ FAIL
 **Notes:** Record which round and which CLI fails, if any.
@@ -4074,15 +4074,15 @@ Then measure:
 
 **Steps:**
 1. On a fresh dev container, confirm `~/.codex/config.toml` is empty or missing.
-2. Start the workbench (Blueprint MCP registration runs at startup).
+2. Start the workbench (Workbench MCP registration runs at startup).
 3. Cat the config: `cat /data/.codex/config.toml`. Confirm it contains exactly one `[mcp_servers.blueprint]` block with `command = "node"` and `args = ["..."]`. Confirm syntactically valid TOML by running `codex --version` — should print version, not a parse error.
 4. Restart Blueprint (re-runs registration). Re-cat config: should NOT have a duplicate `[mcp_servers.blueprint]` block (the early-return guard prevents double-append).
-5. Negative case: manually pre-populate `/data/.codex/config.toml` with non-MCP content (e.g. a `[notice.foo]` block). Restart. Confirm Blueprint appends its block AFTER the existing content without modifying or corrupting it.
+5. Negative case: manually pre-populate `/data/.codex/config.toml` with non-MCP content (e.g. a `[notice.foo]` block). Restart. Confirm Workbench appends its block AFTER the existing content without modifying or corrupting it.
 
 **Expected:**
 - Single valid `[mcp_servers.blueprint]` block; rest of file untouched.
 - `codex --version` prints version (no TOML parse error).
-- Multiple Blueprint restarts produce no duplicate registrations.
+- Multiple Workbench restarts produce no duplicate registrations.
 
 **Result:** ☐ PASS ☐ FAIL
 

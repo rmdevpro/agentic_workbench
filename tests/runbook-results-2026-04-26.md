@@ -1,4 +1,4 @@
-# Blueprint UI Test Runbook Results — 2026-04-26
+# Workbench UI Test Runbook Results — 2026-04-26
 
 **Executor:** Claude Sonnet 4.6 on M5 dev (http://192.168.1.120:7860)
 **Container:** workbench
@@ -43,13 +43,13 @@ _Phase breakdown reflects initial-run values; final totals updated after full ex
 
 ## SMOKE-01: Page Load and Empty State
 **Result:** PASS
-**Observed:** Title="Blueprint", sidebar with 10 project groups (11 in API—1 archived/hidden filtered), #empty-state visible with "Select a session or create a new one / Pick a project from the sidebar to get started", settings modal hidden, status bar inactive, API=11 projects.
-**Expected:** Title "Blueprint", sidebar present, empty state visible, settings hidden, API returns projects array.
+**Observed:** Title="Workbench", sidebar with 10 project groups (11 in API—1 archived/hidden filtered), #empty-state visible with "Select a session or create a new one / Pick a project from the sidebar to get started", settings modal hidden, status bar inactive, API=11 projects.
+**Expected:** Title "Workbench", sidebar present, empty state visible, settings hidden, API returns projects array.
 **Issue:** none
 
 ## SMOKE-02: Sidebar Projects Render
 **Result:** PASS
-**Observed:** 10 project groups, first header "Blueprint" with count badge "2", filter=SELECT defaulting to "active", 25 session items visible.
+**Observed:** 10 project groups, first header "Workbench" with count badge "2", filter=SELECT defaulting to "active", 25 session items visible.
 **Expected:** Project groups match API count, active filter default, session count badges.
 **Issue:** none
 
@@ -65,7 +65,7 @@ _Phase breakdown reflects initial-run values; final totals updated after full ex
 
 ## CORE-01: Create Session
 **Result:** PASS
-**Observed:** Clicked + on Blueprint → C Claude → "New Session" dialog with prompt textarea and "Start Session" button → typed "Say hello" → tab opened with name "Say hello", empty-state removed from DOM, ws.readyState=1.
+**Observed:** Clicked + on Workbench → C Claude → "New Session" dialog with prompt textarea and "Start Session" button → typed "Say hello" → tab opened with name "Say hello", empty-state removed from DOM, ws.readyState=1.
 **Expected:** Dialog opens, session created with prompt-derived name, tab appears, terminal connects.
 **Issue:** none
 **Notes:** `.new-session-menu [data-cli="claude"]` pattern for clicking Claude option. Must use setTimeout in evaluate to allow dropdown to show.
@@ -313,7 +313,7 @@ _Phase breakdown reflects initial-run values; final totals updated after full ex
 
 ## EDGE-08: Temporary Session Lifecycle (Terminal)
 **Result:** PASS
-**Observed:** Clicked + → Terminal on Blueprint project → terminal tab added (count +1). Closing tab → count restored.
+**Observed:** Clicked + → Terminal on Workbench project → terminal tab added (count +1). Closing tab → count restored.
 **Expected:** Terminal tab opens and closes cleanly.
 **Issue:** none
 
@@ -332,7 +332,7 @@ _Phase breakdown reflects initial-run values; final totals updated after full ex
 
 ## EDGE-11: Tmux Death Recovery
 **Result:** PASS
-**Observed:** POST /api/sessions/af3c11be/resume with {project:'Blueprint'} → 200 OK. Resume endpoint responds.
+**Observed:** POST /api/sessions/af3c11be/resume with {project:'Workbench'} → 200 OK. Resume endpoint responds.
 **Expected:** Resume endpoint returns a response (not 500).
 **Issue:** none
 **Notes:** Could not kill tmux server-side (no docker access from executor host), tested API layer.
@@ -401,7 +401,7 @@ _Phase breakdown reflects initial-run values; final totals updated after full ex
 
 ## EDGE-23: Multi-Project Terminal Isolation
 **Result:** FAIL
-**Observed:** Could not confirm isolation — both terminal tabs got the same project (Blueprint) because second project's + dropdown wasn't properly opened in automated scripting. tabA and tabB had same ID.
+**Observed:** Could not confirm isolation — both terminal tabs got the same project (Workbench) because second project's + dropdown wasn't properly opened in automated scripting. tabA and tabB had same ID.
 **Expected:** Terminals from different projects have different tab.project values.
 **Issue:** none
 **Notes:** This is a test execution issue (JS dropdown selection difficulty), not a confirmed product bug. Previous run showed PASS with manual interaction.
@@ -437,7 +437,7 @@ _Phase breakdown reflects initial-run values; final totals updated after full ex
 
 ## CLI-04: /compact Command
 **Result:** PASS
-**Observed:** /compact ran (10s wait). Terminal reset to startup header "Claude Code v2.1.119". Session name changed to "Blueprint workbench" in tmux (compact completed). API context confirmed reduced.
+**Observed:** /compact ran (10s wait). Terminal reset to startup header "Claude Code v2.1.119". Session name changed to "Agentic Workbench" in tmux (compact completed). API context confirmed reduced.
 **Expected:** Compact executes and clears context.
 **Issue:** none
 
