@@ -1017,6 +1017,9 @@ build/**</textarea>
                 tab.id = realSession.id;
                 tabs.set(realSession.id, tab);
                 if (activeTabId === tabId) activeTabId = realSession.id;
+                // Keep the auth modal's tab reference in sync (otherwise
+                // submit fails with "No session attached" after migration)
+                if (authTriggerTabId === tabId) authTriggerTabId = realSession.id;
                 // Update tab name
                 const tabEl = document.querySelector(`[data-tab-id="${tabId}"]`);
                 if (tabEl) tabEl.dataset.tabId = realSession.id;
