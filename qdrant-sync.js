@@ -612,7 +612,15 @@ async function syncSessionFile(filePath, collection, parser, dims) {
     },
   }));
 
-  await upsertPoints(collection, points);
+  // Batch the upsert too. Qdrant rejects POST bodies > 32 MiB by default. A
+  // 384-dim float vector + payload ≈ 4-5 KB JSON per point, so a 22k-point
+  // session would produce a ~38 MB body and get rejected with
+  // "Payload error: JSON payload (... bytes) is larger than allowed".
+  // 5000 points/batch ≈ 15-20 MB, comfortable margin.
+  const UPSERT_BATCH = 5000;
+  for (let i = 0; i < points.length; i += UPSERT_BATCH) {
+    await upsertPoints(collection, points.slice(i, i + UPSERT_BATCH));
+  }
   syncStmts.upsert.run(filePath, collection, content.length, fileStat.mtimeMs, '');
   return points.length;
 }
