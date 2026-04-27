@@ -271,13 +271,13 @@ The following apply to all tests regardless of layer:
 | Network | `default` | `blueprint-test_default` |
 | Data volumes | `joshua26_workspace`, `joshua26_storage` | `blueprint-test_workspace`, `blueprint-test_storage` |
 | Port binding | `7866:3000` | `7867:3000` |
-| Database | `/storage/blueprint.db` | Fresh DB per gating run |
+| Database | `/data/.workbench/workbench.db` | Fresh DB per gating run |
 | Container name | `blueprint-blueprint-1` | `blueprint-test` |
-| Environment | `BLUEPRINT_DATA=/storage` | `BLUEPRINT_DATA=/test-data` |
+| Environment | `WORKBENCH_DATA=/data/.workbench` | `WORKBENCH_DATA=/data/.workbench` |
 | Outbound internet | Unrestricted | Blocked or routed to local stub server |
 | MAX_TMUX_SESSIONS | 5 (default) | 10 (explicit in compose) |
 
-A dedicated `docker-compose.test.yml` override file provides these isolation settings. No test points at production `.blueprint`, `.claude`, workspace, or DB. The compose file is a prerequisite artifact that must be created before the first gating run.
+A dedicated `docker-compose.test.yml` override file provides these isolation settings. No test points at production `.workbench`, `.claude`, workspace, or DB. The compose file is a prerequisite artifact that must be created before the first gating run.
 
 **Outbound network isolation:** The `blueprint-test` container must not make outbound internet requests during Gate B. DNS resolution for external hosts is blocked at the Docker network level or routed to a local stub. This ensures the gating suite never flakes due to external API latency or availability.
 
@@ -1186,7 +1186,7 @@ Every configuration option that affects behavior must be tested.
 | `tmux.windowWidth` / `tmux.windowHeight` | Tmux window dimensions | TMX-03 | Live |
 | `LOG_LEVEL` env var | Log filtering | LOG-03 | Mock |
 | `WORKSPACE` env var | Project path root | SAF-01 | Mock |
-| `BLUEPRINT_DATA` env var | Storage directory | ENT-03 | Live |
+| `WORKBENCH_DATA` env var | Storage directory | ENT-03 | Live |
 
 ---
 
@@ -1652,8 +1652,8 @@ See §3.6 for methodology. Mock tests import functions; live tests use `child_pr
 | ID | Input | Expected | Layer |
 |----|-------|----------|-------|
 | HLT-01 | All healthy | 200 | Live |
-| HLT-02a | DB file removed: `docker exec blueprint-test rm /storage/blueprint.db` | 503, health response body shows db status unhealthy | Live |
-| HLT-02b | DB file unreadable: `docker exec blueprint-test chmod 000 /storage/blueprint.db` (restore with `chmod 644` after test) | 503, health response body shows db status unhealthy | Live |
+| HLT-02a | DB file removed: `docker exec blueprint-test rm /data/.workbench/workbench.db` | 503, health response body shows db status unhealthy | Live |
+| HLT-02b | DB file unreadable: `docker exec blueprint-test chmod 000 /data/.workbench/workbench.db` (restore with `chmod 644` after test) | 503, health response body shows db status unhealthy | Live |
 | HLT-03 | Any state | db, workspace, auth fields present | Live |
 | HLT-04 | Invalid credentials | 200, auth degraded | Live |
 | HLT-05 | DB down, workspace up | 503, workspace healthy | Live |
@@ -1888,7 +1888,7 @@ Count-before/count-after pattern for every side-effecting tool:
 
 ### 9.1 Database Queries
 
-**Access:** `docker exec blueprint-test sqlite3 /storage/blueprint.db "..."`.
+**Access:** `docker exec blueprint-test sqlite3 /data/.workbench/workbench.db "..."`.
 
 | Verification | Table | Query |
 |-------------|-------|-------|

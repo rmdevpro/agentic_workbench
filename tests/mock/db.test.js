@@ -11,14 +11,14 @@ const DB_PATH = path.join(__dirname, '..', '..', 'db.js');
 
 async function withDb(fn) {
   const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'bp-db-'));
-  const prev = process.env.BLUEPRINT_DATA;
-  process.env.BLUEPRINT_DATA = dir;
+  const prev = process.env.WORKBENCH_DATA;
+  process.env.WORKBENCH_DATA = dir;
   try {
     const db = freshRequire(DB_PATH);
     await fn(db, dir);
   } finally {
-    if (prev === undefined) delete process.env.BLUEPRINT_DATA;
-    else process.env.BLUEPRINT_DATA = prev;
+    if (prev === undefined) delete process.env.WORKBENCH_DATA;
+    else process.env.WORKBENCH_DATA = prev;
   }
 }
 
@@ -37,8 +37,8 @@ test('DB-01: schema creates 6 tables with WAL mode', async () => {
 
 test('DB-02: migrations are idempotent', async () => {
   const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'bp-db-mig-'));
-  const prev = process.env.BLUEPRINT_DATA;
-  process.env.BLUEPRINT_DATA = dir;
+  const prev = process.env.WORKBENCH_DATA;
+  process.env.WORKBENCH_DATA = dir;
   try {
     const db1 = freshRequire(DB_PATH);
     const cols1 = db1.db
@@ -52,8 +52,8 @@ test('DB-02: migrations are idempotent', async () => {
       .map((r) => r.name);
     assert.deepEqual(cols2.sort(), cols1.sort());
   } finally {
-    if (prev === undefined) delete process.env.BLUEPRINT_DATA;
-    else process.env.BLUEPRINT_DATA = prev;
+    if (prev === undefined) delete process.env.WORKBENCH_DATA;
+    else process.env.WORKBENCH_DATA = prev;
   }
 });
 

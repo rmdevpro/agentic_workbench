@@ -20,7 +20,7 @@ async function resetBaseline(page = null) {
   try {
     // Clean up test data but preserve the browser seed project (name = 'bp-seed')
     execSync(
-      `docker exec -u blueprint ${CONTAINER} sqlite3 /data/.blueprint/blueprint.db "DELETE FROM sessions WHERE id LIKE 'test_%' OR id LIKE 'new_%' OR project_id IN (SELECT id FROM projects WHERE (name LIKE '%_proj' OR name LIKE 'test_%') AND name != 'bp-seed'); DELETE FROM projects WHERE (name LIKE '%_proj' OR name LIKE 'test_%') AND name != 'bp-seed'; DELETE FROM tasks; DELETE FROM task_history;"`,
+      `docker exec -u blueprint ${CONTAINER} sqlite3 /data/.workbench/workbench.db "DELETE FROM sessions WHERE id LIKE 'test_%' OR id LIKE 'new_%' OR project_id IN (SELECT id FROM projects WHERE (name LIKE '%_proj' OR name LIKE 'test_%') AND name != 'bp-seed'); DELETE FROM projects WHERE (name LIKE '%_proj' OR name LIKE 'test_%') AND name != 'bp-seed'; DELETE FROM tasks; DELETE FROM task_history;"`,
       { stdio: 'ignore', timeout: 10000 },
     );
     execSync(
@@ -40,7 +40,7 @@ async function resetBaseline(page = null) {
     });
     // Delete all bp-seed sessions to ensure exactly 2 after re-seeding
     execSync(
-      `docker exec -u blueprint ${CONTAINER} sqlite3 /data/.blueprint/blueprint.db "DELETE FROM sessions WHERE project_id IN (SELECT id FROM projects WHERE name = 'bp-seed');"`,
+      `docker exec -u blueprint ${CONTAINER} sqlite3 /data/.workbench/workbench.db "DELETE FROM sessions WHERE project_id IN (SELECT id FROM projects WHERE name = 'bp-seed');"`,
       { stdio: 'ignore', timeout: 5000 },
     );
     // Ensure bp-seed project exists

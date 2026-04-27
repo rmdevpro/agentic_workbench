@@ -36,7 +36,7 @@ The entrypoint sets up the following structure under `/data`:
 
 ```
 /data/
-  .blueprint/           — SQLite database (blueprint.db), Qdrant vector data
+  .workbench/           — SQLite database (workbench.db), Qdrant vector data
   .claude/              — Claude CLI config, session JSONLs, MCP registrations
   .codex/               — Codex CLI config, session history
   .gemini/              — Gemini CLI config, session history
@@ -131,7 +131,7 @@ Deploy the same content to two Spaces with different Space-level Secrets to get 
 | Space | URL | Secrets | Auth mode (auto-detected) | Use |
 |---|---|---|---|---|
 | `aristotle9/agentic-workbench` | https://aristotle9-agentic-workbench.hf.space | (none) | `template` | Public landing — duplicate-me gate; if a visitor duplicates as a private Space they get full access |
-| `aristotle9/agentic-workbench-test` | https://aristotle9-agentic-workbench-test.hf.space | `BLUEPRINT_USER`, `BLUEPRINT_PASS` | `password` | Login-gated test deploy — for verifying changes against a real HF deployment |
+| `aristotle9/agentic-workbench-test` | https://aristotle9-agentic-workbench-test.hf.space | `WORKBENCH_USER`, `WORKBENCH_PASS` | `password` | Login-gated test deploy — for verifying changes against a real HF deployment |
 
 Auth-mode detection logic lives in `server.js:detectAuthMode()` — password mode wins over public-Space template mode when both creds are set.
 
@@ -141,12 +141,12 @@ Set or remove Secrets via HF API:
 # Set
 curl -sX POST "https://huggingface.co/api/spaces/<space-id>/secrets" \
   -H "Authorization: Bearer $HF_TOKEN" -H "Content-Type: application/json" \
-  -d '{"key":"BLUEPRINT_USER","value":"<username>"}'
+  -d '{"key":"WORKBENCH_USER","value":"<username>"}'
 
 # Remove
 curl -sX DELETE "https://huggingface.co/api/spaces/<space-id>/secrets" \
   -H "Authorization: Bearer $HF_TOKEN" -H "Content-Type: application/json" \
-  -d '{"key":"BLUEPRINT_USER"}'
+  -d '{"key":"WORKBENCH_USER"}'
 
 # Restart to pick up env changes
 curl -sX POST "https://huggingface.co/api/spaces/<space-id>/restart" \
@@ -231,7 +231,7 @@ Procedure (on the dev host, with the dev container stopped):
 
 ```bash
 rsync -aHAX --delete \
-  --exclude='.blueprint/qdrant/.lock' \
+  --exclude='.workbench/qdrant/.lock' \
   --exclude='*.wal' --exclude='*.shm' \
   <produser>@<prodhost>:/srv/workbench/ \
   /srv/workbench/
@@ -239,7 +239,7 @@ rsync -aHAX --delete \
 sudo chown -R 1000:2001 /srv/workbench
 
 # Re-assert dev-mode logo after the rsync (which overwrote the setting):
-sqlite3 /srv/workbench/.blueprint/blueprint.db \
+sqlite3 /srv/workbench/.workbench/workbench.db \
   "INSERT OR REPLACE INTO settings(key, value) VALUES ('logo_variant', '\"development\"');"
 
 # Start the dev container via the normal Admin-repo compose procedure
@@ -270,7 +270,7 @@ The host stays where it is, just changes which logo it renders. No data movement
 
 ```bash
 # Inside the container (or via curl/sqlite from the host):
-sqlite3 /data/.blueprint/blueprint.db \
+sqlite3 /data/.workbench/workbench.db \
   "INSERT OR REPLACE INTO settings(key, value) VALUES ('logo_variant', '\"production\"');"
 ```
 
@@ -311,7 +311,7 @@ wipe avoids the footgun.
 5. **Rsync from outgoing-prod** (which stays running — the WAL/SHM excludes mean we copy the last-checkpointed state, which SQLite recovers from cleanly on first open):
    ```bash
    ssh <user>@<incoming-prod> "rsync -aHAX --delete \\
-     --exclude='.blueprint/qdrant/.lock' \\
+     --exclude='.workbench/qdrant/.lock' \\
      --exclude='*.wal' --exclude='*.shm' \\
      blueprint@<outgoing-prod>:/srv/workbench/ /srv/workbench/ && \\
      sudo chown -R 1000:2001 /srv/workbench"
@@ -319,7 +319,7 @@ wipe avoids the footgun.
    (`--delete` is redundant after the wipe but harmless; keep it as belt-and-suspenders.)
 6. **Flip incoming-prod's logo to `production`** while its container is still stopped (writes go straight to the SQLite file with no live process holding it):
    ```bash
-   ssh <user>@<incoming-prod> "sqlite3 /srv/workbench/.blueprint/blueprint.db \\
+   ssh <user>@<incoming-prod> "sqlite3 /srv/workbench/.workbench/workbench.db \\
      \"INSERT OR REPLACE INTO settings(key, value) VALUES ('logo_variant', '\\\"production\\\"');\""
    ```
 7. **Start incoming-prod container** with the seeded data:
@@ -330,7 +330,7 @@ wipe avoids the footgun.
 9. **Move your browser to incoming-prod and start working there.** Until step 10 fires, both hosts are showing the Prod logo; the URL you load determines which one you're using.
 10. **Demote outgoing-prod to `development`** (live DB write, no container stop — outgoing-prod stays running as the new dev host):
    ```bash
-   ssh blueprint@<outgoing-prod> "sqlite3 /srv/workbench/.blueprint/blueprint.db \\
+   ssh blueprint@<outgoing-prod> "sqlite3 /srv/workbench/.workbench/workbench.db \\
      \"INSERT OR REPLACE INTO settings(key, value) VALUES ('logo_variant', '\\\"development\\\"');\""
    ```
 

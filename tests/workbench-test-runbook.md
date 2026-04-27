@@ -177,7 +177,7 @@ A fresh container with an empty `/data` volume must come up cleanly. This is the
 2. Bind `${WORKBENCH_URL}` to that container's port for this run.
 3. Wait up to 30s for `/health` to return `{status:'ok'}`.
 4. `browser_navigate` to `${WORKBENCH_URL}` — verify the empty-state UI renders, sidebar shows zero (or default-seeded) projects.
-5. `docker exec ${WORKBENCH_CONTAINER} ls /data/.blueprint/blueprint.db` — DB file exists (entrypoint.sh + db.js migrations ran).
+5. `docker exec ${WORKBENCH_CONTAINER} ls /data/.workbench/workbench.db` — DB file exists (entrypoint.sh + db.js migrations ran).
 6. `docker exec ${WORKBENCH_CONTAINER} ls /data/workspace` — workspace dir created.
 7. `curl ${WORKBENCH_URL}/api/state` — returns `{projects: []}` or default seeded projects without errors.
 
@@ -4190,7 +4190,7 @@ Then measure:
 3. Click the banner → modal opens listing recent errors (time / module / message columns).
 4. Close the modal; banner remains visible until the 1h window passes.
 
-**Cleanup:** `docker exec ${WORKBENCH_CONTAINER} sqlite3 /data/.blueprint/blueprint.db "DELETE FROM logs WHERE module IN ('runbook-181','verify-181')"`.
+**Cleanup:** `docker exec ${WORKBENCH_CONTAINER} sqlite3 /data/.workbench/workbench.db "DELETE FROM logs WHERE module IN ('runbook-181','verify-181')"`.
 
 **Expected:**
 - Errors persist to `logs` table immediately (within the same request).

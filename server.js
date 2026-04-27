@@ -107,9 +107,14 @@ app.use(express.urlencoded({ extended: true }));
 let authMode = 'open'; // 'template' | 'password' | 'open'
 const sessionTokens = new Set();
 
+// Phase 3 rename: accept WORKBENCH_* canonically, fall back to BLUEPRINT_* for
+// existing deployments that haven't migrated their secrets.env yet.
+const GATE_USER = process.env.WORKBENCH_USER || process.env.BLUEPRINT_USER;
+const GATE_PASS = process.env.WORKBENCH_PASS || process.env.BLUEPRINT_PASS;
+
 async function detectAuthMode() {
   // Password auth takes priority — if credentials are set, use them regardless of Space visibility
-  if (process.env.BLUEPRINT_USER && process.env.BLUEPRINT_PASS) {
+  if (GATE_USER && GATE_PASS) {
     authMode = 'password';
     return;
   }
@@ -146,7 +151,7 @@ function serveGatePage(res) {
 app.post('/api/gate/login', (req, res) => {
   if (authMode !== 'password') return res.status(404).json({ error: 'not found' });
   const { username, password } = req.body;
-  if (username === process.env.BLUEPRINT_USER && password === process.env.BLUEPRINT_PASS) {
+  if (username === GATE_USER && password === GATE_PASS) {
     const token = crypto.randomBytes(32).toString('hex');
     sessionTokens.add(token);
     res.cookie('bp_session', token, { httpOnly: true, sameSite: 'lax' });

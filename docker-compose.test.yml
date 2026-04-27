@@ -18,7 +18,7 @@ services:
       - WORKSPACE=/data/workspace
       - CLAUDE_HOME=/data/.claude
       - CLAUDE_CONFIG_DIR=/data/.claude
-      - BLUEPRINT_DATA=/data/.blueprint
+      - WORKBENCH_DATA=/data/.workbench
       - MAX_TMUX_SESSIONS=10
       - TMUX_CLEANUP_MINUTES=2
       - LOG_LEVEL=DEBUG

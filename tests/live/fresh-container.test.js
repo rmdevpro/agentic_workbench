@@ -6,8 +6,8 @@ const { get, BASE_URL } = require('../helpers/http-client');
 const { resetBaseline, dockerExec } = require('../helpers/reset-state');
 
 test('FRS-01/ENT-03: data directories exist', () => {
-  const dbExists = dockerExec('test -f /data/.blueprint/blueprint.db && echo yes || echo no');
-  assert.equal(dbExists, 'yes', '/data/.blueprint/blueprint.db should exist');
+  const dbExists = dockerExec('test -f /data/.workbench/workbench.db && echo yes || echo no');
+  assert.equal(dbExists, 'yes', '/data/.workbench/workbench.db should exist');
 });
 
 test('ENT-02: process runs as blueprint user', () => {
@@ -22,8 +22,8 @@ test('ENT-09: onboarding flags set correctly', () => {
   }
 });
 
-test('ENT-10: blueprint home owned by blueprint', () => {
-  const owner = dockerExec('stat -c %U /data/.blueprint');
+test('ENT-10: workbench home owned by blueprint', () => {
+  const owner = dockerExec('stat -c %U /data/.workbench');
   assert.equal(owner, 'blueprint');
 });
 

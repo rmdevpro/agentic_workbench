@@ -5,11 +5,20 @@ set -e
 # All persistent data lives under /data (mounted volume)
 
 CLAUDE="/data/.claude"
-BP_DATA="/data/.blueprint"
 WORK="/data/workspace"
 
+# Phase 5: data dir migrated to /data/.workbench. db.js handles its own
+# move; entrypoint just needs to use the canonical path and migrate the
+# Qdrant subdir if it's still under the legacy location.
+WB_DATA="/data/.workbench"
+LEGACY_BP_DATA="/data/.blueprint"
+if [ ! -d "$WB_DATA" ] && [ -d "$LEGACY_BP_DATA" ]; then
+  mv "$LEGACY_BP_DATA" "$WB_DATA"
+  echo "[entrypoint] Migrated $LEGACY_BP_DATA → $WB_DATA"
+fi
+
 # Ensure /data structure exists (volume may be empty on first run)
-mkdir -p "$WORK" "$BP_DATA" "$CLAUDE/projects" 2>/dev/null || true
+mkdir -p "$WORK" "$WB_DATA" "$CLAUDE/projects" 2>/dev/null || true
 
 # Ensure docs library exists with standard structure
 mkdir -p "$WORK/docs/guides" "$WORK/docs/processes" "$WORK/docs/reference" "$WORK/docs/system-prompts"
@@ -96,7 +105,7 @@ PERSISTENT_COUNT=$(ls /data/.local/node_modules 2>/dev/null | wc -w)
 [ "$PERSISTENT_COUNT" -gt 0 ] && echo "[entrypoint] Persistent packages: $PERSISTENT_COUNT installed"
 
 # Start Qdrant vector database in background
-QDRANT_STORAGE="$BP_DATA/qdrant"
+QDRANT_STORAGE="$WB_DATA/qdrant"
 mkdir -p "$QDRANT_STORAGE" 2>/dev/null || true
 if command -v qdrant &>/dev/null; then
   export QDRANT__STORAGE__STORAGE_PATH="$QDRANT_STORAGE"

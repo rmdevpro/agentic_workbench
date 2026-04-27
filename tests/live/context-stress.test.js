@@ -120,8 +120,8 @@ test('CST-GRAY: session creation produces filesystem artifacts in container', as
   assert.ok(sess.data.id, 'Session must return an ID');
 
   // Gray-box: verify the DB exists in the container
-  const storageDir = dockerExec('ls /data/.blueprint/blueprint.db 2>/dev/null || echo MISSING');
-  assert.ok(storageDir !== 'MISSING', '/data/.blueprint/blueprint.db must exist in the container');
+  const storageDir = dockerExec('ls /data/.workbench/workbench.db 2>/dev/null || echo MISSING');
+  assert.ok(storageDir !== 'MISSING', '/data/.workbench/workbench.db must exist in the container');
 
   // Verify the project directory was created
   const projExists = dockerExec('test -d /data/workspace/cst_fs_proj && echo YES || echo NO');

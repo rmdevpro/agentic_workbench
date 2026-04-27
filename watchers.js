@@ -165,7 +165,7 @@ module.exports = function createWatchers({
     const isStale = existing && (
       !existing.command ||
       (existing.args && existing.args[0] !== expectedArgs[0]) ||
-      (existing.env && 'BLUEPRINT_PORT' in existing.env)
+      (existing.env && ('BLUEPRINT_PORT' in existing.env || 'WORKBENCH_PORT' in existing.env))
     );
 
     if (!existing || isStale) {
@@ -204,7 +204,7 @@ module.exports = function createWatchers({
     const isStale = existing && (
       !existing.command ||
       (existing.args && existing.args[0] !== expectedArgs[0]) ||
-      (existing.env && 'BLUEPRINT_PORT' in existing.env)
+      (existing.env && ('BLUEPRINT_PORT' in existing.env || 'WORKBENCH_PORT' in existing.env))
     );
 
     if (!existing || isStale) {

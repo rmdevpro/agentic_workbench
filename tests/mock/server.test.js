@@ -103,7 +103,7 @@ test('SRV-05: uncaught exception exits with structured error', async () => {
         NODE_OPTIONS: `--require ${trigger}`,
         WORKSPACE: fixtures.paths.workspace,
         CLAUDE_HOME: fixtures.paths.claudeHome,
-        BLUEPRINT_DATA: tmpData,
+        WORKBENCH_DATA: tmpData,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });

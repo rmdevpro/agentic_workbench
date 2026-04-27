@@ -33,11 +33,11 @@ async function setupEnv(t) {
   const prev = {
     WORKSPACE: process.env.WORKSPACE,
     CLAUDE_HOME: process.env.CLAUDE_HOME,
-    BLUEPRINT_DATA: process.env.BLUEPRINT_DATA,
+    WORKBENCH_DATA: process.env.WORKBENCH_DATA,
   };
   process.env.WORKSPACE = workspace;
   process.env.CLAUDE_HOME = claudeHome;
-  process.env.BLUEPRINT_DATA = dataDir;
+  process.env.WORKBENCH_DATA = dataDir;
   const orig = { rfs: fs.readFileSync, rf: fs.readFile, wf: fs.watchFile };
   function rewrite(p) {
     const n = String(p).replace(/\\/g, '/');

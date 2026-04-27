@@ -118,11 +118,11 @@ Run any one-time data migrations needed for the new code. Check the commit log f
 
 ```bash
 # Clear poisoned Codex cli_session_ids (if upgrading from pre-#152 code)
-docker exec <container> sqlite3 /data/.blueprint/blueprint.db \
+docker exec <container> sqlite3 /data/.workbench/workbench.db \
   "UPDATE sessions SET cli_session_id = NULL WHERE cli_type = 'codex' AND length(cli_session_id) < 10;"
 
 # Clear Gemini cli_session_ids (if upgrading from pre-#152 code)
-docker exec <container> sqlite3 /data/.blueprint/blueprint.db \
+docker exec <container> sqlite3 /data/.workbench/workbench.db \
   "UPDATE sessions SET cli_session_id = NULL WHERE cli_type = 'gemini';"
 ```
 

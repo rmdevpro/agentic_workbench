@@ -13,6 +13,6 @@ services:
       - HOME=/data
       - CLAUDE_HOME=/data/.claude
       - CLAUDE_CONFIG_DIR=/data/.claude
-      - BLUEPRINT_DATA=/data/.blueprint
+      - WORKBENCH_DATA=/data/.workbench
       - MAX_TMUX_SESSIONS=5
     restart: "no"

@@ -24,7 +24,7 @@ Web-based CLI workbench for AI coding agents. Manage Claude Code sessions, proje
 Workbench auto-detects whether it's running on a public or private HF Space:
 
 - **Public Space** — all access is blocked with a landing page. No credentials can be entered or stored.
-- **Private Space** — full access. Optionally set `BLUEPRINT_USER` and `BLUEPRINT_PASS` as Space Secrets to add password protection.
+- **Private Space** — full access. Optionally set `WORKBENCH_USER` and `WORKBENCH_PASS` as Space Secrets to add password protection.
 - **Self-hosted** (docker-compose) — full access, no auth gate.
 
 ## Persistent Storage
@@ -93,7 +93,7 @@ Then open `http://localhost:7860`. See the **Hugging Face Spaces** section in `c
 
 All tunables are externalized in `.env` (see `.env.example` for complete list) and `config/defaults.json`:
 
-- **Server**: `PORT`, `WORKSPACE`, `CLAUDE_HOME`, `BLUEPRINT_DATA`
+- **Server**: `PORT`, `WORKSPACE`, `CLAUDE_HOME`, `WORKBENCH_DATA`
 - **Resources**: `MAX_TMUX_SESSIONS`, `TMUX_CLEANUP_MINUTES`
 - **Logging**: `LOG_LEVEL` (DEBUG, INFO, WARN, ERROR)
 - **Keepalive**: `KEEPALIVE_MODE`, `KEEPALIVE_IDLE_MINUTES`, timing thresholds via config, `keepalive.queryTimeoutMs`, prompts externalized to `config/prompts/keepalive-*.md`
@@ -147,7 +147,7 @@ Auth status is informational only — it does not affect the overall healthy/deg
 
 Workbench is a single-user, Docker-containerized IDE. Per AD-001, it intentionally provides full filesystem access to the user through `/api/browse`, `/api/file`, and the jqueryfiletree connector. No path containment checks are applied to these endpoints to support external file mounts (NFS, bind mounts) that may reside outside the workspace directory.
 
-Plan file operations (`blueprint_read_plan`, `blueprint_update_plan`) do enforce path containment within `BLUEPRINT_DATA/plans` using symlink-aware async validation, as these are internal data structures.
+Plan file operations (`workbench_read_plan`, `workbench_update_plan`) do enforce path containment within `WORKBENCH_DATA/plans` using symlink-aware async validation, as these are internal data structures.
 
 ## Compliance
 

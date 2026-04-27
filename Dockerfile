@@ -30,7 +30,7 @@ RUN npm install -g @anthropic-ai/claude-code @google/gemini-cli @openai/codex
 # Reuse the existing 'node' user (UID 1000) — rename to blueprint, home at /data
 RUN usermod -l blueprint -d /data -m node && \
     groupmod -n blueprint node && \
-    mkdir -p /data/.claude /data/.blueprint /data/workspace && \
+    mkdir -p /data/.claude /data/.workbench /data/workspace && \
     chown -R blueprint:blueprint /data
 
 # Copy and install app dependencies
@@ -48,7 +48,7 @@ RUN chmod +x /entrypoint.sh
 USER blueprint
 
 ENV HOME=/data
-ENV BLUEPRINT_DATA=/data/.blueprint
+ENV WORKBENCH_DATA=/data/.workbench
 ENV WORKSPACE=/data/workspace
 ENV CLAUDE_CONFIG_DIR=/data/.claude
 ENV PORT=7860

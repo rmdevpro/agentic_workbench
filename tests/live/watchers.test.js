@@ -36,7 +36,7 @@ test('WAT-11: settings file watcher detects changes via WebSocket', async () => 
   // to simulate an external change that the watcher should detect
   const testKey = `test_watcher_${Date.now()}`;
   dockerExec(
-    `sqlite3 /data/.blueprint/blueprint.db "INSERT OR REPLACE INTO settings (key, value) VALUES ('${testKey}', '\"watcher_test\"')"`,
+    `sqlite3 /data/.workbench/workbench.db "INSERT OR REPLACE INTO settings (key, value) VALUES ('${testKey}', '\"watcher_test\"')"`,
   );
 
   // Give the watcher time to detect the change
@@ -51,7 +51,7 @@ test('WAT-11: settings file watcher detects changes via WebSocket', async () => 
   );
 
   // Cleanup
-  dockerExec(`sqlite3 /data/.blueprint/blueprint.db "DELETE FROM settings WHERE key='${testKey}'"`);
+  dockerExec(`sqlite3 /data/.workbench/workbench.db "DELETE FROM settings WHERE key='${testKey}'"`);
 });
 
 test('WAT-12: JSONL watcher monitors Claude sessions directories', async () => {
