@@ -3,6 +3,7 @@
 const fsp = require('fs/promises');
 const fs = require('fs');
 const { join, basename } = require('path');
+const { spawn } = require('child_process');
 
 module.exports = function createWatchers({
   db,
@@ -236,6 +237,54 @@ module.exports = function createWatchers({
     }
   }
 
+  // Seed ~/.codex/auth.json so the CLI doesn't launch ChatGPT OAuth on first
+  // run. Codex CLI defaults to OAuth even when OPENAI_API_KEY is in env; only
+  // a populated auth.json (in API-key mode) flips it to use the env key
+  // directly. We invoke the canonical `codex login --with-api-key` command
+  // (which reads the key from stdin) rather than handcraft auth.json — that
+  // way the file format follows whatever the installed codex version expects.
+  // Idempotent: skip if auth.json already exists (preserves any user choice
+  // including manual ChatGPT login).
+  async function registerCodexAuth() {
+    const HOME = safe.HOME;
+    const authFile = join(HOME, '.codex', 'auth.json');
+    if (!process.env.OPENAI_API_KEY) return;
+    try {
+      await fsp.access(authFile);
+      return; // already exists — don't clobber
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        logger.warn('Codex auth.json access check failed', { module: 'watchers', err: err.message });
+        return;
+      }
+    }
+
+    await fsp.mkdir(join(HOME, '.codex'), { recursive: true });
+
+    await new Promise((resolve) => {
+      const child = spawn('codex', ['login', '--with-api-key'], {
+        env: { ...process.env, HOME },
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      let stderr = '';
+      child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+      child.on('error', (err) => {
+        logger.error('codex login spawn failed', { module: 'watchers', err: err.message });
+        resolve();
+      });
+      child.on('close', (code) => {
+        if (code === 0) {
+          logger.info('Seeded Codex auth.json from OPENAI_API_KEY', { module: 'watchers' });
+        } else {
+          logger.error('codex login --with-api-key failed', { module: 'watchers', code, stderr: stderr.substring(0, 500) });
+        }
+        resolve();
+      });
+      child.stdin.write(process.env.OPENAI_API_KEY);
+      child.stdin.end();
+    });
+  }
+
   async function registerCodexMcp() {
     const HOME = safe.HOME;
     const codexConfigFile = join(HOME, '.codex', 'config.toml');
@@ -390,6 +439,7 @@ module.exports = function createWatchers({
     registerMcpServer,
     registerGeminiMcp,
     registerCodexMcp,
+    registerCodexAuth,
     trustProjectDirs,
     trustCodexProjectDirs,
     ensureSettings,

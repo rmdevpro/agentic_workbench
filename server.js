@@ -208,6 +208,7 @@ const { checkAuthStatus } = registerCoreRoutes(app, {
   WORKSPACE,
   ensureSettings: watchers.ensureSettings,
   registerGeminiMcp: watchers.registerGeminiMcp,
+  registerCodexAuth: watchers.registerCodexAuth,
   sleep: tmux.sleep,
 });
 
@@ -299,6 +300,12 @@ if (require.main === module) {
         );
         watchers.registerCodexMcp().catch((err) =>
           logger.error('Post-startup MCP registration failed (Codex)', {
+            module: 'server',
+            err: err.message,
+          }),
+        );
+        watchers.registerCodexAuth().catch((err) =>
+          logger.error('Post-startup Codex auth seeding failed', {
             module: 'server',
             err: err.message,
           }),
