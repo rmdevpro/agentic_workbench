@@ -142,6 +142,12 @@ db.db.exec(`
   )
 `);
 
+// Incremental session sync: track the last turn index we embedded so that on a
+// re-sync we only embed new turns + a small overlap window — instead of
+// re-embedding the entire conversation. ALTER is idempotent (caught by try).
+try { db.db.exec("ALTER TABLE qdrant_sync ADD COLUMN last_turn_index INTEGER DEFAULT NULL"); }
+catch (_e) { /* column exists */ }
+
 const syncStmts = {
   get: db.db.prepare('SELECT * FROM qdrant_sync WHERE file_path = ?'),
   upsert: db.db.prepare(`
@@ -151,6 +157,16 @@ const syncStmts = {
       last_offset = excluded.last_offset,
       last_mtime = excluded.last_mtime,
       last_hash = excluded.last_hash,
+      updated_at = datetime('now')
+  `),
+  upsertWithTurnIndex: db.db.prepare(`
+    INSERT INTO qdrant_sync (file_path, collection, last_offset, last_mtime, last_hash, last_turn_index)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(file_path) DO UPDATE SET
+      last_offset = excluded.last_offset,
+      last_mtime = excluded.last_mtime,
+      last_hash = excluded.last_hash,
+      last_turn_index = excluded.last_turn_index,
       updated_at = datetime('now')
   `),
   getByCollection: db.db.prepare('SELECT * FROM qdrant_sync WHERE collection = ?'),
@@ -596,30 +612,70 @@ async function syncSessionFile(filePath, collection, parser, dims) {
   const syncState = syncStmts.get.get(filePath);
   const fileStat = await stat(filePath);
 
-  // Check if file has changed
+  // Skip if file hasn't changed since last sync
   if (syncState && syncState.last_mtime === fileStat.mtimeMs) return 0;
 
   const content = await readFile(filePath, 'utf-8');
-  const turns = parser(content);
-
-  if (turns.length === 0) return 0;
-
+  const allTurns = parser(content);
+  if (allTurns.length === 0) return 0;
   const sessionId = basename(filePath).replace(/\.(jsonl|json)$/, '');
 
-  // Delete old points and re-index (simpler than offset tracking for windowed chunks)
-  await deletePointsByFilter(collection, {
-    must: [{ key: 'session_id', match: { value: sessionId } }],
-  });
+  // Incremental sync — only re-embed turns added since last sync (plus a small
+  // overlap window so the new chunks blend with the prior context). Without
+  // this, every file change triggered a full re-embed of the entire conversation
+  // (~thousands of API calls per appended message). Now: 1 message ≈ 1 chunk.
+  //
+  // Point IDs are derived from turn_start (not chunk-batch position) so they're
+  // stable across re-syncs — overlapping chunks get re-upserted in place.
+  const lastIdx = syncState?.last_turn_index;
+  const lastTurn = allTurns.length - 1;
+  let fromTurn = 0;
+  let isIncremental = false;
 
-  const chunks = chunkSessionTurns(turns);
-  if (chunks.length === 0) return 0;
+  if (lastIdx != null) {
+    if (lastIdx >= lastTurn) {
+      // No new turns. Just record the new mtime and bail (no API calls).
+      syncStmts.upsertWithTurnIndex.run(
+        filePath, collection, content.length, fileStat.mtimeMs, '', lastIdx,
+      );
+      return 0;
+    }
+    // Re-embed from (lastIdx - CHUNK_OVERLAP) onward — overlap so new chunks
+    // include trailing context from the prior pass for retrieval continuity.
+    fromTurn = Math.max(0, lastIdx - CHUNK_OVERLAP);
+    isIncremental = true;
+  }
+
+  const subTurns = allTurns.slice(fromTurn);
+  const rawChunks = chunkSessionTurns(subTurns);
+  if (rawChunks.length === 0) return 0;
+  // Re-anchor metadata to absolute turn indices in the original turns array.
+  const chunks = rawChunks.map(c => ({
+    text: c.text,
+    metadata: {
+      turn_start: c.metadata.turn_start + fromTurn,
+      turn_end: c.metadata.turn_end + fromTurn,
+    },
+  }));
+
+  if (isIncremental) {
+    // Delete only the chunks whose turn_start falls in the overlap+new range.
+    await deletePointsByFilter(collection, {
+      must: [
+        { key: 'session_id', match: { value: sessionId } },
+        { key: 'turn_start', range: { gte: fromTurn } },
+      ],
+    });
+  } else {
+    // First sync (or post-rotation full sync) — drop all and re-index.
+    await deletePointsByFilter(collection, {
+      must: [{ key: 'session_id', match: { value: sessionId } }],
+    });
+  }
 
   const texts = chunks.map(c => c.text);
-
   // Batch embeddings in groups of 10 with delay to avoid burst rate limits AND
-  // keep aggregate per-batch tokens well under Gemini's per-request cap. Larger
-  // batches (e.g. 20 chunks × ~1500 tokens each = ~30k aggregate) could break
-  // the request mid-write with EPIPE.
+  // keep aggregate per-batch tokens well under Gemini's per-request cap.
   const allEmbeddings = [];
   for (let i = 0; i < texts.length; i += 10) {
     const batch = texts.slice(i, i + 10);
@@ -629,7 +685,7 @@ async function syncSessionFile(filePath, collection, parser, dims) {
   }
 
   const points = chunks.map((chunk, i) => ({
-    id: pointId(filePath, i),
+    id: pointId(filePath, chunk.metadata.turn_start), // stable ID across re-syncs
     vector: allEmbeddings[i],
     payload: {
       session_id: sessionId,
@@ -641,16 +697,21 @@ async function syncSessionFile(filePath, collection, parser, dims) {
     },
   }));
 
-  // Batch the upsert too. Qdrant rejects POST bodies > 32 MiB by default. A
-  // 384-dim float vector + payload ≈ 4-5 KB JSON per point, so a 22k-point
-  // session would produce a ~38 MB body and get rejected with
-  // "Payload error: JSON payload (... bytes) is larger than allowed".
-  // 5000 points/batch ≈ 15-20 MB, comfortable margin.
+  // Batch the upsert too — Qdrant rejects POST bodies > 32 MiB by default.
   const UPSERT_BATCH = 5000;
   for (let i = 0; i < points.length; i += UPSERT_BATCH) {
     await upsertPoints(collection, points.slice(i, i + UPSERT_BATCH));
   }
-  syncStmts.upsert.run(filePath, collection, content.length, fileStat.mtimeMs, '');
+
+  syncStmts.upsertWithTurnIndex.run(
+    filePath, collection, content.length, fileStat.mtimeMs, '', lastTurn,
+  );
+  if (isIncremental) {
+    logger.info('Session incrementally synced', {
+      module: 'qdrant-sync', file: basename(filePath),
+      newTurns: lastTurn - (lastIdx ?? -1), embedded: points.length,
+    });
+  }
   return points.length;
 }
 
