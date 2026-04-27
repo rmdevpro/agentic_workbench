@@ -3,7 +3,6 @@
 const fsp = require('fs/promises');
 const fs = require('fs');
 const { join, basename } = require('path');
-const { spawn } = require('child_process');
 
 module.exports = function createWatchers({
   db,
@@ -237,52 +236,54 @@ module.exports = function createWatchers({
     }
   }
 
-  // Seed ~/.codex/auth.json so the CLI doesn't launch ChatGPT OAuth on first
-  // run. Codex CLI defaults to OAuth even when OPENAI_API_KEY is in env; only
-  // a populated auth.json (in API-key mode) flips it to use the env key
-  // directly. We invoke the canonical `codex login --with-api-key` command
-  // (which reads the key from stdin) rather than handcraft auth.json — that
-  // way the file format follows whatever the installed codex version expects.
-  // Idempotent: skip if auth.json already exists (preserves any user choice
-  // including manual ChatGPT login).
-  async function registerCodexAuth() {
+  // Configure Codex CLI to use OPENAI_API_KEY from env without launching the
+  // ChatGPT OAuth flow. The default `openai` model_provider does not honor
+  // env-var auth — per OpenAI's own docs, the supported way is a custom
+  // model_provider block in ~/.codex/config.toml with `env_key` and
+  // `requires_openai_auth = false`. The key never lands in any file we write.
+  // Idempotent: skip if our [model_providers.openai-api] block is already
+  // present (preserves user choice).
+  async function registerCodexProvider() {
     const HOME = safe.HOME;
-    const authFile = join(HOME, '.codex', 'auth.json');
+    const codexConfigFile = join(HOME, '.codex', 'config.toml');
     if (!process.env.OPENAI_API_KEY) return;
+
+    let content = '';
     try {
-      await fsp.access(authFile);
-      return; // already exists — don't clobber
+      content = await fsp.readFile(codexConfigFile, 'utf-8');
     } catch (err) {
       if (err.code !== 'ENOENT') {
-        logger.warn('Codex auth.json access check failed', { module: 'watchers', err: err.message });
+        logger.warn('Failed to read codex config.toml for provider seed', { module: 'watchers', err: err.message });
         return;
       }
     }
 
-    await fsp.mkdir(join(HOME, '.codex'), { recursive: true });
+    if (content.includes('[model_providers.openai-api]')) return;
 
-    await new Promise((resolve) => {
-      const child = spawn('codex', ['login', '--with-api-key'], {
-        env: { ...process.env, HOME },
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
-      let stderr = '';
-      child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
-      child.on('error', (err) => {
-        logger.error('codex login spawn failed', { module: 'watchers', err: err.message });
-        resolve();
-      });
-      child.on('close', (code) => {
-        if (code === 0) {
-          logger.info('Seeded Codex auth.json from OPENAI_API_KEY', { module: 'watchers' });
-        } else {
-          logger.error('codex login --with-api-key failed', { module: 'watchers', code, stderr: stderr.substring(0, 500) });
-        }
-        resolve();
-      });
-      child.stdin.write(process.env.OPENAI_API_KEY);
-      child.stdin.end();
-    });
+    const providerBlock = `\n[model_providers.openai-api]\nname = "OpenAI (API key from env)"\nbase_url = "https://api.openai.com/v1"\nwire_api = "responses"\nenv_key = "OPENAI_API_KEY"\nrequires_openai_auth = false\n`;
+
+    // TOML rule: top-level keys must come before any [section]. Split the
+    // existing file at its first section so we can update model_provider in
+    // the top-level area without accidentally rewriting a section key.
+    const sectionStart = content.search(/^\[/m);
+    const splitAt = sectionStart >= 0 ? sectionStart : content.length;
+    const topLevel = content.slice(0, splitAt);
+    const sections = content.slice(splitAt);
+
+    const mpRegex = /^model_provider\s*=\s*"[^"]*"\s*$/m;
+    const newTopLevel = mpRegex.test(topLevel)
+      ? topLevel.replace(mpRegex, 'model_provider = "openai-api"')
+      : `model_provider = "openai-api"\n${topLevel ? '\n' + topLevel : ''}`;
+
+    const newContent = (newTopLevel + sections).trimEnd() + '\n' + providerBlock;
+
+    try {
+      await fsp.mkdir(join(HOME, '.codex'), { recursive: true });
+      await fsp.writeFile(codexConfigFile, newContent);
+      logger.info('Configured Codex API-key provider in config.toml', { module: 'watchers' });
+    } catch (err) {
+      logger.error('Could not write Codex provider config', { module: 'watchers', err: err.message });
+    }
   }
 
   async function registerCodexMcp() {
@@ -439,7 +440,7 @@ module.exports = function createWatchers({
     registerMcpServer,
     registerGeminiMcp,
     registerCodexMcp,
-    registerCodexAuth,
+    registerCodexProvider,
     trustProjectDirs,
     trustCodexProjectDirs,
     ensureSettings,

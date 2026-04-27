@@ -76,7 +76,7 @@ function registerCoreRoutes(
     WORKSPACE,
     ensureSettings,
     registerGeminiMcp,
-    registerCodexAuth,
+    registerCodexProvider,
     sleep,
   },
 ) {
@@ -1198,11 +1198,11 @@ function registerCoreRoutes(
     }
     if (key === 'codex_api_key') {
       process.env.OPENAI_API_KEY = value || '';
-      // Seed ~/.codex/auth.json so the CLI uses API-key auth instead of
-      // launching ChatGPT OAuth on the next session. Skips if auth.json
-      // already exists (preserves user choice).
-      registerCodexAuth().catch(err =>
-        logger.warn('registerCodexAuth after codex_api_key save failed', { module: 'routes', err: err.message })
+      // Seed ~/.codex/config.toml with the api-key provider so the CLI
+      // reads OPENAI_API_KEY from env on the next session instead of
+      // launching ChatGPT OAuth. Idempotent; preserves any user choice.
+      registerCodexProvider().catch(err =>
+        logger.warn('registerCodexProvider after codex_api_key save failed', { module: 'routes', err: err.message })
       );
     }
 
