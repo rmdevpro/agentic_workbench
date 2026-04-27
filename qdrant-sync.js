@@ -426,10 +426,15 @@ function parseClaudeJsonl(content) {
             .join('\n');
         }
         if (text.length > 10) {
-          // Truncate very long messages for embedding
+          // Truncate very long messages for embedding. Cap = 1200 chars/turn
+          // so a 3-turn chunk (CHUNK_WINDOW=3) stays well under Gemini's
+          // 2048-token-per-input limit. 1200 chars × 3 + overhead ≈ 3650 chars
+          // ≈ 900-1100 tokens, comfortable margin. Prior 2000-char cap could
+          // produce ~6000-char chunks ≈ 1800-2000 tokens that broke Gemini's
+          // request mid-write with EPIPE.
           turns.push({
             role: msg.role || entry.type,
-            content: text.substring(0, 2000),
+            content: text.substring(0, 1200),
             timestamp: entry.timestamp,
           });
         }
@@ -582,13 +587,16 @@ async function syncSessionFile(filePath, collection, parser, dims) {
 
   const texts = chunks.map(c => c.text);
 
-  // Batch embeddings in groups of 20 with delay to avoid burst rate limits
+  // Batch embeddings in groups of 10 with delay to avoid burst rate limits AND
+  // keep aggregate per-batch tokens well under Gemini's per-request cap. Larger
+  // batches (e.g. 20 chunks × ~1500 tokens each = ~30k aggregate) could break
+  // the request mid-write with EPIPE.
   const allEmbeddings = [];
-  for (let i = 0; i < texts.length; i += 20) {
-    const batch = texts.slice(i, i + 20);
+  for (let i = 0; i < texts.length; i += 10) {
+    const batch = texts.slice(i, i + 10);
     const batchEmbeddings = await embed(batch, dims);
     allEmbeddings.push(...batchEmbeddings);
-    if (i + 20 < texts.length) await new Promise(r => setTimeout(r, 200));
+    if (i + 10 < texts.length) await new Promise(r => setTimeout(r, 200));
   }
 
   const points = chunks.map((chunk, i) => ({
