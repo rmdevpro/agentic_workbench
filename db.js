@@ -2,49 +2,11 @@
 
 const Database = require('better-sqlite3');
 const { join } = require('path');
-const { mkdirSync, existsSync, renameSync } = require('fs');
+const { mkdirSync } = require('fs');
 
-// Path resolution (Phases 3 + 5):
-// 1. Honor WORKBENCH_DATA env var (canonical, Phase 3).
-// 2. Else honor legacy BLUEPRINT_DATA env var (still accepted for back-compat).
-// 3. Else default to /data/.workbench (canonical, Phase 5).
-// 4. Migrate /data/.blueprint → /data/.workbench in-place if the new dir doesn't
-//    exist yet but the old one does. One-shot, idempotent.
-// 5. Open the DB. Filename: workbench.db (canonical, Phase 5). If only the
-//    legacy blueprint.db exists in the resolved dir, rename it.
-const HOME = process.env.HOME || '/data';
-const LEGACY_DATA_DIR = join(HOME, '.blueprint');
-const NEW_DATA_DIR = join(HOME, '.workbench');
-const DATA_DIR =
-  process.env.WORKBENCH_DATA ||
-  process.env.BLUEPRINT_DATA ||
-  NEW_DATA_DIR;
-
-if (!existsSync(DATA_DIR) && existsSync(LEGACY_DATA_DIR) && DATA_DIR === NEW_DATA_DIR) {
-  // Phase 5 migration: directory rename. Atomic on the same filesystem.
-  renameSync(LEGACY_DATA_DIR, DATA_DIR);
-  // eslint-disable-next-line no-console
-  console.log(`[db] Migrated ${LEGACY_DATA_DIR} → ${DATA_DIR}`);
-}
+const DATA_DIR = process.env.WORKBENCH_DATA || join(process.env.HOME || '/data', '.workbench');
 mkdirSync(DATA_DIR, { recursive: true });
-
-// File rename inside DATA_DIR: blueprint.db → workbench.db
-const LEGACY_DB = join(DATA_DIR, 'blueprint.db');
-const NEW_DB = join(DATA_DIR, 'workbench.db');
-if (!existsSync(NEW_DB) && existsSync(LEGACY_DB)) {
-  renameSync(LEGACY_DB, NEW_DB);
-  // SQLite WAL/SHM siblings move with it
-  for (const sibling of ['blueprint.db-wal', 'blueprint.db-shm']) {
-    const oldPath = join(DATA_DIR, sibling);
-    if (existsSync(oldPath)) {
-      renameSync(oldPath, join(DATA_DIR, sibling.replace('blueprint', 'workbench')));
-    }
-  }
-  // eslint-disable-next-line no-console
-  console.log(`[db] Migrated ${LEGACY_DB} → ${NEW_DB}`);
-}
-
-const db = new Database(NEW_DB);
+const db = new Database(join(DATA_DIR, 'workbench.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 

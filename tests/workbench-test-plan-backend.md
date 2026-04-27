@@ -21,7 +21,7 @@
 - `blueprint_send_message`, `blueprint_get_project_notes`, `blueprint_get_session_notes`, `blueprint_ask_cli`, `blueprint_ask_quorum`, `blueprint_smart_compaction` — all removed
 
 ### Changed modules
-- `mcp-tools.js` — 17 tools consolidated to 3 (`blueprint_files`, `blueprint_sessions`, `blueprint_tasks`)
+- `mcp-tools.js` — 17 tools consolidated to 3 (`workbench_files`, `workbench_sessions`, `workbench_tasks`)
 - `mcp-server.js` — tool definitions updated to match
 - `db.js` — added `cli_type` column, `mcp_registry` and `mcp_project_enabled` tables, `searchSessionsByName()`
 - `safe-exec.js` — added `tmuxCreateGemini()`, `tmuxCreateCodex()`, user `blueprint` (was `hopper`)
@@ -895,44 +895,44 @@ This is the highest-risk subsystem. It requires both granular stage tests and fu
 | ID | Capability | Layer | Status |
 |----|-----------|-------|--------|
 | MCS-01 | JSON-RPC `initialize` returns protocol version | Mock + Live | NONE |
-| MCS-02 | `tools/list` returns all 3 tools (blueprint_files, blueprint_sessions, blueprint_tasks) | Mock | NONE |
+| MCS-02 | `tools/list` returns all 3 tools (workbench_files, workbench_sessions, workbench_tasks) | Mock | NONE |
 | MCS-03 | `tools/call` delegates to Workbench HTTP API | Live | NONE |
-| MCS-04a | `blueprint_files action=list` | Live | PASS |
-| MCS-04b | `blueprint_files action=read` | Live | PASS |
-| MCS-04c | `blueprint_files action=grep` | Live | PASS |
-| MCS-04d | `blueprint_files action=create` | Live | PASS |
-| MCS-04e | `blueprint_files action=update` | Live | PASS |
-| MCS-04f | `blueprint_files action=delete` | Live | PASS |
-| MCS-04g | `blueprint_files action=search_documents` | Live | PASS |
-| MCS-04h | `blueprint_files action=search_code` | Live | PASS |
-| MCS-04i | `blueprint_sessions action=list` | Live | PASS |
-| MCS-04j | `blueprint_sessions action=new` (claude) | Live | PASS |
-| MCS-04k | `blueprint_sessions action=new` (gemini) | Live | PASS |
-| MCS-04l | `blueprint_sessions action=new` (codex) | Live | PASS |
-| MCS-04m | `blueprint_sessions action=connect` (by id) | Live | PASS |
-| MCS-04n | `blueprint_sessions action=connect` (by query) | Live | PASS |
-| MCS-04o | `blueprint_sessions action=restart` | Live | PASS |
-| MCS-04p | `blueprint_sessions action=config` | Live | PASS |
-| MCS-04q | `blueprint_sessions action=tokens` | Live | PASS |
-| MCS-04r | `blueprint_sessions action=summarize` | Live | PASS |
-| MCS-04s | `blueprint_sessions action=transition` | Live | PASS |
-| MCS-04t | `blueprint_sessions action=resume` | Live | PASS |
-| MCS-04u | `blueprint_sessions action=grep` (claude filter) | Live | PASS |
-| MCS-04v | `blueprint_sessions action=grep` (all CLIs) | Live | PASS |
-| MCS-04w | `blueprint_sessions action=search_semantic` | Live | PASS |
-| MCS-04x | `blueprint_sessions action=mcp_register` | Live | PASS |
-| MCS-04y | `blueprint_sessions action=mcp_unregister` | Live | PASS |
-| MCS-04z | `blueprint_sessions action=mcp_enable` | Live | PASS |
-| MCS-04aa | `blueprint_sessions action=mcp_disable` | Live | PASS |
-| MCS-04ab | `blueprint_sessions action=mcp_list_available` | Live | PASS |
-| MCS-04ac | `blueprint_sessions action=mcp_list_enabled` | Live | PASS |
-| MCS-04ad | `blueprint_tasks action=get` | Live | PASS |
-| MCS-04ae | `blueprint_tasks action=add` | Live | PASS |
-| MCS-04af | `blueprint_tasks action=complete` | Live | PASS |
-| MCS-04ag | `blueprint_tasks action=reopen` | Live | PASS |
-| MCS-04ah | `blueprint_tasks action=archive` | Live | PASS |
-| MCS-04ai | `blueprint_tasks action=move` | Live | PASS |
-| MCS-04aj | `blueprint_tasks action=update` | Live | PASS |
+| MCS-04a | `workbench_files action=list` | Live | PASS |
+| MCS-04b | `workbench_files action=read` | Live | PASS |
+| MCS-04c | `workbench_files action=grep` | Live | PASS |
+| MCS-04d | `workbench_files action=create` | Live | PASS |
+| MCS-04e | `workbench_files action=update` | Live | PASS |
+| MCS-04f | `workbench_files action=delete` | Live | PASS |
+| MCS-04g | `workbench_files action=search_documents` | Live | PASS |
+| MCS-04h | `workbench_files action=search_code` | Live | PASS |
+| MCS-04i | `workbench_sessions action=list` | Live | PASS |
+| MCS-04j | `workbench_sessions action=new` (claude) | Live | PASS |
+| MCS-04k | `workbench_sessions action=new` (gemini) | Live | PASS |
+| MCS-04l | `workbench_sessions action=new` (codex) | Live | PASS |
+| MCS-04m | `workbench_sessions action=connect` (by id) | Live | PASS |
+| MCS-04n | `workbench_sessions action=connect` (by query) | Live | PASS |
+| MCS-04o | `workbench_sessions action=restart` | Live | PASS |
+| MCS-04p | `workbench_sessions action=config` | Live | PASS |
+| MCS-04q | `workbench_sessions action=tokens` | Live | PASS |
+| MCS-04r | `workbench_sessions action=summarize` | Live | PASS |
+| MCS-04s | `workbench_sessions action=transition` | Live | PASS |
+| MCS-04t | `workbench_sessions action=resume` | Live | PASS |
+| MCS-04u | `workbench_sessions action=grep` (claude filter) | Live | PASS |
+| MCS-04v | `workbench_sessions action=grep` (all CLIs) | Live | PASS |
+| MCS-04w | `workbench_sessions action=search_semantic` | Live | PASS |
+| MCS-04x | `workbench_sessions action=mcp_register` | Live | PASS |
+| MCS-04y | `workbench_sessions action=mcp_unregister` | Live | PASS |
+| MCS-04z | `workbench_sessions action=mcp_enable` | Live | PASS |
+| MCS-04aa | `workbench_sessions action=mcp_disable` | Live | PASS |
+| MCS-04ab | `workbench_sessions action=mcp_list_available` | Live | PASS |
+| MCS-04ac | `workbench_sessions action=mcp_list_enabled` | Live | PASS |
+| MCS-04ad | `workbench_tasks action=get` | Live | PASS |
+| MCS-04ae | `workbench_tasks action=add` | Live | PASS |
+| MCS-04af | `workbench_tasks action=complete` | Live | PASS |
+| MCS-04ag | `workbench_tasks action=reopen` | Live | PASS |
+| MCS-04ah | `workbench_tasks action=archive` | Live | PASS |
+| MCS-04ai | `workbench_tasks action=move` | Live | PASS |
+| MCS-04aj | `workbench_tasks action=update` | Live | PASS |
 | MCS-05 | Invalid tool name returns error | Mock | NONE |
 | MCS-06 | Malformed JSON-RPC request handling | Mock | NONE |
 | MCS-07 | `notifications/initialized` no-op | Live | NONE |

@@ -19,7 +19,7 @@ test('MCP-06g/06f: add task and get tasks via MCP with DB count verification', a
   const countBefore = queryCount('tasks', "folder_path = '/'");
 
   const addResult = await post('/api/mcp/call', {
-    tool: 'blueprint_tasks',
+    tool: 'workbench_tasks',
     args: { action: 'add', folder_path: '/', title: 'mcp-task-test' },
   });
   assert.ok(addResult.data.result);
@@ -29,11 +29,11 @@ test('MCP-06g/06f: add task and get tasks via MCP with DB count verification', a
   assert.equal(
     countAfter,
     countBefore + 1,
-    `DB task count must increment by 1 after blueprint_tasks add (before: ${countBefore}, after: ${countAfter})`,
+    `DB task count must increment by 1 after workbench_tasks add (before: ${countBefore}, after: ${countAfter})`,
   );
 
   const r = await post('/api/mcp/call', {
-    tool: 'blueprint_tasks',
+    tool: 'workbench_tasks',
     args: { action: 'get', folder_path: '/' },
   });
   assert.ok(r.data.result.tasks.some((t) => t.title === 'mcp-task-test'));

@@ -47,7 +47,7 @@ Issue #XX: Step 6 — Verify: Smoke test fix + regression
 Issue #XX: Step 7 — Close: Update and close GitHub Issue
 ```
 
-Use Blueprint's task system (`blueprint_tasks` MCP tool or Claude Code TaskCreate) to track these. Work ONE issue at a time. Complete every step before moving to the next step. Do not skip steps. Do not jump ahead.
+Use Blueprint's task system (`workbench_tasks` MCP tool or Claude Code TaskCreate) to track these. Work ONE issue at a time. Complete every step before moving to the next step. Do not skip steps. Do not jump ahead.
 
 **If you need to pause an issue** (e.g., waiting for a long test), save the current task state as a comment in the GitHub Issue so you can return to it later. Then start Step 0 for the next issue.
 
@@ -116,7 +116,7 @@ Each model has different blind spots. In practice:
 
 Send all three in parallel. Ask them to find root cause independently — do NOT tell them your theory. No leading questions. Let them find everything on their own.
 
-**Preferred: Blueprint session MCP tools.** Use `blueprint_sessions` to create sessions for each CLI. This handles startup prompts and session management automatically.
+**Preferred: Blueprint session MCP tools.** Use `workbench_sessions` to create sessions for each CLI. This handles startup prompts and session management automatically.
 
 **Alternative: tmux sessions.** Follow the tmux guide (`docs/guides/using-other-clis-via-tmux.md`) for interaction patterns, especially for long prompts (use load-buffer/paste-buffer) and handling startup prompts.
 
@@ -126,9 +126,9 @@ Pattern: `[cli]-[issue#]-[step]` e.g. `claude-123-rca`, `gemini-123-rca`, `codex
 ```bash
 # Create sessions for all 3 CLIs
 # Via Workbench MCP tools (preferred):
-blueprint_sessions action:new cli:claude project:<project> prompt:"RCA for issue #123"
-blueprint_sessions action:new cli:gemini project:<project> prompt:"RCA for issue #123"
-blueprint_sessions action:new cli:codex  project:<project> prompt:"RCA for issue #123"
+workbench_sessions action:new cli:claude project:<project> prompt:"RCA for issue #123"
+workbench_sessions action:new cli:gemini project:<project> prompt:"RCA for issue #123"
+workbench_sessions action:new cli:codex  project:<project> prompt:"RCA for issue #123"
 
 # Via tmux (alternative):
 tmux new-session -d -s claude-123-rca -x 200 -y 50

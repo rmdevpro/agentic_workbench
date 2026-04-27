@@ -34,7 +34,7 @@ This plan was originally written for a single-CLI (Claude) system with notes, me
 - **Tmux lifecycle** — periodic scan, idle timeouts, session limits
 - **CLI type indicator** — C/G/X with per-CLI colors
 - **Filter/sort dropdowns** — replaced filter buttons
-- **3 MCP tools** — blueprint_files, blueprint_sessions, blueprint_tasks (consolidated from 17)
+- **3 MCP tools** — workbench_files, workbench_sessions, workbench_tasks (consolidated from 17)
 
 ---
 
@@ -1129,9 +1129,9 @@ Workbench wraps Claude Code sessions in tmux. Users interact with Claude through
 
 | ID | Tool | Verification | Gray-Box |
 |----|------|-------------|----------|
-| CLI-10 | `blueprint_tasks action=get` | Task list shown in terminal | -- |
-| CLI-11 | `blueprint_tasks action=add` | Task added | Tasks API shows new task |
-| CLI-12 | `blueprint_sessions action=grep` | Search results shown | -- |
+| CLI-10 | `workbench_tasks action=get` | Task list shown in terminal | -- |
+| CLI-11 | `workbench_tasks action=add` | Task added | Tasks API shows new task |
+| CLI-12 | `workbench_sessions action=grep` | Search results shown | -- |
 | CLI-13 | ~~`blueprint_get_project_notes`~~ REMOVED | — | Notes endpoint deleted |
 | CLI-14 | ~~`blueprint_smart_compaction`~~ REMOVED | — | Feature deleted |
 

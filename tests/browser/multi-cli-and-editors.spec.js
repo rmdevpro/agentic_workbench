@@ -205,7 +205,7 @@ describe('Multi-CLI sessions, editors, and task panel (browser)', () => {
   it('EDIT-03: clicking Save persists file and resets dirty state', async () => {
     // Create a test file via MCP (ensures workspace path)
     await apiPost('/api/mcp/call', {
-      tool: 'blueprint_files',
+      tool: 'workbench_files',
       args: { action: 'create', path: 'bp-seed/edit-test.txt', content: 'original' },
     });
     await page.evaluate(() => openFileTab('/data/workspace/bp-seed/edit-test.txt'));
@@ -228,7 +228,7 @@ describe('Multi-CLI sessions, editors, and task panel (browser)', () => {
     assert.equal(dirty, false, 'dirty reset after save');
     // Verify file content on disk
     const rd = await apiPost('/api/mcp/call', {
-      tool: 'blueprint_files', args: { action: 'read', path: 'bp-seed/edit-test.txt' },
+      tool: 'workbench_files', args: { action: 'read', path: 'bp-seed/edit-test.txt' },
     });
     assert.equal(rd.result.content, 'saved content');
   });
@@ -263,7 +263,7 @@ describe('Multi-CLI sessions, editors, and task panel (browser)', () => {
   it('TASK-03: adding task via context menu creates it in the DB', async () => {
     // Add via API to avoid prompt() dialog in headless
     const result = await apiPost('/api/mcp/call', {
-      tool: 'blueprint_tasks',
+      tool: 'workbench_tasks',
       args: { action: 'add', folder_path: '/data/workspace/bp-seed', title: 'TASK-03 test task' },
     });
     assert.ok(result.result.id, 'task created with ID');
@@ -278,7 +278,7 @@ describe('Multi-CLI sessions, editors, and task panel (browser)', () => {
     assert.ok(sess.id, 'session created for connect test');
     await new Promise(r => setTimeout(r, 3000));
     const result = await apiPost('/api/mcp/call', {
-      tool: 'blueprint_sessions',
+      tool: 'workbench_sessions',
       args: { action: 'connect', query: 'findme' },
     });
     assert.ok(result.result?.session_id, `session found, got: ${JSON.stringify(result)}`);
@@ -291,7 +291,7 @@ describe('Multi-CLI sessions, editors, and task panel (browser)', () => {
     assert.ok(sess.id, 'session created for restart test');
     await new Promise(r => setTimeout(r, 3000));
     const result = await apiPost('/api/mcp/call', {
-      tool: 'blueprint_sessions',
+      tool: 'workbench_sessions',
       args: { action: 'restart', session_id: sess.id },
     });
     assert.ok(result.result, `restart result exists, got: ${JSON.stringify(result)}`);
@@ -301,65 +301,65 @@ describe('Multi-CLI sessions, editors, and task panel (browser)', () => {
 
   // ── #97: MCP Tool Actions ─────────────────────────────────
 
-  it('MCP-01: blueprint_files list action returns entries', async () => {
+  it('MCP-01: workbench_files list action returns entries', async () => {
     const result = await apiPost('/api/mcp/call', {
-      tool: 'blueprint_files', args: { action: 'list', path: 'bp-seed' },
+      tool: 'workbench_files', args: { action: 'list', path: 'bp-seed' },
     });
     assert.ok(Array.isArray(result.result.entries), 'entries is array');
   });
 
-  it('MCP-02: blueprint_files create/read/delete cycle works', async () => {
+  it('MCP-02: workbench_files create/read/delete cycle works', async () => {
     const cr = await apiPost('/api/mcp/call', {
-      tool: 'blueprint_files', args: { action: 'create', path: 'bp-seed/mcp-test.txt', content: 'hello' },
+      tool: 'workbench_files', args: { action: 'create', path: 'bp-seed/mcp-test.txt', content: 'hello' },
     });
     assert.ok(cr.result.created);
     const rd = await apiPost('/api/mcp/call', {
-      tool: 'blueprint_files', args: { action: 'read', path: 'bp-seed/mcp-test.txt' },
+      tool: 'workbench_files', args: { action: 'read', path: 'bp-seed/mcp-test.txt' },
     });
     assert.equal(rd.result.content, 'hello');
     const dl = await apiPost('/api/mcp/call', {
-      tool: 'blueprint_files', args: { action: 'delete', path: 'bp-seed/mcp-test.txt' },
+      tool: 'workbench_files', args: { action: 'delete', path: 'bp-seed/mcp-test.txt' },
     });
     assert.ok(dl.result.deleted);
   });
 
-  it('MCP-03: blueprint_files grep finds pattern in files', async () => {
+  it('MCP-03: workbench_files grep finds pattern in files', async () => {
     const result = await apiPost('/api/mcp/call', {
-      tool: 'blueprint_files', args: { action: 'grep', pattern: 'README' },
+      tool: 'workbench_files', args: { action: 'grep', pattern: 'README' },
     });
     assert.ok(Array.isArray(result.result.matches));
   });
 
-  it('MCP-04: blueprint_tasks full lifecycle (add/complete/reopen/archive)', async () => {
+  it('MCP-04: workbench_tasks full lifecycle (add/complete/reopen/archive)', async () => {
     const add = await apiPost('/api/mcp/call', {
-      tool: 'blueprint_tasks', args: { action: 'add', folder_path: '/', title: 'lifecycle test' },
+      tool: 'workbench_tasks', args: { action: 'add', folder_path: '/', title: 'lifecycle test' },
     });
     const id = String(add.result.id);
     const comp = await apiPost('/api/mcp/call', {
-      tool: 'blueprint_tasks', args: { action: 'complete', task_id: id },
+      tool: 'workbench_tasks', args: { action: 'complete', task_id: id },
     });
     assert.equal(comp.result.completed, true);
     const reop = await apiPost('/api/mcp/call', {
-      tool: 'blueprint_tasks', args: { action: 'reopen', task_id: id },
+      tool: 'workbench_tasks', args: { action: 'reopen', task_id: id },
     });
     assert.equal(reop.result.reopened, true);
     const arch = await apiPost('/api/mcp/call', {
-      tool: 'blueprint_tasks', args: { action: 'archive', task_id: id },
+      tool: 'workbench_tasks', args: { action: 'archive', task_id: id },
     });
     assert.equal(arch.result.archived, true);
   });
 
-  it('MCP-05: blueprint_sessions list returns sessions for project', async () => {
+  it('MCP-05: workbench_sessions list returns sessions for project', async () => {
     const result = await apiPost('/api/mcp/call', {
-      tool: 'blueprint_sessions', args: { action: 'list', project: 'bp-seed' },
+      tool: 'workbench_sessions', args: { action: 'list', project: 'bp-seed' },
     });
     assert.ok(Array.isArray(result.result));
   });
 
-  it('MCP-06: blueprint_sessions config saves session name', async () => {
+  it('MCP-06: workbench_sessions config saves session name', async () => {
     const sess = await apiPost('/api/sessions', { project: 'bp-seed', prompt: 'config test', cli_type: 'claude' });
     const result = await apiPost('/api/mcp/call', {
-      tool: 'blueprint_sessions', args: { action: 'config', session_id: sess.id, name: 'renamed by MCP' },
+      tool: 'workbench_sessions', args: { action: 'config', session_id: sess.id, name: 'renamed by MCP' },
     });
     assert.equal(result.result.saved, true);
   });
@@ -378,7 +378,7 @@ describe('Multi-CLI sessions, editors, and task panel (browser)', () => {
     const status = await apiGet('/api/qdrant/status');
     assert.ok(status.collections?.documents?.points > 0, `documents has ${status.collections?.documents?.points} points`);
     const result = await apiPost('/api/mcp/call', {
-      tool: 'blueprint_files', args: { action: 'search_documents', query: 'deployment' },
+      tool: 'workbench_files', args: { action: 'search_documents', query: 'deployment' },
     });
     assert.ok(Array.isArray(result.result) && result.result.length > 0, 'search returns results');
     assert.ok(result.result[0].score > 0, 'results have scores');
@@ -392,7 +392,7 @@ describe('Multi-CLI sessions, editors, and task panel (browser)', () => {
       return;
     }
     const result = await apiPost('/api/mcp/call', {
-      tool: 'blueprint_files', args: { action: 'search_code', query: 'express server' },
+      tool: 'workbench_files', args: { action: 'search_code', query: 'express server' },
     });
     assert.ok(Array.isArray(result.result), 'search returns array');
   });
@@ -401,7 +401,7 @@ describe('Multi-CLI sessions, editors, and task panel (browser)', () => {
     const status = await apiGet('/api/qdrant/status');
     assert.ok(status.collections?.claude?.points > 0, `claude has ${status.collections?.claude?.points} points`);
     const result = await apiPost('/api/mcp/call', {
-      tool: 'blueprint_sessions', args: { action: 'search_semantic', query: 'session test', cli: 'claude' },
+      tool: 'workbench_sessions', args: { action: 'search_semantic', query: 'session test', cli: 'claude' },
     });
     assert.ok(Array.isArray(result.result) && result.result.length > 0, 'search returns results');
     assert.ok(result.result[0].collection === 'claude_sessions', 'results from claude collection');
@@ -411,7 +411,7 @@ describe('Multi-CLI sessions, editors, and task panel (browser)', () => {
     const status = await apiGet('/api/qdrant/status');
     if (!status.collections?.gemini || status.collections.gemini.points === 0) return;
     const result = await apiPost('/api/mcp/call', {
-      tool: 'blueprint_sessions', args: { action: 'search_semantic', query: 'Dockerfile', cli: 'gemini' },
+      tool: 'workbench_sessions', args: { action: 'search_semantic', query: 'Dockerfile', cli: 'gemini' },
     });
     assert.ok(Array.isArray(result.result), 'search returns array');
     if (result.result.length > 0) assert.ok(result.result[0].collection === 'gemini_sessions', 'results from gemini collection');
@@ -421,7 +421,7 @@ describe('Multi-CLI sessions, editors, and task panel (browser)', () => {
     const status = await apiGet('/api/qdrant/status');
     if (!status.collections?.codex || status.collections.codex.points === 0) return;
     const result = await apiPost('/api/mcp/call', {
-      tool: 'blueprint_sessions', args: { action: 'search_semantic', query: 'fibonacci', cli: 'codex' },
+      tool: 'workbench_sessions', args: { action: 'search_semantic', query: 'fibonacci', cli: 'codex' },
     });
     assert.ok(Array.isArray(result.result), 'search returns array');
     if (result.result.length > 0) assert.ok(result.result[0].collection === 'codex_sessions', 'results from codex collection');
@@ -496,7 +496,7 @@ describe('Multi-CLI sessions, editors, and task panel (browser)', () => {
   it('TASKUX-02: checkbox complete updates inline without losing expand state', async () => {
     // Create a task
     await apiPost('/api/mcp/call', {
-      tool: 'blueprint_tasks', args: { action: 'add', folder_path: '/data/workspace/bp-seed', title: 'inline-test' },
+      tool: 'workbench_tasks', args: { action: 'add', folder_path: '/data/workspace/bp-seed', title: 'inline-test' },
     });
     await page.evaluate(() => { switchPanel('tasks'); expandedTaskFolders.add('/data/workspace'); expandedTaskFolders.add('/data/workspace/bp-seed'); loadTaskTree(); });
     await new Promise(r => setTimeout(r, 2000));
@@ -518,9 +518,9 @@ describe('Multi-CLI sessions, editors, and task panel (browser)', () => {
 
   it('TASKUX-03: task filter buttons show correct tasks per filter', async () => {
     // Create tasks in different states
-    const t1 = await apiPost('/api/mcp/call', { tool: 'blueprint_tasks', args: { action: 'add', folder_path: '/data/workspace/bp-seed', title: 'filter-todo' } });
-    const t2 = await apiPost('/api/mcp/call', { tool: 'blueprint_tasks', args: { action: 'add', folder_path: '/data/workspace/bp-seed', title: 'filter-done' } });
-    await apiPost('/api/mcp/call', { tool: 'blueprint_tasks', args: { action: 'complete', task_id: String(t2.result.id) } });
+    const t1 = await apiPost('/api/mcp/call', { tool: 'workbench_tasks', args: { action: 'add', folder_path: '/data/workspace/bp-seed', title: 'filter-todo' } });
+    const t2 = await apiPost('/api/mcp/call', { tool: 'workbench_tasks', args: { action: 'add', folder_path: '/data/workspace/bp-seed', title: 'filter-done' } });
+    await apiPost('/api/mcp/call', { tool: 'workbench_tasks', args: { action: 'complete', task_id: String(t2.result.id) } });
     await page.evaluate(() => { expandedTaskFolders.add('/data/workspace'); expandedTaskFolders.add('/data/workspace/bp-seed'); });
 
     // Active filter
@@ -543,7 +543,7 @@ describe('Multi-CLI sessions, editors, and task panel (browser)', () => {
   // ── #94: Editor Enhancements ───────────────────────────
 
   it('EDITUX-01: save button flashes green "Saved" on successful save', async () => {
-    await apiPost('/api/mcp/call', { tool: 'blueprint_files', args: { action: 'create', path: 'bp-seed/save-flash-test.txt', content: 'hello' } });
+    await apiPost('/api/mcp/call', { tool: 'workbench_files', args: { action: 'create', path: 'bp-seed/save-flash-test.txt', content: 'hello' } });
     await page.evaluate(() => openFileTab('/data/workspace/bp-seed/save-flash-test.txt'));
     await new Promise(r => setTimeout(r, 2000));
     const result = await page.evaluate(() => {

@@ -41,7 +41,7 @@ Historical incident notes (Phase 5 & Phase 8 sections) may reference specific de
 - **Tool:** Playwright MCP (local, NOT Malory)
 - **Container user:** `blueprint` (UID 1000)
 - **Workspace path:** `/data/workspace`
-- **MCP Tools:** 3 tools — `blueprint_files`, `blueprint_sessions`, `blueprint_tasks`
+- **MCP Tools:** 3 tools — `workbench_files`, `workbench_sessions`, `workbench_tasks`
 - **Settings tabs:** General, Claude Code, Vector Search, System Prompts
 - **Session types:** Claude, Gemini, Codex (selected via + dropdown)
 - **Test Plan:** See `docs/work-specs/blueprint-test-plan.md`
@@ -61,7 +61,7 @@ These changes affect many test steps. Read before executing.
 9. **Workspace path:** `/data/workspace` (not `/mnt/workspace`). Container user is `blueprint` (not `hopper`).
 10. **CLI type indicator:** `.active-dot` replaced by CLI type label (C/G/X) with per-CLI colors.
 11. **Session creation:** `+` button opens dropdown: C Claude, G Gemini, X Codex, Terminal. `createSession(projectName, cliType)` accepts CLI type.
-12. **MCP tools consolidated:** 17 tools → 3 (`blueprint_files`, `blueprint_sessions`, `blueprint_tasks`). All action-based.
+12. **MCP tools consolidated:** 17 tools → 3 (`workbench_files`, `workbench_sessions`, `workbench_tasks`). All action-based.
 
 ## How to Use This Runbook
 
@@ -696,7 +696,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 3. Expand workspace mount by clicking mount header arrow
 4. `browser_evaluate`: `document.querySelectorAll('.task-folder').length > 0` — folders visible
 5. Right-click a folder label → context menu shows "Add Task" and "New Folder"
-6. Add a task via API: `POST /api/mcp/call {tool:'blueprint_tasks', args:{action:'add', folder_path:'/data/workspace/...', title:'Runbook test'}}`
+6. Add a task via API: `POST /api/mcp/call {tool:'workbench_tasks', args:{action:'add', folder_path:'/data/workspace/...', title:'Runbook test'}}`
 7. Reload task tree, expand folder → task visible as `.task-node` with checkbox
 8. Click task checkbox → `browser_evaluate`: task status changes to 'done' in DB
 9. Click task ✕ button → task removed from tree and DB
@@ -2625,35 +2625,35 @@ Ask CLI, Quorum, Guides, Skills, and Prompts tests removed — features deleted 
 **Verify:** No >_ button. Only ✎ and +.
 
 ### NF-59: Create Session via MCP
-**Action:** `fetch('/api/mcp/call', {method:'POST', body:JSON.stringify({tool:'blueprint_sessions', args:{action:'new', cli:'claude', project:'...'}})})`
+**Action:** `fetch('/api/mcp/call', {method:'POST', body:JSON.stringify({tool:'workbench_sessions', args:{action:'new', cli:'claude', project:'...'}})})`
 **Verify:** Returns session_id, tmux, cli.
 
 ### NF-60: Connect to Session by Name
-**Action:** `fetch('/api/mcp/call', {method:'POST', body:JSON.stringify({tool:'blueprint_sessions', args:{action:'connect', query:'session name'}})})`
+**Action:** `fetch('/api/mcp/call', {method:'POST', body:JSON.stringify({tool:'workbench_sessions', args:{action:'connect', query:'session name'}})})`
 **Verify:** Returns session_id, tmux, cli.
 
 ### NF-61: Restart Session
-**Action:** `fetch('/api/mcp/call', {method:'POST', body:JSON.stringify({tool:'blueprint_sessions', args:{action:'restart', session_id:'...'}})})`
+**Action:** `fetch('/api/mcp/call', {method:'POST', body:JSON.stringify({tool:'workbench_sessions', args:{action:'restart', session_id:'...'}})})`
 **Verify:** Returns restarted: true, tmux.
 
 ### NF-62: MCP Register
-**Action:** `blueprint_sessions action=mcp_register mcp_name="test-mcp" mcp_config={command:'echo'}`
+**Action:** `workbench_sessions action=mcp_register mcp_name="test-mcp" mcp_config={command:'echo'}`
 **Verify:** Returns registered.
 
 ### NF-63: MCP List Available
-**Action:** `blueprint_sessions action=mcp_list_available`
+**Action:** `workbench_sessions action=mcp_list_available`
 **Verify:** Returns servers array including test-mcp.
 
 ### NF-64: MCP Enable for Project
-**Action:** `blueprint_sessions action=mcp_enable mcp_name="test-mcp" project=...`
+**Action:** `workbench_sessions action=mcp_enable mcp_name="test-mcp" project=...`
 **Verify:** Returns enabled. .mcp.json written.
 
 ### NF-65: MCP List Enabled
-**Action:** `blueprint_sessions action=mcp_list_enabled project=...`
+**Action:** `workbench_sessions action=mcp_list_enabled project=...`
 **Verify:** Returns servers array.
 
 ### NF-66: MCP Disable
-**Action:** `blueprint_sessions action=mcp_disable mcp_name="test-mcp" project=...`
+**Action:** `workbench_sessions action=mcp_disable mcp_name="test-mcp" project=...`
 **Verify:** Returns disabled. .mcp.json updated.
 
 ### NF-67: Tmux Periodic Scan Running
@@ -2662,7 +2662,7 @@ Ask CLI, Quorum, Guides, Skills, and Prompts tests removed — features deleted 
 
 ### NF-68: Only 3 MCP Tools
 **Action:** Fetch `/api/mcp/tools`.
-**Verify:** Exactly 3 tools: blueprint_files, blueprint_sessions, blueprint_tasks.
+**Verify:** Exactly 3 tools: workbench_files, workbench_sessions, workbench_tasks.
 
 ---
 
@@ -2884,11 +2884,11 @@ Covers all fixes and features from issues #87, #93-#102. Automated tests in `tes
 **Verify:** Folder still expanded.
 
 ### CONN-01: Connect by Name Query
-**Action:** `blueprint_sessions action=connect query="session name"`
+**Action:** `workbench_sessions action=connect query="session name"`
 **Verify:** Returns session_id, tmux, cli.
 
 ### CONN-02: Restart Session
-**Action:** `blueprint_sessions action=restart session_id=...`
+**Action:** `workbench_sessions action=restart session_id=...`
 **Verify:** Returns restarted:true. New tmux session created.
 
 ### MCP-01 through MCP-06: MCP Tool Actions
@@ -2904,7 +2904,7 @@ Covers all fixes and features from issues #87, #93-#102. Automated tests in `tes
 **Verify:** Token expiry detected, next check scheduled.
 
 ### QDRANT-01: Semantic Search
-**Action:** `blueprint_files action=search_documents query="deployment"`
+**Action:** `workbench_files action=search_documents query="deployment"`
 **Verify:** Returns ranked results with scores when embeddings configured.
 
 ### PROMPT-01: Claude System Prompt
@@ -3724,7 +3724,7 @@ If Phase 0.A passes, REG-FRESH-01 inherits PASS. If 0.A fails, REG-FRESH-01 fail
 
 ### REG-META-03a: MCP Tokens Action — Claude
 **Issue:** #156 — MCP tokens consumer
-**Steps:** Call `POST /api/mcp/call` with `{tool:'blueprint_sessions', args:{action:'tokens', session_id:'<claude-id>', project:'<project>'}}`. Verify: `input_tokens` > 0, `model` contains "claude", `max_tokens` is 200000 or 1000000.
+**Steps:** Call `POST /api/mcp/call` with `{tool:'workbench_sessions', args:{action:'tokens', session_id:'<claude-id>', project:'<project>'}}`. Verify: `input_tokens` > 0, `model` contains "claude", `max_tokens` is 200000 or 1000000.
 **Result:** ☐ PASS ☐ FAIL
 
 ### REG-META-03b: MCP Tokens Action — Gemini
@@ -3739,7 +3739,7 @@ If Phase 0.A passes, REG-FRESH-01 inherits PASS. If 0.A fails, REG-FRESH-01 fail
 
 ### REG-META-04a: MCP Config Action — Claude
 **Issue:** #156 — MCP config consumer
-**Steps:** Call `POST /api/mcp/call` with `{tool:'blueprint_sessions', args:{action:'config', session_id:'<claude-id>'}}`. Verify response contains: `id`, `name`, `state`, `project`. No error.
+**Steps:** Call `POST /api/mcp/call` with `{tool:'workbench_sessions', args:{action:'config', session_id:'<claude-id>'}}`. Verify response contains: `id`, `name`, `state`, `project`. No error.
 **Result:** ☐ PASS ☐ FAIL
 
 ### REG-META-04b: MCP Config Action — Gemini
@@ -3760,7 +3760,7 @@ If Phase 0.A passes, REG-FRESH-01 inherits PASS. If 0.A fails, REG-FRESH-01 fail
 1. In Settings → API Keys, set Gemini API Key to a valid key.
 2. Confirm `process.env.GEMINI_API_KEY` is set inside the container: `docker exec <container> sh -c 'echo $GEMINI_API_KEY' | head -c 12` should match the first 12 chars of the key (or be empty if read from DB).
 3. Set `vector_embedding_provider` = `gemini` in Settings.
-4. `POST /api/qdrant/reindex` for `claude_sessions` (or call via `blueprint_sessions` MCP).
+4. `POST /api/qdrant/reindex` for `claude_sessions` (or call via `workbench_sessions` MCP).
 5. Watch `docker logs <container> --tail 100 -f` during reindex.
 6. **Negative case:** clear DB row (`DELETE FROM settings WHERE key='gemini_api_key'`), restart container, confirm reindex still works using the env-var fallback (env is still set from step 1's API write).
 
@@ -3781,7 +3781,7 @@ If Phase 0.A passes, REG-FRESH-01 inherits PASS. If 0.A fails, REG-FRESH-01 fail
 **Steps:**
 1. Confirm a synthetic chunk exists: `grep -l '"isApiErrorMessage":true' /data/.claude/projects/*/*.jsonl | head -1` returns at least one file.
 2. Reindex `claude_sessions` collection.
-3. Search via MCP `blueprint_sessions` action `search_semantic` with query `"Prompt is too long"` — should return zero matches OR only legitimate user/assistant mentions of that phrase, never the synthetic boilerplate text itself.
+3. Search via MCP `workbench_sessions` action `search_semantic` with query `"Prompt is too long"` — should return zero matches OR only legitimate user/assistant mentions of that phrase, never the synthetic boilerplate text itself.
 4. Sanity: total point count for `claude_sessions` should match the count of non-synthetic user+assistant turns across all session JSONLs (not the raw line count).
 
 **Expected:**

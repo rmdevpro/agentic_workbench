@@ -6,16 +6,7 @@ set -e
 
 CLAUDE="/data/.claude"
 WORK="/data/workspace"
-
-# Phase 5: data dir migrated to /data/.workbench. db.js handles its own
-# move; entrypoint just needs to use the canonical path and migrate the
-# Qdrant subdir if it's still under the legacy location.
 WB_DATA="/data/.workbench"
-LEGACY_BP_DATA="/data/.blueprint"
-if [ ! -d "$WB_DATA" ] && [ -d "$LEGACY_BP_DATA" ]; then
-  mv "$LEGACY_BP_DATA" "$WB_DATA"
-  echo "[entrypoint] Migrated $LEGACY_BP_DATA → $WB_DATA"
-fi
 
 # Ensure /data structure exists (volume may be empty on first run)
 mkdir -p "$WORK" "$WB_DATA" "$CLAUDE/projects" 2>/dev/null || true
@@ -66,8 +57,9 @@ if [ ! -f "$CLAUDE/settings.json" ]; then
   echo "[entrypoint] Created settings.json"
 fi
 
-# Register Workbench MCP server globally
-claude mcp add-json --scope user blueprint '{"command":"node","args":["/app/mcp-server.js"]}' 2>/dev/null || true
+# Register Workbench MCP server globally (drop legacy "blueprint" entry first)
+claude mcp remove --scope user blueprint 2>/dev/null || true
+claude mcp add-json --scope user workbench '{"command":"node","args":["/app/mcp-server.js"]}' 2>/dev/null || true
 
 # Install Workbench slash commands as global skills
 if [ -d /app/config/skills ]; then

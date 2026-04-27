@@ -161,21 +161,23 @@ module.exports = function createWatchers({
 
     if (!cfg.mcpServers) cfg.mcpServers = {};
     const expectedArgs = [join(__dirname, 'mcp-server.js')];
-    const existing = cfg.mcpServers.blueprint;
+    // Drop legacy "blueprint" key if present (renamed to "workbench" in Phase 6).
+    const hadLegacy = 'blueprint' in cfg.mcpServers;
+    if (hadLegacy) delete cfg.mcpServers.blueprint;
+    const existing = cfg.mcpServers.workbench;
     const isStale = existing && (
       !existing.command ||
-      (existing.args && existing.args[0] !== expectedArgs[0]) ||
-      (existing.env && ('BLUEPRINT_PORT' in existing.env || 'WORKBENCH_PORT' in existing.env))
+      (existing.args && existing.args[0] !== expectedArgs[0])
     );
 
-    if (!existing || isStale) {
-      cfg.mcpServers.blueprint = {
+    if (!existing || isStale || hadLegacy) {
+      cfg.mcpServers.workbench = {
         command: 'node',
         args: expectedArgs,
       };
       try {
         await fsp.writeFile(settingsFile, JSON.stringify(cfg, null, 2));
-        logger.info('Registered Blueprint MCP server', { module: 'watchers' });
+        logger.info('Registered Workbench MCP server', { module: 'watchers' });
       } catch (err) {
         logger.error('Could not write MCP configuration', {
           module: 'watchers',
@@ -200,26 +202,42 @@ module.exports = function createWatchers({
 
     if (!cfg.mcpServers) cfg.mcpServers = {};
     const expectedArgs = [join(__dirname, 'mcp-server.js')];
-    const existing = cfg.mcpServers.blueprint;
+    const hadLegacy = 'blueprint' in cfg.mcpServers;
+    if (hadLegacy) delete cfg.mcpServers.blueprint;
+    const existing = cfg.mcpServers.workbench;
     const isStale = existing && (
       !existing.command ||
-      (existing.args && existing.args[0] !== expectedArgs[0]) ||
-      (existing.env && ('BLUEPRINT_PORT' in existing.env || 'WORKBENCH_PORT' in existing.env))
+      (existing.args && existing.args[0] !== expectedArgs[0])
     );
 
-    if (!existing || isStale) {
-      cfg.mcpServers.blueprint = {
+    if (!existing || isStale || hadLegacy) {
+      cfg.mcpServers.workbench = {
         command: 'node',
         args: expectedArgs,
       };
       try {
         await fsp.mkdir(join(HOME, '.gemini'), { recursive: true });
         await fsp.writeFile(geminiSettingsFile, JSON.stringify(cfg, null, 2));
-        logger.info('Registered Blueprint MCP server for Gemini', { module: 'watchers' });
+        logger.info('Registered Workbench MCP server for Gemini', { module: 'watchers' });
       } catch (err) {
         logger.error('Could not write Gemini MCP config', { module: 'watchers', err: err.message });
       }
     }
+  }
+
+  // Remove a top-level TOML section block by header line. Line-based: keeps
+  // every line outside [section]…(next-header-or-eof), inclusive of the header.
+  function dropTomlSection(content, header) {
+    const lines = content.split('\n');
+    const out = [];
+    let inTarget = false;
+    for (const line of lines) {
+      const t = line.trim();
+      if (t === header) { inTarget = true; continue; }
+      if (inTarget && t.startsWith('[') && t.endsWith(']')) inTarget = false;
+      if (!inTarget) out.push(line);
+    }
+    return out.join('\n');
   }
 
   async function registerCodexMcp() {
@@ -233,17 +251,19 @@ module.exports = function createWatchers({
         if (err.code !== 'ENOENT') throw err;
       }
 
-      // #188: previously this branch also tried to migrate an old
-      // [mcp_servers.blueprint.env]/BLUEPRINT_PORT block away with a regex
-      // that ate too much and corrupted the file. The migration is now dead
-      // weight (any persistent-/data host has either already migrated or
-      // already been corrupted), so just check-and-append.
-      if (content.includes('[mcp_servers.blueprint]')) return;
+      const hasLegacy = content.includes('[mcp_servers.blueprint]');
+      const hasNew = content.includes('[mcp_servers.workbench]');
+      if (hasNew && !hasLegacy) return;
 
-      const mcpConfig = `\n[mcp_servers.blueprint]\ncommand = "node"\nargs = ["${join(__dirname, 'mcp-server.js')}"]\n`;
+      let next = content;
+      if (hasLegacy) next = dropTomlSection(next, '[mcp_servers.blueprint]');
+      if (!hasNew) {
+        next += `\n[mcp_servers.workbench]\ncommand = "node"\nargs = ["${join(__dirname, 'mcp-server.js')}"]\n`;
+      }
+
       await fsp.mkdir(join(HOME, '.codex'), { recursive: true });
-      await fsp.appendFile(codexConfigFile, mcpConfig);
-      logger.info('Registered Blueprint MCP server for Codex', { module: 'watchers' });
+      await fsp.writeFile(codexConfigFile, next);
+      logger.info('Registered Workbench MCP server for Codex', { module: 'watchers' });
     } catch (err) {
       logger.error('Could not write Codex MCP config', { module: 'watchers', err: err.message });
     }

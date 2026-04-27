@@ -453,11 +453,9 @@ function registerMcpRoutes(app) {
     const { tool, args } = req.body;
     if (!args || !args.action) return res.status(400).json({ error: 'action required' });
 
-    // Phase 4 rename: workbench_* are canonical; blueprint_* kept as aliases.
-    const canonical = (tool || '').replace(/^blueprint_/, 'workbench_');
     try {
       let result;
-      switch (canonical) {
+      switch (tool) {
         case 'workbench_files':
           result = await handleFiles(args, res);
           break;
