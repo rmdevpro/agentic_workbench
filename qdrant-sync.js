@@ -99,7 +99,10 @@ function getEmbeddingConfig() {
     case 'huggingface':
     default: {
       const hfToken = process.env.HF_TOKEN || '';
-      return { url: 'https://api-inference.huggingface.co/models/sentence-transformers/all-MiniLM-L6-v2', model: 'hf-free', key: hfToken, isHF: true };
+      // HF deprecated api-inference.huggingface.co (April 2025) and moved
+      // serverless inference behind router.huggingface.co/hf-inference. The
+      // pipeline/feature-extraction suffix is required for embeddings models.
+      return { url: 'https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2/pipeline/feature-extraction', model: 'hf-free', key: hfToken, isHF: true };
     }
   }
 }
@@ -301,7 +304,10 @@ function buildCandidateConfig(overrideKey, overrideValue) {
     case 'huggingface':
     default: {
       const hfToken = process.env.HF_TOKEN || '';
-      return { url: 'https://api-inference.huggingface.co/models/sentence-transformers/all-MiniLM-L6-v2', model: 'hf-free', key: hfToken, isHF: true };
+      // HF deprecated api-inference.huggingface.co (April 2025) and moved
+      // serverless inference behind router.huggingface.co/hf-inference. The
+      // pipeline/feature-extraction suffix is required for embeddings models.
+      return { url: 'https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2/pipeline/feature-extraction', model: 'hf-free', key: hfToken, isHF: true };
     }
   }
 }
@@ -963,6 +969,22 @@ async function start() {
       return;
     }
 
+    // Probe the embedding provider once before scanning — a dead provider
+    // (e.g. default HuggingFace inference endpoint, missing API key,
+    // expired key) would otherwise fire a per-file ERROR every cycle of
+    // every deploy. Single WARN here, then bail; settings change triggers
+    // a restart() from the PUT /api/settings handler.
+    const probeResult = await validateProviderConfig(getEmbeddingConfig());
+    if (!probeResult.ok) {
+      logger.warn('Embedding provider unavailable — vector sync disabled until configured', {
+        module: 'qdrant-sync',
+        provider: getEmbeddingConfig().model,
+        reason: probeResult.error?.substring(0, 200),
+      });
+      _starting = false;
+      return;
+    }
+
     _running = true;
     logger.info('Qdrant sync starting', { module: 'qdrant-sync', url: QDRANT_URL });
 
@@ -1020,6 +1042,13 @@ function stop() {
   if (_bgRetryTimer) { clearInterval(_bgRetryTimer); _bgRetryTimer = null; }
   _running = false;
   _starting = false;
+}
+
+// Stop + start. Used when settings change (provider/key updates) so a fresh
+// configuration takes effect without a server restart.
+async function restart() {
+  stop();
+  await start();
 }
 
 async function search(query, collections = null, limit = 10) {
@@ -1103,4 +1132,4 @@ async function status() {
   return { available: true, running: _running, url: QDRANT_URL, collections };
 }
 
-module.exports = { start, stop, search, status, embed, qdrantHealthy, reindexCollection, buildCandidateConfig, validateProviderConfig };
+module.exports = { start, stop, restart, search, status, embed, qdrantHealthy, reindexCollection, buildCandidateConfig, validateProviderConfig };

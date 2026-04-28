@@ -1239,6 +1239,20 @@ function registerCoreRoutes(
         logger.error('Failed to trigger re-index on provider change', { module: 'routes', err: err.message });
       }
     }
+    // Wake qdrant-sync up if it had been disabled at startup (provider probe
+    // failed — e.g. fresh deploy with default-but-dead HF endpoint, or no
+    // key configured). restart() probes the new config and resumes sync if
+    // it now works. No-op if sync was already running.
+    if ([
+      'vector_embedding_provider',
+      'vector_custom_url', 'vector_custom_key',
+      'gemini_api_key', 'codex_api_key',
+    ].includes(key)) {
+      const qdrant = require('./qdrant-sync');
+      qdrant.restart().catch(err =>
+        logger.warn('qdrant.restart after settings change failed', { module: 'routes', settingKey: key, err: err.message })
+      );
+    }
     res.json({ saved: true });
   });
 
