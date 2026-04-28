@@ -174,6 +174,7 @@ function makeApp(overrides = {}) {
       tmuxSendKeysAsync: async () => {},
       claudeExecAsync: overrides.claudeExecAsync ?? (async () => 'ok'),
       gitCloneAsync: async () => 'cloned',
+      sanitizeErrorForClient: (msg) => msg,
     },
     config: {
       get: (k, fb) =>
@@ -733,12 +734,16 @@ test('summary error returns 500', async () => {
   });
 });
 
-test('tokens missing project returns null', async () => {
+test('tokens endpoint works without project param (#156)', async () => {
+  // Pre-#156 the route required ?project=…; post-#156 the project is
+  // looked up via getSessionInfo so the param is optional. Response shape
+  // is {input_tokens, model, max_tokens}, not the legacy {tokens}.
   await withFullServer(async ({ port, db }) => {
     const p = db.ensureProject('tp2', '/workspace/tp2');
     db.upsertSession('tok2', p.id, 'Tok');
     const r = await (await req(port, 'GET', '/api/sessions/tok2/tokens')).json();
-    assert.equal(r.tokens, null, 'Missing project param should return tokens: null');
+    assert.ok('input_tokens' in r, 'response must include input_tokens');
+    assert.ok('max_tokens' in r, 'response must include max_tokens');
   });
 });
 
@@ -1362,6 +1367,7 @@ test('SRCH-02: GET /api/search returns 500 when searchSessions throws', async ()
       tmuxSendKeysAsync: async () => {},
       claudeExecAsync: async () => 'ok',
       gitCloneAsync: async () => 'cloned',
+      sanitizeErrorForClient: (msg) => msg,
     },
     config: { get: (k, fb) => fb, getPrompt: () => '' },
     sessionUtils: {

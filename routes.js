@@ -1253,23 +1253,26 @@ function registerCoreRoutes(
 
   // ── CLI Credentials Check ─────────────────────────────────────────────────
 
-  app.get('/api/cli-credentials', (req, res) => {
-    const fs = require('fs');
+  app.get('/api/cli-credentials', async (req, res) => {
+    const fsp = require('fs/promises');
     const { join } = require('path');
     const home = safe.HOME;
 
     // Gemini: check for credentials file OR GOOGLE_API_KEY in env OR key in DB settings
     const geminiCredFile = join(home, '.gemini', 'gemini-credentials.json');
-    const hasGemini = fs.existsSync(geminiCredFile) ||
-      !!process.env.GOOGLE_API_KEY ||
+    let hasGemini = !!process.env.GOOGLE_API_KEY ||
       !!process.env.GEMINI_API_KEY ||
       !!db.getSetting('gemini_api_key', '');
+    if (!hasGemini) {
+      try { await fsp.access(geminiCredFile); hasGemini = true; }
+      catch { /* no creds file */ }
+    }
 
     // Codex: check auth.json for OPENAI_API_KEY
     let hasOpenai = !!process.env.OPENAI_API_KEY || !!db.getSetting('codex_api_key', '');
     if (!hasOpenai) {
       try {
-        const codexAuth = JSON.parse(fs.readFileSync(join(home, '.codex', 'auth.json'), 'utf-8'));
+        const codexAuth = JSON.parse(await fsp.readFile(join(home, '.codex', 'auth.json'), 'utf-8'));
         hasOpenai = !!codexAuth.OPENAI_API_KEY;
       } catch { /* no auth file */ }
     }

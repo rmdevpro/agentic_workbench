@@ -258,13 +258,14 @@ module.exports = function createSessionResolver({
               if (!d.isDirectory()) continue;
               const chatsDir = join(geminiBase, d.name, 'chats');
               try {
-                const files = fs.readdirSync(chatsDir).filter(f => f.endsWith('.json'));
+                const allFiles = await fsp.readdir(chatsDir);
+                const files = allFiles.filter(f => f.endsWith('.json'));
                 for (const f of files) {
                   const fullPath = join(chatsDir, f);
                   if (existingFiles.has(fullPath)) continue;
                   // New file found — read its sessionId
                   try {
-                    const data = JSON.parse(fs.readFileSync(fullPath, 'utf-8'));
+                    const data = JSON.parse(await fsp.readFile(fullPath, 'utf-8'));
                     if (data.sessionId) {
                       logger.info('Gemini CLI session ID discovered', {
                         module: 'session-resolver',

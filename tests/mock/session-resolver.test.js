@@ -7,7 +7,8 @@ const createSessionResolver = require('../../session-resolver.js');
 function makeResolver({ filesByDir = new Map(), tmuxAlive = new Set(), configValues = {} } = {}) {
   const sessions = new Map();
   const db = {
-    sessions,
+    sessions,    db: { transaction: (fn) => fn },
+
     getProjects: () => [{ id: 1, name: 'proj', path: '/workspace/proj' }],
     getSessionsForProject: (pid) => [...sessions.values()].filter((s) => s.project_id === pid),
     getSession: (id) => sessions.get(id),
@@ -241,7 +242,8 @@ test('RES-09: resolveSessionId handles tmux rename failure (no server running)',
   const dir = '/sessions/_workspace_proj';
   const sessions = new Map();
   const db = {
-    sessions,
+    sessions,    db: { transaction: (fn) => fn },
+
     getProjects: () => [{ id: 1, name: 'proj', path: '/workspace/proj' }],
     getSessionsForProject: (pid) => [...sessions.values()].filter((s) => s.project_id === pid),
     getSession: (id) => sessions.get(id),
@@ -305,7 +307,8 @@ test('RES-10: resolveSessionId handles tmux rename failure (other error)', async
   const dir = '/sessions/_workspace_proj';
   const sessions = new Map();
   const db = {
-    sessions,
+    sessions,    db: { transaction: (fn) => fn },
+
     getSession: (id) => sessions.get(id),
     upsertSession: (id, pid, name) => {
       const r = { id, project_id: pid, name, notes: '', state: 'active', user_renamed: 0 };
@@ -441,7 +444,8 @@ test('RES-14: resolveStaleNewSessions handles readdir non-ENOENT error', async (
   const errors = [];
   const sessions = new Map();
   const db = {
-    sessions,
+    sessions,    db: { transaction: (fn) => fn },
+
     getProjects: () => [{ id: 1, name: 'proj', path: '/workspace/proj' }],
     getSessionsForProject: (pid) => [...sessions.values()].filter((s) => s.project_id === pid),
     getSession: (id) => sessions.get(id),

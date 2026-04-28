@@ -34,10 +34,15 @@ async function setupEnv(t) {
     WORKSPACE: process.env.WORKSPACE,
     CLAUDE_HOME: process.env.CLAUDE_HOME,
     WORKBENCH_DATA: process.env.WORKBENCH_DATA,
+    HOME: process.env.HOME,
   };
   process.env.WORKSPACE = workspace;
   process.env.CLAUDE_HOME = claudeHome;
   process.env.WORKBENCH_DATA = dataDir;
+  // Pin HOME to the test root so discoverGemini/CodexSessions don't leak
+  // into the host's real ~/.gemini/tmp or ~/.codex/sessions dirs and pollute
+  // search/list results with sessions the test didn't create.
+  process.env.HOME = root;
   const orig = { rfs: fs.readFileSync, rf: fs.readFile, wf: fs.watchFile };
   function rewrite(p) {
     const n = String(p).replace(/\\/g, '/');
