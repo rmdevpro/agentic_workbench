@@ -1,6 +1,6 @@
 'use strict';
 
-// Mock-server tests for the new flat 45-tool MCP API. Hits the in-process
+// Mock-server tests for the new flat 44-tool MCP API. Hits the in-process
 // Express app via supertest-style helpers (no docker, no live workbench).
 // Live integration coverage lives in tests/live/mcp-tools.test.js.
 
@@ -23,26 +23,26 @@ async function call(port, body) {
   return { status: r.status, body: json };
 }
 
-test('MCP catalogue: 45 flat tools exposed via /api/mcp/tools', async () => {
+test('MCP catalogue: 44 flat tools exposed via /api/mcp/tools', async () => {
   await withServer(startMcpApp(), async ({ port }) => {
     const r = await req(port, 'GET', '/api/mcp/tools');
     assert.equal(r.status, 200);
     const json = await r.json();
-    assert.equal(json.tools.length, 45);
+    assert.equal(json.tools.length, 44);
     for (const n of json.tools) {
-      assert.ok(/^(file|session|project|task)_/.test(n), `name not flat: ${n}`);
+      assert.ok(/^(file|session|project|task|log)_/.test(n), `name not flat: ${n}`);
     }
   });
 });
 
 test('MCP catalogue: handler set + advertised tools agree', () => {
-  assert.equal(TOOL_NAMES.length, 45);
+  assert.equal(TOOL_NAMES.length, 44);
   const grouped = TOOL_NAMES.reduce((acc, n) => {
     const d = n.split('_')[0];
     acc[d] = (acc[d] || 0) + 1;
     return acc;
   }, {});
-  assert.deepEqual(grouped, { file: 8, session: 19, project: 12, task: 6 });
+  assert.deepEqual(grouped, { file: 8, session: 19, project: 11, task: 5, log: 1 });
 });
 
 test('MCP unknown tool returns 404', async () => {

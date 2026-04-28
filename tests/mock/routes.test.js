@@ -411,7 +411,7 @@ test('session creation success path with webhook event', async () => {
   await withFullServer(async ({ port, db, firedEvents }) => {
     const r = await req(port, 'POST', '/api/sessions', {
       project: 'test-project',
-      prompt: 'Test prompt',
+      name: 'Test session',
     });
     assert.equal(r.status, 200);
     const body = await r.json();
@@ -1198,7 +1198,7 @@ test('SES-20: POST /api/sessions rejects overlong project name', async () => {
   await withFullServer(async ({ port }) => {
     const r = await req(port, 'POST', '/api/sessions', {
       project: 'x'.repeat(256),
-      prompt: 'hi',
+      name: 'hi',
     });
     assert.equal(r.status, 400);
     const body = await r.json();
@@ -1206,11 +1206,11 @@ test('SES-20: POST /api/sessions rejects overlong project name', async () => {
   });
 });
 
-test('SES-21: POST /api/sessions rejects overlong prompt', async () => {
+test('SES-21: POST /api/sessions rejects overlong name', async () => {
   await withFullServer(async ({ port }) => {
     const r = await req(port, 'POST', '/api/sessions', {
       project: 'test-project',
-      prompt: 'x'.repeat(50001),
+      name: 'x'.repeat(50001),
     });
     assert.equal(r.status, 400);
     const body = await r.json();
