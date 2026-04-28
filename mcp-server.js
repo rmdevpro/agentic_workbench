@@ -83,6 +83,7 @@ const TOOLS = [
         pattern: { type: 'string', description: 'Regex pattern for grep action' },
         cli: { type: 'string', description: 'CLI type: claude, gemini, codex. For new: which CLI to launch. For grep/search: filter (comma-separated). Default: all.' },
         prompt: { type: 'string', description: 'Initial prompt for new session' },
+        hidden: { type: 'boolean', description: 'For new action: whether the session is hidden from the sidebar (default true — MCP-spawned sessions are sub-sessions). Pass false to make it visible.' },
         name: { type: 'string', description: 'New session name for config action' },
         state: { type: 'string', enum: ['active', 'archived', 'hidden'], description: 'New session state for config action' },
         notes: { type: 'string', description: 'Session notes for config action' },

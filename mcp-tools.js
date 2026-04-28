@@ -168,7 +168,11 @@ async function handleSessions(args, res) {
       const tmux = safe.sanitizeTmuxName(`wb_${tmpId.substring(0, 12)}_${hash}`);
       safe.tmuxCreateCLI(tmux, projectPath, cliType);
       db.upsertSession(tmpId, proj.id, args.prompt || 'New Session', cliType);
-      if (args.hidden) db.setSessionState(tmpId, 'hidden');
+      // MCP-created sessions are sub-sessions spawned by an agent, not by
+      // the human UI — default to hidden so they don't clutter the sidebar.
+      // Agents that explicitly want a visible session can pass hidden=false.
+      const shouldHide = args.hidden !== false;
+      if (shouldHide) db.setSessionState(tmpId, 'hidden');
       return { session_id: tmpId, tmux, project: args.project, cli: cliType };
     }
     case 'connect': {
