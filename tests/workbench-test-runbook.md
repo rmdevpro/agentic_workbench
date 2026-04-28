@@ -321,19 +321,19 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 9. `browser_screenshot`
 
 **Expected:**
-- New session dialog appears with a prompt textarea (no separate name field)
+- New session dialog appears with a `Session name` single-line input
 - After submit, a new tab appears in `#tab-bar`
-- Tab name is derived from the prompt (e.g., "Say hello")
+- Tab name equals what was typed in the input (e.g., "Say hello")
 - Terminal pane becomes active (empty-state hidden)
 - `#empty-state` is no longer visible
 
 **Verify:**
 - Tab count increased by 1
-- Active tab name contains prompt-derived text
+- Active tab name matches the typed session name
 - `browser_evaluate`: `document.querySelector('#empty-state').offsetParent === null`
 
 **Result:** PASS
-**Notes:** New session dialog appeared, tab name "Say hello" derived from prompt, #empty-state removed from DOM when session opens (not just hidden).
+**Notes:** New session dialog appeared, tab name "Say hello" matched the value typed into the Session name input, #empty-state removed from DOM when session opens (not just hidden).
 
 ---
 
@@ -377,7 +377,7 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 **Steps:**
 1. Create a second session via API: `browser_evaluate`:
    ```
-   fetch('/api/sessions', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({project:'PROJECT_NAME', prompt:'test-tab-2 Say hi'})}).then(r=>r.json())
+   fetch('/api/sessions', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({project:'PROJECT_NAME', name:'test-tab-2 Say hi'})}).then(r=>r.json())
    ```
    (Replace PROJECT_NAME with actual value from setup)
 2. Wait 3s for session to start, then refresh sidebar: `browser_evaluate`: `loadState()`
@@ -1214,7 +1214,7 @@ The Prompts tab shows three read-only template buttons (C / G / X) that open CLA
 **Steps:**
 1. Create session with long name via API:
    ```
-   fetch('/api/sessions', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({project:'PROJECT_NAME', prompt:'this-is-a-very-long-session-name-that-should-be-truncated-with-ellipsis-in-the-sidebar-display'})}).then(r=>r.json())
+   fetch('/api/sessions', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({project:'PROJECT_NAME', name:'this-is-a-very-long-session-name-that-should-be-truncated-with-ellipsis-in-the-sidebar-display'})}).then(r=>r.json())
    ```
 2. `browser_wait` 2000
 3. `browser_evaluate`: check that the session name is truncated with CSS:
@@ -1289,7 +1289,7 @@ The Prompts tab shows three read-only template buttons (C / G / X) that open CLA
 
 **Setup:** Ensure at least one session is visible in the sidebar. Get project name: `browser_evaluate`: `fetch('/api/state').then(r=>r.json()).then(d=>d.projects[0].name)`. If no sessions exist, create one via API:
 ```
-browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({project:'PROJECT_NAME', prompt:'test-dblclick'})}).then(r=>r.json())
+browser_evaluate: fetch('/api/sessions', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({project:'PROJECT_NAME', name:'test-dblclick'})}).then(r=>r.json())
 ```
 `browser_wait` 3000, then `browser_evaluate`: `loadState()`, `browser_wait` 1000.
 
@@ -2200,7 +2200,7 @@ For each test below, use the standardized terminal I/O pattern:
 **Priority:** P1
 
 **Steps:**
-1. Create session with coding prompt: name `usr01-coding`, prompt `Create a simple hello.py that prints hello world`
+1. Create session with name `usr01-coding`. Wait for the session to attach, then send `Create a simple hello.py that prints hello world` as the user's first message in the terminal pane.
 2. Wait for Claude to respond and create the file (30s max)
 3. Verify file exists via API: `fetch('/api/file?path=PROJECT_PATH/hello.py')`
 4. Check terminal shows success
@@ -2960,14 +2960,14 @@ Covers all fixes and features from issues #87, #93-#102. Automated tests in `tes
 
 ### SESS-02: Session Creation Modal
 **Action:** Select Claude from dropdown.
-**Verify:** Modal with prompt textarea and Start Session button.
+**Verify:** Modal with `Session name` single-line input (`#new-session-name`) and Start Session button.
 
 ### SESS-03: Session Creation End-to-End
-**Action:** Type prompt, click Start Session.
-**Verify:** Tab opens, terminal connects, session appears in sidebar.
+**Action:** Type a session name, click Start Session.
+**Verify:** Tab opens with that name, terminal connects, session appears in sidebar. For Claude, the CLI receives a brief standby hint (`The user has titled this session "<name>". Stand by for their first message.`) — not a free-form prompt that would make it run wild.
 
 ### SESS-04: Gemini Session via API
-**Action:** `POST /api/sessions {project, prompt, cli_type:'gemini'}`
+**Action:** `POST /api/sessions {project, name, cli_type:'gemini'}`
 **Verify:** Returns session with cli_type gemini. Appears in /api/state.
 
 ### SESS-05: Gemini Session Persistence
@@ -2979,12 +2979,12 @@ Covers all fixes and features from issues #87, #93-#102. Automated tests in `tes
 **Verify:** Sidebar shows C (claude) and G (gemini) indicators with correct titles.
 
 ### SESS-07: Codex Session Creation
-**Action:** `POST /api/sessions {project, prompt, cli_type:'codex'}`
+**Action:** `POST /api/sessions {project, name, cli_type:'codex'}`
 **Verify:** Codex CLI launches in tmux. Session in state with cli_type codex.
 
-### SESS-08: Empty Prompt Rejected
+### SESS-08: Empty Name Rejected
 **Action:** Open new session modal, click Start Session without typing.
-**Verify:** Modal stays open, no session created, textarea focused.
+**Verify:** Modal stays open, no session created, `#new-session-name` input focused.
 
 ### SESS-09: Sidebar Click Opens Session
 **Action:** Click existing session in sidebar.
@@ -3275,7 +3275,7 @@ Tests for all fixes applied in the canonical branch. Every test uses Playwright 
 **Action:** For EACH CLI type (Claude, Gemini, Codex): create a session, send a message, close the tab, reopen it, verify it resumes.
 
 **Steps (repeat for Claude, Gemini, Codex):**
-1. Create session: `fetch('/api/sessions', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({project:'PROJECT_NAME', cli_type:'CLI_TYPE', prompt:'test resume CLI_TYPE'})}).then(r=>r.json())`
+1. Create session: `fetch('/api/sessions', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({project:'PROJECT_NAME', cli_type:'CLI_TYPE', name:'test resume CLI_TYPE'})}).then(r=>r.json())`
 2. `browser_wait` 5000
 3. Refresh sidebar: `browser_evaluate`: `loadState()`
 4. `browser_wait` 2000
@@ -3739,7 +3739,7 @@ All 3 CLIs must successfully send AND receive chat messages in ALL 5 rounds. A 4
 **Issue:** #149 — Sub-sessions not auto-hiding
 
 **Steps:**
-1. Create session with hidden flag: `POST /api/sessions {project, cli_type:'claude', prompt:'hidden test', hidden:true}`
+1. Create session with hidden flag: `POST /api/sessions {project, cli_type:'claude', name:'hidden test', hidden:true}`
 2. Refresh sidebar
 3. Verify session does NOT appear in Active filter
 4. Switch filter to Hidden — verify session appears

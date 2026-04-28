@@ -51,12 +51,12 @@ test('REGVAL: malformed input regression — overlong names rejected', async () 
     `Overlong project name (300 chars) must be rejected, got ${r1.status}`,
   );
 
-  // Overlong session prompt must be rejected
-  const longPrompt = 'Y'.repeat(5000);
-  const r2 = await post('/api/sessions', { project: 'test', prompt: longPrompt });
+  // Overlong session name must be rejected
+  const longName = 'Y'.repeat(5000);
+  const r2 = await post('/api/sessions', { project: 'test', name: longName });
   assert.ok(
     r2.status >= 400,
-    `Overlong session prompt (5000 chars) must be rejected, got ${r2.status}`,
+    `Overlong session name (5000 chars) must be rejected, got ${r2.status}`,
   );
 });
 
@@ -68,8 +68,8 @@ test('REGVAL: overlong input regression — server does not crash on huge payloa
   const r = await post('/api/projects', { path: '/workspace/test', name: longName });
   assert.ok(r.status >= 400, `Overlong project name must be rejected, got ${r.status}`);
 
-  // 10KB session prompt — must be rejected
-  const longPrompt = 'B'.repeat(10000);
-  const r2 = await post('/api/sessions', { project: 'test', prompt: longPrompt });
-  assert.ok(r2.status >= 400, `Overlong session prompt must be rejected, got ${r2.status}`);
+  // 10KB session name — must be rejected
+  const longSessionName = 'B'.repeat(10000);
+  const r2 = await post('/api/sessions', { project: 'test', name: longSessionName });
+  assert.ok(r2.status >= 400, `Overlong session name must be rejected, got ${r2.status}`);
 });
