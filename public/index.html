@@ -13,6 +13,13 @@
     UL.jqueryFileTree A { color: var(--text-primary); }
     UL.jqueryFileTree A:hover { color: var(--accent); background: var(--bg-tertiary); }
     UL.jqueryFileTree LI.selected > A { color: var(--accent); }
+    /* jqueryFileTree puts the folder icon as a background-image on the LI's
+       20px left padding, and renders the name in an inline-block <a> sized to
+       the text. Click handler is bound to the <a> only — so clicking the icon
+       (or the empty row to the right of the name) does nothing. Extend the <a>
+       to cover the whole row width and overlap the icon zone so the entire
+       row, including the icon, is clickable. */
+    UL.jqueryFileTree LI > A { display: block; padding-left: 20px; margin-left: -20px; }
   </style>
   <script src="/lib/jquery/jquery.min.js"></script>
   <script src="/lib/jqueryfiletree/jQueryFileTree.min.js"></script>
