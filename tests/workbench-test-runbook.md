@@ -168,8 +168,9 @@ When a test fails:
 **Allowed:**
 
 - `ssh ${WORKBENCH_HOST} 'docker exec -i ${WORKBENCH_CONTAINER} sh -c "cd /app && npm test"'` — runs the suite inside the deployed container's own filesystem and DB.
-- `npm run test:browser` driven from a dev workstation against a deployed `${WORKBENCH_URL}` (Playwright doesn't import server code).
-- HF Space deploys + verification via curl/Playwright against the Space URL.
+- The Playwright MCP server (driven from inside this Claude Code session) pointed at a deployed `${WORKBENCH_URL}` — an HF Space or irina dev container. The Playwright MCP runs Chromium against an HTTP target, never imports server code, so `browser_navigate` / `browser_evaluate` against a Space URL is fine.
+- Hymie / Hymie2 (remote desktops with real Firefox) for headed/visual checks against a deployed Space, when the bug needs real rendering rather than a headless capture.
+- HF Space deploys + verification via curl/Playwright MCP against the Space URL.
 
 **Not allowed (anywhere on the host shell of a workbench-running machine):**
 

@@ -100,9 +100,14 @@ Before context threshold or autocompaction scenarios:
 
 ### 2.0 Where tests run (host vs container)
 
-**Run all UI tests against a deployed `${WORKBENCH_URL}` — never against an in-process app spun up from a workbench-host shell.** Playwright itself only loads HTTP and never imports server code, so it can run from a developer workstation, a deployed Space, or a dev container. The hard constraint: never run any of `npm test` / `npm run test:coverage` / `npm run test:live` / `npm run test:browser` / `node --test` / `c8` from the host shell of a machine that's actually running Workbench (e.g. M5, irina) — those commands import project modules into the host's Node process and end up using the live DB, live `secrets.env` (real webhooks, real API keys), and live tmux server.
+**Run all UI tests against a deployed `${WORKBENCH_URL}` — never against an in-process app spun up from a workbench-host shell.** Two acceptable surfaces:
 
-If you need browser tests against a Space, point the harness at the Space URL and run the harness from any non-Workbench-running machine. If you need browser tests against a dev container, run the harness inside that container or from another box pointing at it. The runbook's prerequisites section repeats this rule for an executor who skipped the plan.
+1. **Playwright MCP** (driven from inside Claude Code in this session) → pointed at a deployed Space URL or the irina dev container's URL. The MCP server drives Chromium against HTTP only, never imports server code — so `browser_navigate` / `browser_evaluate` calls against the Space are safe.
+2. **Hymie / Hymie2** (remote desktops with real Firefox) → for headed/visual bugs that need actual rendering, also pointed at the deployed URL.
+
+The hard constraint: never run `npm test`, `npm run test:coverage`, `npm run test:live`, `npm run test:browser`, `node --test`, or `c8` from the host shell of a machine that's actually running Workbench (e.g. M5, irina). Those commands import project modules into the host's Node process and end up using the live DB, live `secrets.env` (real webhooks, real API keys), and live tmux server. The Playwright *MCP* path is fine; the Playwright *npm wrapper* path is not.
+
+The runbook's prerequisites section repeats this rule for an executor who skipped the plan.
 
 ### 2.1 Principle
 
