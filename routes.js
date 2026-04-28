@@ -1554,8 +1554,8 @@ function registerCoreRoutes(
   // Generic delivery of text/keys to a session's tmux pane via server-side
   // load-buffer/paste-buffer/send-keys. Robust to a closed terminal WS on
   // the client (e.g. browser tab backgrounded during OAuth flow). Shape
-  // mirrors the planned `workbench_sessions send_text` / `send_key` MCP
-  // actions so the MCP rework can reuse the same primitives.
+  // mirrors the `session_send_text` / `session_send_key` MCP tools, which
+  // share the same underlying safe-exec primitives.
 
   const SEND_TEXT_MAX_LEN = 8192;
   const ALLOWED_NAMED_KEYS = new Set([

@@ -21,7 +21,7 @@
 - `workbench_send_message`, `workbench_get_project_notes`, `workbench_get_session_notes`, `workbench_ask_cli`, `workbench_ask_quorum`, `workbench_smart_compaction` — all removed
 
 ### Changed modules
-- `mcp-tools.js` — 17 tools consolidated to 3 (`workbench_files`, `workbench_sessions`, `workbench_tasks`)
+- `mcp-tools.js` — 45 flat tools grouped by domain: `file_*` (8), `session_*` (19), `project_*` (12), `task_*` (6)
 - `mcp-server.js` — tool definitions updated to match
 - `db.js` — added `cli_type` column, `mcp_registry` and `mcp_project_enabled` tables, `searchSessionsByName()`
 - `safe-exec.js` — added `tmuxCreateGemini()`, `tmuxCreateCodex()`, user `workbench` (was `hopper`)
@@ -895,44 +895,44 @@ This is the highest-risk subsystem. It requires both granular stage tests and fu
 | ID | Capability | Layer | Status |
 |----|-----------|-------|--------|
 | MCS-01 | JSON-RPC `initialize` returns protocol version | Mock + Live | NONE |
-| MCS-02 | `tools/list` returns all 3 tools (workbench_files, workbench_sessions, workbench_tasks) | Mock | NONE |
+| MCS-02 | `tools/list` returns all 45 flat tools grouped by file_/session_/project_/task_ prefix | Mock | NONE |
 | MCS-03 | `tools/call` delegates to Workbench HTTP API | Live | NONE |
-| MCS-04a | `workbench_files action=list` | Live | PASS |
-| MCS-04b | `workbench_files action=read` | Live | PASS |
-| MCS-04c | `workbench_files action=grep` | Live | PASS |
-| MCS-04d | `workbench_files action=create` | Live | PASS |
-| MCS-04e | `workbench_files action=update` | Live | PASS |
-| MCS-04f | `workbench_files action=delete` | Live | PASS |
-| MCS-04g | `workbench_files action=search_documents` | Live | PASS |
-| MCS-04h | `workbench_files action=search_code` | Live | PASS |
-| MCS-04i | `workbench_sessions action=list` | Live | PASS |
-| MCS-04j | `workbench_sessions action=new` (claude) | Live | PASS |
-| MCS-04k | `workbench_sessions action=new` (gemini) | Live | PASS |
-| MCS-04l | `workbench_sessions action=new` (codex) | Live | PASS |
-| MCS-04m | `workbench_sessions action=connect` (by id) | Live | PASS |
-| MCS-04n | `workbench_sessions action=connect` (by query) | Live | PASS |
-| MCS-04o | `workbench_sessions action=restart` | Live | PASS |
-| MCS-04p | `workbench_sessions action=config` | Live | PASS |
-| MCS-04q | `workbench_sessions action=tokens` | Live | PASS |
-| MCS-04r | `workbench_sessions action=summarize` | Live | PASS |
-| MCS-04s | `workbench_sessions action=transition` | Live | PASS |
-| MCS-04t | `workbench_sessions action=resume` | Live | PASS |
-| MCS-04u | `workbench_sessions action=grep` (claude filter) | Live | PASS |
-| MCS-04v | `workbench_sessions action=grep` (all CLIs) | Live | PASS |
-| MCS-04w | `workbench_sessions action=search_semantic` | Live | PASS |
-| MCS-04x | `workbench_sessions action=mcp_register` | Live | PASS |
-| MCS-04y | `workbench_sessions action=mcp_unregister` | Live | PASS |
-| MCS-04z | `workbench_sessions action=mcp_enable` | Live | PASS |
-| MCS-04aa | `workbench_sessions action=mcp_disable` | Live | PASS |
-| MCS-04ab | `workbench_sessions action=mcp_list_available` | Live | PASS |
-| MCS-04ac | `workbench_sessions action=mcp_list_enabled` | Live | PASS |
-| MCS-04ad | `workbench_tasks action=get` | Live | PASS |
-| MCS-04ae | `workbench_tasks action=add` | Live | PASS |
-| MCS-04af | `workbench_tasks action=complete` | Live | PASS |
-| MCS-04ag | `workbench_tasks action=reopen` | Live | PASS |
-| MCS-04ah | `workbench_tasks action=archive` | Live | PASS |
-| MCS-04ai | `workbench_tasks action=move` | Live | PASS |
-| MCS-04aj | `workbench_tasks action=update` | Live | PASS |
+| MCS-04a | `file_list` | Live | PASS |
+| MCS-04b | `file_read` | Live | PASS |
+| MCS-04c | `file_grep` | Live | PASS |
+| MCS-04d | `file_create` | Live | PASS |
+| MCS-04e | `file_update` | Live | PASS |
+| MCS-04f | `file_delete` | Live | PASS |
+| MCS-04g | `file_search_documents` | Live | PASS |
+| MCS-04h | `file_search_code` | Live | PASS |
+| MCS-04i | `session_list` | Live | PASS |
+| MCS-04j | `session_new` (claude) | Live | PASS |
+| MCS-04k | `session_new` (gemini) | Live | PASS |
+| MCS-04l | `session_new` (codex) | Live | PASS |
+| MCS-04m | `session_connect` (by id) | Live | PASS |
+| MCS-04n | `session_connect` (by query) | Live | PASS |
+| MCS-04o | `session_restart` | Live | PASS |
+| MCS-04p | `session_config` | Live | PASS |
+| MCS-04q | `session_info` | Live | PASS |
+| MCS-04r | `session_summarize` | Live | PASS |
+| MCS-04s | `session_prepare_pre_compact` | Live | PASS |
+| MCS-04t | `session_resume_post_compact` | Live | PASS |
+| MCS-04u | `session_grep` (claude filter) | Live | PASS |
+| MCS-04v | `session_grep` (all CLIs) | Live | PASS |
+| MCS-04w | `session_search` | Live | PASS |
+| MCS-04x | `project_mcp_register` | Live | PASS |
+| MCS-04y | `project_mcp_unregister` | Live | PASS |
+| MCS-04z | `project_mcp_enable` | Live | PASS |
+| MCS-04aa | `project_mcp_disable` | Live | PASS |
+| MCS-04ab | `project_mcp_list` | Live | PASS |
+| MCS-04ac | `project_mcp_list_enabled` | Live | PASS |
+| MCS-04ad | `task_list` | Live | PASS |
+| MCS-04ae | `task_add` | Live | PASS |
+| MCS-04af | `task_update {status:'done'}` | Live | PASS |
+| MCS-04ag | `task_update {status:'todo'}` | Live | PASS |
+| MCS-04ah | `task_update {status:'archived'}` | Live | PASS |
+| MCS-04ai | `task_move` | Live | PASS |
+| MCS-04aj | `task_update` | Live | PASS |
 | MCS-05 | Invalid tool name returns error | Mock | NONE |
 | MCS-06 | Malformed JSON-RPC request handling | Mock | NONE |
 | MCS-07 | `notifications/initialized` no-op | Live | NONE |

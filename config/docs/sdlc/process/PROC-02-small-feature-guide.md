@@ -49,7 +49,7 @@ Issue #XX: Step 6 — Regression: Test existing functionality
 Issue #XX: Step 7 — Close: Update and close GitHub Issue
 ```
 
-Use Workbench's task system (`workbench_tasks` MCP tool or Claude Code TaskCreate) to track these. Work ONE feature at a time. Complete every step before moving to the next step. Do not skip steps. Do not jump ahead.
+Use Workbench's task system (`task_*` MCP tools or Claude Code TaskCreate) to track these. Work ONE feature at a time. Complete every step before moving to the next step. Do not skip steps. Do not jump ahead.
 
 **If you need to pause a feature** (e.g., waiting for a long test), save the current task state as a comment in the GitHub Issue so you can return to it later. Then start Step 0 for the next item.
 
@@ -107,18 +107,18 @@ Only when the change has **no consumers** — nothing reads it, depends on it, o
 
 Send all three in parallel. Ask them to review the design independently. Do NOT lead them — no "focus on X" or "check Y." Let them find issues on their own.
 
-**Preferred: Workbench session MCP tools.** Use `workbench_sessions` to create sessions for each CLI. This handles startup prompts and session management automatically.
+**Preferred: Workbench session MCP tools.** Use `session_new` to create sessions for each CLI. This handles startup prompts and session management automatically.
 
-**Alternative: tmux sessions.** Follow the tmux guide (`docs/guides/using-other-clis-via-tmux.md`) for interaction patterns, especially for long prompts (use load-buffer/paste-buffer) and handling startup prompts.
+**Alternative: tmux sessions.** Follow the tmux guide (`docs/guides/using-cli-sessions.md`) for interaction patterns, especially for long prompts (use load-buffer/paste-buffer) and handling startup prompts.
 
 Session names must include the GitHub issue number to avoid collisions.
 Pattern: `[cli]-[issue#]-[step]` e.g. `claude-42-design`, `gemini-42-design`, `codex-42-design`.
 
 ```bash
 # Via Workbench MCP tools (preferred):
-workbench_sessions action:new cli:claude project:<project> prompt:"Design review for #42"
-workbench_sessions action:new cli:gemini project:<project> prompt:"Design review for #42"
-workbench_sessions action:new cli:codex  project:<project> prompt:"Design review for #42"
+session_new {project: <project>, cli: "claude", name: "Design review for #42"}
+session_new {project: <project>, cli: "gemini", name: "Design review for #42"}
+session_new {project: <project>, cli: "codex", name: "Design review for #42"}
 
 # Via tmux (alternative):
 tmux new-session -d -s claude-42-design -x 200 -y 50
@@ -238,4 +238,4 @@ gh issue comment [number] \
 
 ***
 
-**Related:** [Debugging Procedure](./PROC-01-debugging-guide.md) · [Tmux Guide](../guides/using-other-clis-via-tmux.md) · [Deployment Guide](../guides/workbench-deployment.md)
+**Related:** [Debugging Procedure](./PROC-01-debugging-guide.md) · [Session Guide](../guides/using-cli-sessions.md) · [Deployment Guide](../guides/workbench-deployment.md)
