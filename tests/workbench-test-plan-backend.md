@@ -2591,36 +2591,27 @@ Single source of truth. Updated on every write/run. One row per scenario.
 | FS-05 | Mock + Live | tests/mock/routes.test.js, tests/live/routes-filesystem.test.js | Not started | - | Not run | |
 | FS-06 | Mock + Live | tests/mock/mcp-tools.test.js, tests/live/mcp-tools.test.js | Not started | - | Not run | |
 
-### 15.21 MCP Tools (Internal)
+### 15.21 MCP Tools (Internal — 45 flat tools)
 
-| ID | Layer | Test File | Status | Last Run | Result | Notes |
-|----|-------|-----------|--------|----------|--------|-------|
-| MCP-01 | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-02 | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-03 | Mock + Live | tests/mock/mcp-tools.test.js, tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-04 | Mock | tests/mock/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-05 | Mock | tests/mock/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06a | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06b | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06c | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06d | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06e | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06f | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06g | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06h | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06i | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06j | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06k | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06l | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06m | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06n | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06o | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06p | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06q | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-07 | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-08 | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-09 | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-10 | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
+After the `mcp-rework` (commits `ce1b624` + `2f062f5`), the `workbench` MCP server exposes 45 flat tools across four domains: `file_*` (8), `session_*` (19), `project_*` (12), `task_*` (6). Tests live across three layers:
+
+- **Mock** — `tests/mock/mcp-tools.test.js`. Catalogue size, dispatch, validation/error mapping. 9 tests, all pass with `node --test`.
+- **Live integration** — `tests/live/mcp-tools.test.js` and the runbook **Phase 14** matrix. One happy-path row per tool, exercised via `POST /api/mcp/call` against a deployed `${WORKBENCH_CONTAINER}`.
+- **Live e2e** — runbook **Phase 14b** (`MCP-E2E-01..05`). Drives real CLI panes via `session_*` tools end-to-end for Claude/Gemini/Codex.
+
+| ID | Layer | Coverage | Test artefact |
+|----|-------|----------|---------------|
+| MCP-CAT-MOCK | Mock | Catalogue size = 45, group counts (file:8, session:19, project:12, task:6), every name flat | tests/mock/mcp-tools.test.js |
+| MCP-CAT-INT | Live | `GET /api/mcp/tools` returns 45, all flat-named | runbook MCP-CAT-00 |
+| MCP-CAT-STDIO | Live | `mcp-server.js` stdio: initialize → `serverInfo.name="workbench"`; tools/list → 45 tools, no `workbench_` double-prefix | runbook MCP-CAT-01 |
+| MCP-F-01..08 | Live | Each `file_*` tool happy path | runbook Phase 14 file_* matrix |
+| MCP-S-01..19 | Live | Each `session_*` tool happy path (S-14..19 are tmux interaction) | runbook Phase 14 session_* matrix |
+| MCP-P-01..12 | Live | Each `project_*` tool happy path (incl. sys_prompt_*, mcp_*) | runbook Phase 14 project_* matrix |
+| MCP-T-01..06 | Live | Each `task_*` tool happy path (status transitions via task_update) | runbook Phase 14 task_* matrix |
+| MCP-NEG-01..10 | Mock + Live | Error mapping: 404 unknown / 400 validation / 403 traversal / 410 dead session / 409 conflict | runbook Phase 14 negative-path matrix |
+| MCP-E2E-01..05 | Live e2e | Drive Claude/Gemini/Codex through full prompt→read cycle via `session_*` only. Hidden-default + override. | runbook Phase 14b |
+
+**Coverage assertion (gate):** every one of the 45 tool names must appear at least once in the Live or Live-e2e matrices with a PASS row before the rework can merge to main. Mock catalogue is automated on every commit and is non-negotiable as a precondition.
 
 ### 15.22 MCP Tools (External/Admin) — REMOVED
 

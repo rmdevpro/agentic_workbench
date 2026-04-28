@@ -33,7 +33,11 @@ Historical incident notes appear in some test sections — those are records of 
 | 9. Settings & Vector Search | 14 | NF-39 through NF-52 |
 | 10. Multi-CLI & MCP | 16 | NF-53 through NF-68 |
 | 11. New Features v2 | 10 | NF-69 through NF-78 |
-| **Total** | **~145** | |
+| 12. Comprehensive Feature Verification | 32 | — |
+| 13. Regression Tests for Issue Fixes | ~50 | REG-* tests for landed fixes |
+| 14. MCP Tool Catalogue | 47 (45 tools × 1 happy path + 2 stdio + 10 negative + 5 e2e) | One row per tool + negative-path matrix + Phase 14b CLI driving |
+| 15. Recent Regression Coverage | 13 | REG-220..228 + REG-MCP-REWORK-* |
+| **Total** | **~270** | |
 
 ## Meta
 - **Target:** `${WORKBENCH_URL}` (specified per run — see Target section above)
@@ -4464,6 +4468,258 @@ Then measure:
 - Banner does not stack: opening modal again with a still-bad value should not duplicate the banner.
 
 **Result:** ☐ PASS ☐ FAIL
+
+---
+
+## Phase 14: MCP Tool Catalogue (45 flat tools)
+
+End-to-end coverage for the flat MCP tool surface introduced in the `mcp-rework` work. Each tool gets one happy-path integration test; the layered safety net is:
+
+- **Mock** (`node --test tests/mock/mcp-tools.test.js`): catalogue size, dispatch, validation/error mapping. Run on every commit, no container required.
+- **Live integration** (this phase): each tool exercised against a deployed `${WORKBENCH_CONTAINER}` via `POST /api/mcp/call`. Schema-shape verification, no UI.
+- **Live e2e** (Phase 14b): `session_*` interaction tools verified against real CLI panes — actually drives Claude/Gemini/Codex.
+
+For every test below: `${API}` = `${WORKBENCH_URL}/api/mcp/call`. Default request shape: `{tool: <name>, args: {...}}`. Verify is HTTP 200 + the listed response keys present.
+
+### MCP-CAT-00: Catalogue size and shape
+**Action:** `GET ${WORKBENCH_URL}/api/mcp/tools`
+**Verify:** `tools.length === 45`. Every name matches `/^(file|session|project|task)_/`. Counts: 8 file, 19 session, 12 project, 6 task.
+
+### MCP-CAT-01: Stdio server advertises 45 tools
+**Action:** Spawn `docker exec -i ${WORKBENCH_CONTAINER} node /app/mcp-server.js` and send `{jsonrpc:"2.0",id:1,method:"initialize"}` then `{jsonrpc:"2.0",id:2,method:"tools/list"}`.
+**Verify:** initialize → `serverInfo.name === "workbench"`. tools/list → 45 entries. No tool name contains `workbench_` (single-prefix).
+
+### file_* (8 tools)
+
+| ID | Tool | Args | Verify |
+|----|------|------|--------|
+| MCP-F-01 | `file_list` | `{}` | `entries[]` array, mix of `type:"directory"` and `type:"file"` |
+| MCP-F-02 | `file_create` | `{path:"mcp-test.txt", content:"a"}` | `{created:"mcp-test.txt"}` |
+| MCP-F-03 | `file_read` | `{path:"mcp-test.txt"}` | `{path, content:"a"}` |
+| MCP-F-04 | `file_update` | `{path:"mcp-test.txt", content:"b"}` | `{updated:"mcp-test.txt"}`. Re-read returns `"b"`. |
+| MCP-F-05 | `file_grep` | `{pattern:"workbench"}` | `{pattern, matches:[...]}` (array, may be empty) |
+| MCP-F-06 | `file_search_documents` | `{query:"deployment"}` | `{configured:true, results:[]}` if vector off, else `results.length>=0` |
+| MCP-F-07 | `file_search_code` | `{query:"express"}` | same shape as F-06 |
+| MCP-F-08 | `file_delete` | `{path:"mcp-test.txt"}` | `{deleted:"mcp-test.txt"}`. Subsequent read returns 404. |
+
+### session_* (19 tools) — non-tmux
+
+| ID | Tool | Args | Verify |
+|----|------|------|--------|
+| MCP-S-01 | `session_list` | `{project:<P>}` | `{sessions:[]}` (array; empty fine for fresh container) |
+| MCP-S-02 | `session_new` | `{project:<P>, cli:"claude", name:"mcp-cat-claude"}` | `{session_id, tmux, cli:"claude"}`. Save `session_id` for downstream tests. |
+| MCP-S-03 | `session_info` | `{session_id:<from S-02>}` | Has `model`, `input_tokens`, `max_tokens`, `cli_type:"claude"`, `active:true` |
+| MCP-S-04 | `session_config` | `{session_id, name:"renamed"}` | `{saved:true}` |
+| MCP-S-05 | `session_summarize` | `{session_id, project:<P>}` | summary object (may be empty for fresh session) |
+| MCP-S-06 | `session_export` | `{session_id, project:<P>}` | `{format, content}` for claude; structured for non-claude |
+| MCP-S-07 | `session_grep` | `{pattern:"hello"}` | `{pattern, results:{}}` (per-CLI keys, may be empty) |
+| MCP-S-08 | `session_search` | `{query:"any"}` | `{results:[]}` or `{configured:false}` if vector off |
+| MCP-S-09 | `session_prepare_pre_compact` | `{}` | Returns string containing "checklist" or "compact" |
+| MCP-S-10 | `session_resume_post_compact` | `{session_id, tail_lines:10}` | Returns prompt string with tail content |
+| MCP-S-11 | `session_connect` | `{query:"renamed"}` | `{session_id, tmux, cli}` |
+| MCP-S-12 | `session_restart` | `{session_id}` | `{restarted:true, tmux, cli}` |
+| MCP-S-13 | `session_kill` | `{session_id:<temp Gemini from S-NEW>}` | `{killed:true}` (use a separate session — don't kill mcp-cat-claude until after S-15) |
+
+### session_* (19 tools) — tmux interaction (against the live `mcp-cat-claude` session)
+
+| ID | Tool | Args | Verify |
+|----|------|------|--------|
+| MCP-S-14 | `session_send_text` | `{session_id, text:"hello from mcp test"}` | `{sent:true, tmux}`. No Enter sent — text sits in input. |
+| MCP-S-15 | `session_send_key` | `{session_id, key:"Enter"}` | `{sent:true, key:"Enter", tmux}`. Claude begins responding. |
+| MCP-S-16 | `session_wait` | `{seconds:5}` | `{waited_seconds:5}` (≥4s actual elapsed) |
+| MCP-S-17 | `session_read_screen` | `{session_id, lines:50}` | `{tmux, lines:50, screen:<string>}`. Screen contains either the prompt echo or Claude's response. |
+| MCP-S-18 | `session_read_output` | `{session_id, project:<P>}` | structured response (model, transcript) |
+| MCP-S-19 | `session_send_keys` | `{session_id, text:"test "}` | `{sent:true, tmux}` (raw send-keys, no buffer) |
+
+After S-19, run `session_kill {session_id: mcp-cat-claude}` to clean up.
+
+### Repeat S-02..S-19 for Gemini
+
+**Action:** Same sequence with `cli:"gemini"`. Special handling: after S-14 (send_text) Gemini may need a *second* `Enter` to submit (multiline editor quirk — see `using-cli-sessions.md`). Verify via S-17 that "Thinking..." or response output appeared.
+
+### Repeat S-02..S-19 for Codex
+
+**Action:** Same sequence with `cli:"codex"`. Special handling: handle trust + update prompts with `session_send_key {key:"2"}` first; then prompts work. Same multiline-editor double-Enter as Gemini.
+
+### project_* (12 tools)
+
+| ID | Tool | Args | Verify |
+|----|------|------|--------|
+| MCP-P-01 | `project_list` | `{}` | `{projects:[{id,name,path,notes,state}, ...]}` |
+| MCP-P-02 | `project_get` | `{project:<P>}` | `{id, name:<P>, path, notes, state}` |
+| MCP-P-03 | `project_update` | `{project:<P>, notes:"runbook test note"}` | Updated row returned. Re-fetch via P-02 confirms. |
+| MCP-P-04 | `project_grep` | `{pattern:"workbench"}` | `{pattern, matches:[...]}` |
+| MCP-P-05 | `project_sys_prompt_get` | `{project:<P>, cli:"claude"}` | `{project, cli, file:"CLAUDE.md", content}` |
+| MCP-P-06 | `project_sys_prompt_update` | `{project:<P>, cli:"claude", content:"# Test\n"}` | `{updated:true}`. P-05 then returns `"# Test\n"`. Restore previous via P-06. |
+| MCP-P-07 | `project_mcp_register` | `{mcp_name:"runbook-test", mcp_config:{command:"echo"}}` | `{registered:"runbook-test"}` |
+| MCP-P-08 | `project_mcp_list` | `{}` | `{servers:[..., {name:"runbook-test"}, ...]}` |
+| MCP-P-09 | `project_mcp_enable` | `{mcp_name:"runbook-test", project:<P>}` | `{enabled, project}`. `<project_path>/.mcp.json` updated. |
+| MCP-P-10 | `project_mcp_list_enabled` | `{project:<P>}` | `{servers:[..., runbook-test, ...]}` |
+| MCP-P-11 | `project_mcp_disable` | `{mcp_name:"runbook-test", project:<P>}` | `{disabled, project}` |
+| MCP-P-12 | `project_mcp_unregister` | `{mcp_name:"runbook-test"}` | `{unregistered}`. P-08 no longer lists it. |
+
+### task_* (6 tools)
+
+| ID | Tool | Args | Verify |
+|----|------|------|--------|
+| MCP-T-01 | `task_add` | `{title:"runbook task", folder_path:"/"}` | Returns task with `id` (numeric). Save id. |
+| MCP-T-02 | `task_list` | `{folder_path:"/"}` | `{tasks:[..., {id, title:"runbook task"}, ...]}` |
+| MCP-T-03 | `task_get` | `{task_id:<id>}` | Full task row |
+| MCP-T-04 | `task_update` | `{task_id, title:"renamed", description:"x", status:"done"}` | Returns updated row |
+| MCP-T-05 | `task_grep` | `{pattern:"renamed"}` | `{matches:[..., {id}, ...]}` |
+| MCP-T-06 | `task_move` | `{task_id, folder_path:"/inbox"}` | `{moved:true, task_id, folder_path:"/inbox"}` |
+
+After T-06 mark done by setting status=archived via T-04 to keep test DB clean.
+
+### Negative-path coverage (validation/security)
+
+| ID | Tool | Args | Expected |
+|----|------|------|----------|
+| MCP-NEG-01 | `nonexistent_tool` | `{}` | HTTP 404, `{error:"Unknown tool: nonexistent_tool"}` |
+| MCP-NEG-02 | `file_read` | `{}` | HTTP 400, error mentions `path required` |
+| MCP-NEG-03 | `file_read` | `{path:"../../../etc/passwd"}` | HTTP 403, `path traversal blocked` |
+| MCP-NEG-04 | `file_create` | `{path:"x", content:"x"}` then same again | Second call HTTP 409, `file already exists` |
+| MCP-NEG-05 | `file_update` | `{path:"missing.txt", content:"x"}` | HTTP 404 |
+| MCP-NEG-06 | `task_get` | `{task_id:"abc"}` | HTTP 400, `task_id` |
+| MCP-NEG-07 | `session_info` | `{session_id:"has spaces"}` | HTTP 400, invalid format |
+| MCP-NEG-08 | `session_send_key` | `{session_id, key:"NotAKey"}` | HTTP 400, `invalid key` |
+| MCP-NEG-09 | `session_wait` | `{seconds:0}` | HTTP 400 |
+| MCP-NEG-10 | `session_send_text` | `{session_id:"<dead-session-id>", text:"x"}` | HTTP 410, `tmux session not running` |
+
+### Coverage assertion
+
+After Phase 14 completes, **every one of the 45 flat tools must have at least one PASS row above** (positive path) and at least one of MCP-NEG-* must touch each error category (404 unknown / 400 validation / 403 traversal / 410 dead session / 409 conflict). If any tool has no positive coverage, file an issue and FAIL Phase 14 as a whole.
+
+---
+
+## Phase 14b: Live e2e CLI session driving
+
+These exercise the `session_*` tools against real CLI panes (not just tmux schemas). Run after Phase 14 catalogue passes.
+
+### MCP-E2E-01: Claude — full conversation cycle via MCP only
+**Steps:**
+1. `session_new {cli:"claude", project:<P>, name:"mcp-e2e-claude"}`
+2. `session_wait {seconds:5}` — CLI startup
+3. `session_read_screen {session_id}` — verify Claude is at an empty prompt (no auth dialog blocking)
+4. `session_send_text {session_id, text:"What is 2+2?"}`
+5. `session_send_key {session_id, key:"Enter"}`
+6. `session_wait {seconds:15}`
+7. `session_read_screen {session_id}` — screen contains `4` somewhere
+8. `session_read_output {session_id, project}` — structured transcript shows the user message + assistant response
+9. `session_kill {session_id}`
+
+**Verify:** Each step returns the expected shape. Final read confirms a complete user→assistant exchange. No tmux primitives leaked into the agent's vocabulary anywhere.
+
+### MCP-E2E-02: Gemini — startup-aware drive
+**Steps:** Like E2E-01 but `cli:"gemini"`, with extra `session_send_key {key:"Enter"}` after the first send if read_screen shows the text in the multiline editor without "Thinking…".
+
+### MCP-E2E-03: Codex — trust dialog handled via MCP
+**Steps:**
+1. `session_new {cli:"codex", project:<P>, name:"mcp-e2e-codex"}`
+2. `session_wait {seconds:5}`
+3. `session_read_screen` — likely shows trust dialog
+4. `session_send_key {key:"1"}` (or whichever option = trust) + `session_send_key {key:"Enter"}`
+5. Continue as E2E-01.
+
+**Verify:** Trust dialog dismissed using MCP only — no shell-out, no direct tmux commands. End-to-end conversation completes.
+
+### MCP-E2E-04: Hidden flag default
+**Action:** `session_new {cli:"claude", project:<P>, name:"hidden-default"}` — no `hidden` arg.
+**Verify:** `GET /api/state` shows the session with `state:"hidden"`. Sidebar (default Active filter) does NOT show it.
+
+### MCP-E2E-05: Hidden flag explicit override
+**Action:** `session_new {cli:"claude", project:<P>, name:"visible-explicit", hidden:false}`.
+**Verify:** Session has `state:"active"`. Visible in sidebar Active filter.
+
+---
+
+## Phase 15: Recent regression coverage
+
+Tests for the user-facing fixes shipped in the canonical branch but not yet in the REG-* set.
+
+### REG-220: Auto-respawn passes --resume so JSONL stays the same
+**Issue:** #220 — ws-terminal silently re-keyed Claude sessions to a new UUID across container restarts.
+**Steps:**
+1. Open a Claude session via `+` button. Note `session_id` and the JSONL path.
+2. `ssh ${WORKBENCH_HOST} docker exec ${WORKBENCH_CONTAINER} tmux kill-session -t <tmux>` (simulate idle cleanup).
+3. Click the same session in the sidebar to reconnect — auto-respawn should fire.
+4. `browser_evaluate`: confirm the active tab's `id` still matches the original `session_id`.
+5. `ssh ${WORKBENCH_HOST} docker exec ${WORKBENCH_CONTAINER} stat /data/.claude/projects/<encoded>/<session_id>.jsonl` — file still grows on next message.
+6. **Negative path:** delete that JSONL on disk, repeat the kill+reconnect → should refuse with a `WARN: Refusing to auto-respawn — JSONL missing` log. Tab shows error.
+
+### REG-220-UI: Status bar token count tracks the live JSONL
+**Steps:** After REG-220 step 4, send a message in the reattached session. The status bar Context value should increase. Sidebar message count should increment. (Pre-fix: both stayed stuck on the dead file's count.)
+
+### REG-221: Vector search "none" provider keeps qdrant quiet
+**Issue:** #221.
+**Already covered:** VEC-01..VEC-21 (Phase 9). Re-confirm by checking container logs for absence of `qdrant: configured but probe failed` on a fresh deploy with `vector_embedding_provider="none"`.
+
+### REG-222: qdrant restart race with rapid setting changes
+**Issue:** #222.
+**Steps:**
+1. Have provider `gemini` configured + scanning.
+2. Rapidly PUT `/api/settings` `vector_embedding_provider` → `huggingface` → `none` → `gemini` (4 calls within 1s).
+3. Watch container logs.
+**Verify:** No error spam during teardown. Final state is `gemini` running. No "No embedding API key configured" errors after stop().
+
+### REG-223-VIS: Primary buttons in dark theme are readable
+**Issue:** #223.
+**Action:** UI screenshot of `+ → Claude` modal (Start Session button), `Add Project` modal, and the auth-link panel. Visual check: button background is `#1f6feb` (or `--btn-primary` token), not the old too-light blue.
+
+### REG-224: File-tree row click — icon area expands the folder
+**Issue:** #224.
+**Steps:**
+1. Open the right-panel Files tab. Expand `/data/workspace`.
+2. Find any directory LI in the tree.
+3. Click 8px from the LI's left edge (the icon area).
+**Verify:** LI gains class `expanded` and shows children. (Pre-fix: clicks in icon area did nothing.)
+
+### REG-225-UI: Default-model dropdown shows aliases (no version pins)
+**Issue:** #225.
+**Steps:** Settings → Claude Code → Default Model dropdown.
+**Verify:** Options are exactly `Opus`, `Sonnet`, `Haiku` (3 options, in that order). No version numbers visible. Selecting `Sonnet` and reopening shows `Sonnet` retained.
+
+### REG-225-MIG: Legacy versioned DB value normalized to alias on load
+**Steps:**
+1. `ssh ${WORKBENCH_HOST} docker exec ${WORKBENCH_CONTAINER} sqlite3 /data/workbench.db "UPDATE settings SET value='\"claude-opus-4-6\"' WHERE key='default_model'"`
+2. Reload Settings → Claude Code.
+**Verify:** Dropdown shows `Opus` (alias), DB row still has the legacy value, and re-saving to a different option writes the alias form (`"sonnet"`).
+
+### REG-226: Settings save flashes a Saved indicator
+**Issue:** #226.
+**Steps:** Open Settings. Toggle any field. Within 1.5s of the change a `#settings-saved-indicator` element appears in top-right of the modal with text `✓ Saved`. After ~1.5s, opacity transitions to 0.
+
+### REG-227: Session-name field replaces the prompt textarea
+**Issue:** #227.
+**Steps:** `+ → Claude`.
+**Verify:**
+- Modal label is `Session name`.
+- Field is a single-line `<input id="new-session-name" type="text" maxlength="60">`.
+- Old `#new-session-prompt` is gone.
+- Submitting `"My session"` posts `{project, name, cli_type}` (not `prompt`). Sidebar shows `My session`.
+- For Claude, after attach, the CLI receives a brief stand-by hint (verifiable via `session_read_screen` or container tmux capture-pane). It does NOT execute a free-form prompt.
+
+### REG-228-A: File tree does not collapse on tab close
+**Issue:** #228.
+**Steps:**
+1. Files panel open. Expand a sub-directory.
+2. Open any file in the editor (double-click).
+3. Close the file editor tab.
+**Verify:** The previously-expanded sub-directory is still expanded. (Pre-fix: tree fully collapsed on tab close.)
+
+### REG-228-B: Manual ↻ button preserves expanded state
+**Steps:**
+1. Files panel: expand a sub-directory.
+2. Click `↻` (`#panel-refresh-files`).
+**Verify:** After the rebuild settles (~2s), the same sub-directory is expanded again.
+
+### REG-MCP-REWORK-01: Old action-router shape is gone
+**Steps:** `POST /api/mcp/call {tool:"workbench_files", args:{action:"list"}}`
+**Verify:** HTTP 404 with `Unknown tool: workbench_files`. Same for `workbench_sessions`, `workbench_tasks`. Confirms migration is irreversible — old saved sessions referencing those names will get a clean error rather than silent misbehavior.
+
+### REG-MCP-REWORK-02: No double-prefix anywhere
+**Steps:** Spawn `mcp-server.js` and read `tools/list`.
+**Verify:** No tool name contains `workbench_` (the inner prefix). All names are `<domain>_<verb>`. Server name is `workbench` (single outer prefix).
 
 ---
 ## Troubleshooting

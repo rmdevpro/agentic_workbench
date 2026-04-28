@@ -1029,6 +1029,31 @@ Messages panel and inter-session messaging removed. Replaced by tmux (#51). MSG-
 |----|----------|-------|-------|------------------|
 | LIFE-01 | Tmux session killed externally while tab open | Live | Open session, `docker exec` kill the tmux session | Tab status changes to "disconnected"; reconnect attempts; eventually `noReconnect` triggers ("No tmux session"); tab remains closable; no console errors |
 
+### 7.41 Recent UI Regressions (mcp-rework + issue fixes)
+
+Coverage for UI-visible fixes shipped in the canonical branch on or after the MCP rework. Cross-referenced from runbook **Phase 15**.
+
+| ID | Scenario | Layer | Issue | Expected Outcome |
+|----|----------|-------|-------|------------------|
+| UI-REG-220 | Auto-respawn keeps the same session_id; status bar tracks the live JSONL after kill+reattach | Live | #220 | Token count and message count update on the original session row, never silently re-key to a new UUID |
+| UI-REG-223 | Primary action buttons readable in dark theme (Start Session / Add Project / Authenticate) | Visual | #223 | Background is `var(--btn-primary)` (#1f6feb), legible against `--bg-secondary`. No washed-out near-white blue. |
+| UI-REG-224 | Click on folder icon area expands the directory | Live | #224 | `elementFromPoint(li.left + 8, mid)` returns `<a>`. Clicking the icon toggles `expanded` class on the LI. Same for the project picker (`#jqft-tree`). |
+| UI-REG-225 | Default-model dropdown uses CLI aliases | Live | #225 | `#setting-model` options are `Opus`/`Sonnet`/`Haiku` only. No version numbers. Legacy DB values (`claude-sonnet-4-6`) display as the matching alias on load. |
+| UI-REG-226 | Saved indicator flashes on each successful save | Live | #226 | After any successful `saveSetting()`, `#settings-saved-indicator` appears top-right of modal with `✓ Saved`, fades after ~1.5s. Failure path still surfaces via the error banner (no overlap). |
+| UI-REG-227 | Session-name field replaces free-form prompt textarea | Live | #227 | New-session modal has single-line `#new-session-name` (label "Session name", maxlength 60). Submit body uses `name`, not `prompt`. Sidebar shows the typed name verbatim. |
+| UI-REG-228-A | File tree does not collapse on tab close | Live | #228 | Open editor → close tab → tree state preserved. Pre-fix expanded directories collapsed every tab switch. |
+| UI-REG-228-B | Manual ↻ button preserves expanded state | Live | #228 | Click `#panel-refresh-files`; after rebuild settles (~2s), the same expanded directories are expanded again. |
+| UI-REG-MODE-REMOVED | Status bar no longer shows hardcoded "Mode: bypass" | Visual | mcp-rework | Bottom status bar contains only Model, optional Thinking, and Context items. No Mode item. |
+
+### 7.42 MCP Tool Catalogue from the Browser
+
+These are not new UI surfaces but are sanity checks that the front-end (and any future tool-list panel) reflects the new flat-tool world.
+
+| ID | Scenario | Layer | Expected Outcome |
+|----|----------|-------|------------------|
+| UI-MCP-CAT-01 | `fetch('/api/mcp/tools')` from the page returns 45 names | Live | `tools.length === 45`; all flat-named (`file_*` / `session_*` / `project_*` / `task_*`); no double-prefix |
+| UI-MCP-CAT-02 | Old action-router shape rejected | Live | `POST /api/mcp/call {tool:"workbench_files", args:{action:"list"}}` returns HTTP 404 with `Unknown tool: workbench_files` |
+
 ---
 
 ## 8. End-to-End Workflow Scenarios (`e2e-workflows.spec.js`)
