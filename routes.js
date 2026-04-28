@@ -730,7 +730,7 @@ function registerCoreRoutes(
 
   app.post('/api/sessions', async (req, res) => {
     try {
-      const { project, prompt, cli_type, hidden } = req.body;
+      const { project, name, cli_type, hidden } = req.body;
       const cliType = cli_type || 'claude';
       const VALID_CLI_TYPES = ['claude', 'gemini', 'codex'];
       if (!VALID_CLI_TYPES.includes(cliType))
@@ -740,8 +740,8 @@ function registerCoreRoutes(
         return res
           .status(400)
           .json({ error: `project name too long (max ${PROJECT_NAME_MAX_LEN})` });
-      if (prompt && prompt.length > PROMPT_MAX_LEN)
-        return res.status(400).json({ error: `prompt too long (max ${PROMPT_MAX_LEN})` });
+      if (name && name.length > PROMPT_MAX_LEN)
+        return res.status(400).json({ error: `name too long (max ${PROMPT_MAX_LEN})` });
 
       const dbProject = db.getProject(project);
       const projectPath = dbProject ? dbProject.path : safe.resolveProjectPath(project);
@@ -797,26 +797,33 @@ function registerCoreRoutes(
       const proj = db.ensureProject(project, projectPath);
       const nameMaxLen = config.get('session.nameMaxLength', 60);
       const sessionName =
-        prompt && prompt.replace(/\s+/g, ' ').trim()
-          ? prompt.substring(0, nameMaxLen).replace(/\n/g, ' ').trim()
+        name && name.replace(/\s+/g, ' ').trim()
+          ? name.substring(0, nameMaxLen).replace(/\n/g, ' ').trim()
           : 'New Session';
       db.upsertSession(tmpId, proj.id, sessionName, cliType);
       if (hidden) db.setSessionState(tmpId, 'hidden');
 
-      if (prompt && cliType === 'claude') {
-        // Only inject prompt for Claude — it triggers JSONL creation for session resolution.
-        // Gemini/Codex have startup dialogs (trust, auth) that would consume the prompt.
-        // They get permanent UUIDs at creation, so no JSONL resolution needed.
+      if (name && cliType === 'claude') {
+        // Send a stand-by hint instead of treating the form value as a prompt.
+        // Old behavior — pasting the user's free-form prompt verbatim — caused
+        // Claude to start taking action on form submit (sometimes destructively).
+        // Now the field is just a session title; we hand Claude a brief notice
+        // that orients it without inviting action. The byproduct is the same:
+        // Claude responds with a JSONL entry, which is what session-id
+        // resolution is waiting on.
+        // Gemini/Codex still skipped — startup dialogs (trust, auth) would
+        // consume any input. They get permanent UUIDs at creation anyway.
         const promptDelayMs = config.get('session.promptInjectionDelayMs', 2000);
+        const hint = `The user has titled this session "${sessionName}". Stand by for their first message.`;
         setTimeout(async () => {
           try {
             if (!(await tmuxExists(tmux))) {
-              logger.warn('Session died before prompt could be sent', { module: 'routes', tmux, tmpId: tmpId.substring(0, 15) });
+              logger.warn('Session died before standby hint could be sent', { module: 'routes', tmux, tmpId: tmpId.substring(0, 15) });
               return;
             }
-            await safe.tmuxSendKeysAsync(tmux, prompt);
+            await safe.tmuxSendKeysAsync(tmux, hint);
           } catch (err) {
-            logger.error('Failed to send initial prompt', { module: 'routes', err: err.message });
+            logger.error('Failed to send standby hint', { module: 'routes', err: err.message });
           }
         }, promptDelayMs);
       }

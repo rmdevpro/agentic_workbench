@@ -415,7 +415,7 @@ Every DOM element with an `id`, semantic role, or interactive behavior. Each map
 | ID | Element | Type | Tests |
 |----|---------|------|-------|
 | UI-E118 | New session overlay | Modal | NS-01..09 |
-| UI-E119 | `#new-session-prompt` | Textarea | NS-02 |
+| UI-E119 | `#new-session-name` | Session name input | NS-02 |
 | UI-E120 | `#new-session-submit` ("Start Session") | Button | NS-03, NS-08 |
 | UI-E121 | New session overlay close button (X) | Button | NS-09 |
 | UI-E122 | New session overlay Cancel button | Button | NS-06 |

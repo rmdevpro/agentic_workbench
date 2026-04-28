@@ -312,9 +312,8 @@ These 3 tests validate that the app is functional. If any fail, stop and investi
 **Steps:**
 1. `browser_evaluate`: `fetch('/api/state').then(r=>r.json()).then(d=>d.projects[0].name)` -- save as PROJECT_NAME
 2. `browser_click` on `.project-group .new-btn` (the + button on the first project header)
-3. Wait for new-session dialog: `browser_evaluate`: `document.querySelector('#new-session-prompt') !== null`
-4. `browser_type` into `#new-session-prompt`: `Say hello`
-   (Note: there is no `#new-session-name` field. The session name is automatically derived from the prompt text.)
+3. Wait for new-session dialog: `browser_evaluate`: `document.querySelector('#new-session-name') !== null`
+4. `browser_type` into `#new-session-name`: `Say hello`
 5. `browser_click` on `#new-session-submit`
 6. Wait 3s for session creation: `browser_wait` with timeout 5000
 7. `browser_evaluate`: `document.querySelectorAll('.tab').length`
@@ -1779,7 +1778,7 @@ function openSessionFromMenu(projectName, cliType) {
 7. Close settings: `browser_click` on `.settings-close`
 8. Create a new session: `browser_click` on `.project-group .new-btn`
 9. `browser_wait` 500
-10. `browser_type` into `#new-session-prompt`: `test-settings-propagation`
+10. `browser_type` into `#new-session-name`: `test-settings-propagation`
 11. `browser_click` on `#new-session-submit`
 12. `browser_wait` 5000
 13. Check status bar shows configured model: `browser_evaluate`: `document.querySelector('#status-bar')?.innerHTML`
@@ -2147,7 +2146,7 @@ For each test below, use the standardized terminal I/O pattern:
 4. **Create new session:**
    - `browser_click` on `.project-group:first-child .new-btn`
    - `browser_wait` 500
-   - `browser_type` into `#new-session-prompt`: `List the files in this directory`
+   - `browser_type` into `#new-session-name`: `List the files in this directory`
    - `browser_click` on `#new-session-submit`
 5. **Wait for session:** `browser_wait` 5000
 6. **Save session ID:** `browser_evaluate`: `activeTabId` -- save as SESSION_ID
@@ -3231,7 +3230,7 @@ Quick pass/fail checklist for all 139 UI elements. Execute with `browser_evaluat
 | # | Selector/Check | Description | Result |
 |---|---------------|-------------|--------|
 | 1 | New session dialog (on + click) | Session creation form | ☐ |
-| 3 | `#new-session-prompt` | Session prompt textarea | ☐ |
+| 3 | `#new-session-name` | Session name input | ☐ |
 | 4 | `#new-session-submit` | Submit button | ☐ |
 | 5 | Config dialog (on rename click) | Session config overlay | ☐ |
 | 6 | `#cfg-name` | Config name input | ☐ |
@@ -4480,4 +4479,4 @@ Then measure:
 | Session creation via API returns 500 | No projects exist, or tmux is full | Create a project first via `POST /api/projects`. Check `docker exec ${WORKBENCH_CONTAINER} tmux list-sessions` for tmux limits. |
 | SMOKE-01 fails | App not loading at all | Stop execution. Investigate container health. No downstream tests are valid. |
 | Tests see stale data after state changes | Sidebar not refreshed | Call `browser_evaluate`: `loadState()` then `browser_wait` 2000 before re-checking. |
-| `#new-session-prompt` not found | Overlay not opened; + button click missed | Retry `browser_click` on `.project-group .new-btn`. Ensure the project group is expanded (not collapsed). |
+| `#new-session-name` not found | Overlay not opened; + button click missed | Retry `browser_click` on `.project-group .new-btn`. Ensure the project group is expanded (not collapsed). |

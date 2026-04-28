@@ -74,13 +74,13 @@ describe('UI smoke tests (browser)', () => {
       'Clicking new-session button must create a session overlay modal',
     );
 
-    // Modal must contain a textarea for the prompt
-    const textarea = page.locator('#new-session-prompt');
+    // Modal must contain a session-name input
+    const nameInput = page.locator('#new-session-name');
     assert.ok(
-      (await textarea.count()) > 0,
-      'Session creation modal must contain a prompt textarea (#new-session-prompt)',
+      (await nameInput.count()) > 0,
+      'Session creation modal must contain a session-name input (#new-session-name)',
     );
-    assert.ok(await textarea.isVisible(), 'Prompt textarea must be visible in the modal');
+    assert.ok(await nameInput.isVisible(), 'Session-name input must be visible in the modal');
 
     // Modal must contain a submit button
     const submitBtn = page.locator('#new-session-submit');
@@ -449,11 +449,11 @@ describe('UI smoke tests (browser)', () => {
     await newSessionBtn.click();
     await page.waitForTimeout(300);
 
-    const textarea = page.locator('#new-session-prompt');
-    assert.ok(await textarea.isVisible(), 'Prompt textarea must be visible');
+    const nameInput = page.locator('#new-session-name');
+    assert.ok(await nameInput.isVisible(), 'Session-name input must be visible');
 
-    // Type something and press Ctrl+Enter
-    await textarea.fill('keyboard shortcut test');
+    // Type something and press Enter (single-line input — Enter submits)
+    await nameInput.fill('keyboard shortcut test');
     // Intercept the fetch to verify the form would submit
     const result = await page.evaluate(() => {
       let fetchCalled = false;
@@ -464,10 +464,10 @@ describe('UI smoke tests (browser)', () => {
         }
         return origFetch(url, opts);
       };
-      // Simulate Ctrl+Enter on the textarea
-      const ta = document.getElementById('new-session-prompt');
-      ta.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }),
+      // Simulate Enter on the input
+      const el = document.getElementById('new-session-name');
+      el.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
       );
       // Give time for the async handler
       return new Promise((resolve) => {

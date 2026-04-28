@@ -1323,8 +1323,8 @@ build/**</textarea>
             <button style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px" title="Close" onclick="document.getElementById('${overlayId}').remove()">&#10005;</button>
           </div>
           <div style="margin-bottom:16px">
-            <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">What would you like to work on?</label>
-            <textarea id="new-session-prompt" maxlength="4096" style="width:100%;min-height:80px;padding:8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:13px;font-family:inherit;resize:vertical;outline:none;box-sizing:border-box" placeholder="Describe what you'd like to do..." autofocus></textarea>
+            <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Session name</label>
+            <input id="new-session-name" type="text" maxlength="60" style="width:100%;padding:8px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box" placeholder="Short description of this session" autofocus>
           </div>
           <div style="display:flex;justify-content:flex-end;gap:8px">
             <button onclick="document.getElementById('${overlayId}').remove()" style="padding:6px 16px;background:var(--bg-tertiary);color:var(--text-secondary);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:13px">Cancel</button>
@@ -1334,13 +1334,13 @@ build/**</textarea>
       `;
       document.body.appendChild(overlay);
 
-      // Focus the textarea
-      setTimeout(() => document.getElementById('new-session-prompt')?.focus(), 50);
+      // Focus the input
+      setTimeout(() => document.getElementById('new-session-name')?.focus(), 50);
 
       // Handle submit
       document.getElementById('new-session-submit').addEventListener('click', async () => {
-        const prompt = document.getElementById('new-session-prompt').value.trim();
-        if (!prompt) { document.getElementById('new-session-prompt').focus(); return; }
+        const name = document.getElementById('new-session-name').value.trim();
+        if (!name) { document.getElementById('new-session-name').focus(); return; }
 
         // Disable button while creating
         const btn = document.getElementById('new-session-submit');
@@ -1351,7 +1351,7 @@ build/**</textarea>
           const res = await fetch('/api/sessions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ project: projectName, prompt, cli_type: cliType }),
+            body: JSON.stringify({ project: projectName, name, cli_type: cliType }),
           });
           const data = await res.json();
           if (data.error) { alert('Error: ' + data.error); btn.textContent = 'Start Session'; btn.disabled = false; return; }
@@ -1370,9 +1370,9 @@ build/**</textarea>
         }
       });
 
-      // Allow Ctrl+Enter to submit
-      document.getElementById('new-session-prompt').addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      // Allow Enter to submit (single-line input)
+      document.getElementById('new-session-name').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
           document.getElementById('new-session-submit').click();
         }
       });

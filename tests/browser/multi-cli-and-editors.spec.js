@@ -88,13 +88,13 @@ describe('Multi-CLI sessions, editors, and task panel (browser)', () => {
     assert.ok(items.some(t => t.includes('Terminal')), 'Terminal option present');
   });
 
-  it('SESS-02: selecting Claude opens new session modal with prompt textarea', async () => {
+  it('SESS-02: selecting Claude opens new session modal with name input', async () => {
     await page.waitForSelector('.new-btn');
     await page.locator('.new-btn').first().click();
     await page.locator('.new-session-menu .context-menu-item[data-cli="claude"]').first().click();
-    await page.waitForSelector('#new-session-prompt');
-    const textarea = page.locator('#new-session-prompt');
-    assert.ok(await textarea.isVisible(), 'prompt textarea visible');
+    await page.waitForSelector('#new-session-name');
+    const input = page.locator('#new-session-name');
+    assert.ok(await input.isVisible(), 'session-name input visible');
     const submit = page.locator('#new-session-submit');
     assert.ok(await submit.isVisible(), 'Start Session button visible');
   });
@@ -103,8 +103,8 @@ describe('Multi-CLI sessions, editors, and task panel (browser)', () => {
     await page.waitForSelector('.new-btn');
     await page.locator('.new-btn').first().click();
     await page.locator('.new-session-menu .context-menu-item[data-cli="claude"]').first().click();
-    await page.waitForSelector('#new-session-prompt');
-    await page.fill('#new-session-prompt', 'Test session SESS-03');
+    await page.waitForSelector('#new-session-name');
+    await page.fill('#new-session-name', 'Test session SESS-03');
     await page.click('#new-session-submit');
     // Tab should appear
     await page.waitForFunction(() => {
@@ -128,7 +128,7 @@ describe('Multi-CLI sessions, editors, and task panel (browser)', () => {
 
   it('SESS-04: creating Gemini session via API returns cli_type gemini', async () => {
     const data = await apiPost('/api/sessions', {
-      project: 'wb-seed', prompt: 'test gemini', cli_type: 'gemini',
+      project: 'wb-seed', name: 'test gemini', cli_type: 'gemini',
     });
     assert.ok(data.id, `session ID returned, got: ${JSON.stringify(data)}`);
     assert.ok(data.tmux, 'tmux name returned');
@@ -144,7 +144,7 @@ describe('Multi-CLI sessions, editors, and task panel (browser)', () => {
 
   it('SESS-05: Gemini session persists in state (not cleaned up by reconciler)', async () => {
     const data = await apiPost('/api/sessions', {
-      project: 'wb-seed', prompt: 'persist test', cli_type: 'gemini',
+      project: 'wb-seed', name: 'persist test', cli_type: 'gemini',
     });
     assert.ok(data.id, 'session created');
     // Wait for multiple state poll cycles
@@ -158,8 +158,8 @@ describe('Multi-CLI sessions, editors, and task panel (browser)', () => {
   });
 
   it('SESS-06: sidebar shows CLI type indicator (C for Claude, G for Gemini)', async () => {
-    const c = await apiPost('/api/sessions', { project: 'wb-seed', prompt: 'claude indicator', cli_type: 'claude' });
-    const g = await apiPost('/api/sessions', { project: 'wb-seed', prompt: 'gemini indicator', cli_type: 'gemini' });
+    const c = await apiPost('/api/sessions', { project: 'wb-seed', name: 'claude indicator', cli_type: 'claude' });
+    const g = await apiPost('/api/sessions', { project: 'wb-seed', name: 'gemini indicator', cli_type: 'gemini' });
     assert.ok(c.id && g.id, 'both sessions created');
     await new Promise(r => setTimeout(r, 3000));
     const state = await apiGet('/api/state');
@@ -274,7 +274,7 @@ describe('Multi-CLI sessions, editors, and task panel (browser)', () => {
   // ── #98: Session Connect / Restart ─────────────────────────
 
   it('CONN-01: connect action finds session by name query', async () => {
-    const sess = await apiPost('/api/sessions', { project: 'wb-seed', prompt: 'findme session', cli_type: 'claude' });
+    const sess = await apiPost('/api/sessions', { project: 'wb-seed', name: 'findme session', cli_type: 'claude' });
     assert.ok(sess.id, 'session created for connect test');
     await new Promise(r => setTimeout(r, 3000));
     const result = await apiPost('/api/mcp/call', {
@@ -287,7 +287,7 @@ describe('Multi-CLI sessions, editors, and task panel (browser)', () => {
   });
 
   it('CONN-02: restart action kills and recreates tmux session', async () => {
-    const sess = await apiPost('/api/sessions', { project: 'wb-seed', prompt: 'restart test', cli_type: 'claude' });
+    const sess = await apiPost('/api/sessions', { project: 'wb-seed', name: 'restart test', cli_type: 'claude' });
     assert.ok(sess.id, 'session created for restart test');
     await new Promise(r => setTimeout(r, 3000));
     const result = await apiPost('/api/mcp/call', {
@@ -357,7 +357,7 @@ describe('Multi-CLI sessions, editors, and task panel (browser)', () => {
   });
 
   it('MCP-06: workbench_sessions config saves session name', async () => {
-    const sess = await apiPost('/api/sessions', { project: 'wb-seed', prompt: 'config test', cli_type: 'claude' });
+    const sess = await apiPost('/api/sessions', { project: 'wb-seed', name: 'config test', cli_type: 'claude' });
     const result = await apiPost('/api/mcp/call', {
       tool: 'workbench_sessions', args: { action: 'config', session_id: sess.id, name: 'renamed by MCP' },
     });
