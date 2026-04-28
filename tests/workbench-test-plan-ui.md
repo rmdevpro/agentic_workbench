@@ -207,6 +207,30 @@ All shared utilities live in `tests/helpers/`:
 | `visual-review-rubric.md` | Versioned visual review criteria |
 | `llm-judge-rubric.md` | Versioned LLM-as-judge rubric: judge model (Haiku), rating scale (1-5), minimum acceptable (3/5), evaluation dimensions |
 
+### 3.4a Prescribed UI Test Methodology
+
+UI tests follow one prescribed pattern, with one exception. Both surfaces drive the **deployed `${WORKBENCH_URL}`** (HF Space or irina dev container). Neither uses a synthetic stand-in for the CLI.
+
+**Default — Playwright MCP (headless Chromium):**
+
+- Driven from inside this Claude Code session via the Playwright MCP server. `browser_navigate` / `browser_evaluate` / `browser_click` / etc.
+- Exercises the **full stack**: UI → WebSocket → tmux pane → real Claude / Gemini / Codex CLI → session JSONL → status-bar / sidebar updates.
+- Used for every UI test that is not specifically about real-rendering or OAuth input. This is the default.
+
+**Exception — Hymie / Hymie2 (real Firefox, headed):**
+
+- For visual / rendering bugs that headless Chromium cannot accurately model (font metrics, scrollbar behavior, layout edge cases under real fonts).
+- For CLI-input bugs (Ink keyboard handling, /login paste-back, anything that touches how a real terminal forwards keypresses to a TUI).
+- Driven via the Hymie MCP tools (`mcp__hymie__*` / `mcp__hymie2__*`) against the same `${WORKBENCH_URL}`.
+
+**Forbidden as test surfaces:**
+
+- Synthetic CLI substitutes (e.g. spawning a `bash` session via `session_new {cli:"bash"}` to "test" `session_send_*` instead of using a real Claude/Gemini/Codex pane). The `session_*` tools are tested by driving real CLI sessions, not by sending text to a generic shell. If the live CLI isn't authenticated on the test host, fix that — don't substitute.
+- Mocked WebSocket layers, mocked tmux, in-process app spun up next to the deployed one. The deployed Space/container is the only valid target.
+- `npm run test:browser` from the host shell of any workbench-running machine (M5, irina). See §2.0.
+
+The "no synthetic CLI" rule is part of the 100% feature-coverage gate (§3.7). A `session_*` test row that exercised a bash session instead of a real CLI does not count as covering that tool.
+
 ### 3.5 Baseline Reset Protocol
 
 Every test starts from a known clean state:
