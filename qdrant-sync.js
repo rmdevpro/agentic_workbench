@@ -768,6 +768,12 @@ async function scanCollection(collection, dirs, patterns, dims) {
     if (!existsSync(dir)) return;
     const entries = await readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
+      // Bail mid-scan if a settings change has stopped this run. stop() flips
+      // _running to false; a new pipeline (kicked off by reapplyConfig) will
+      // start its own scan with the fresh config. Without this check, the
+      // in-flight scan would keep using the now-stale cfg and produce
+      // "No embedding API key configured" errors per-file.
+      if (!_running) return;
       const full = join(dir, entry.name);
       const rel = relative(baseDir, full);
       if (isIgnored(rel, ignorePatterns)) continue;
@@ -777,6 +783,13 @@ async function scanCollection(collection, dirs, patterns, dims) {
         try {
           total += await syncFileToCollection(full, collection, baseDir, dims);
         } catch (err) {
+          // If settings flipped to provider='none' mid-scan, the embed call
+          // throws "No embedding API key configured". That's not an error,
+          // it's the expected cancellation signal — log as debug and bail.
+          if (err.message === 'No embedding API key configured' && getEmbeddingProvider() === 'none') {
+            logger.debug('Scan aborted — provider switched to none mid-scan', { module: 'qdrant-sync' });
+            return;
+          }
           logger.error('File sync error', { module: 'qdrant-sync', file: full, collection, err: err.message });
         }
       }
