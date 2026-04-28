@@ -2720,7 +2720,14 @@ Wait 30s for serialized pipelines to drain. `GET /api/logs?level=ERROR&module=qd
 3. `browser_press_key` Tab to fire `onchange` → server-side validation hits `https://router.huggingface.co/hf-inference/.../pipeline/feature-extraction` with the new key.
 4. `browser_wait_for` 4000 ms.
 5. `browser_evaluate`: `await fetch('/api/cli-credentials').then(r => r.json())`.
-**Verify:** `cli-credentials.huggingface === true`. (For the negative-path test: type a clearly-bogus key like `hf_xxx_invalid`. Server returns 400 with `"API key validation failed"`. The settings-error banner — `#settings-error` — surfaces the message; the field value rolls back to its previous state via `saveSetting()`'s rollback path.)
+**Verify:** `cli-credentials.huggingface === true`.
+
+**VEC-20 negative path** (verified on hf-test):
+- With a valid HF key already saved, fire `change` on `#setting-huggingface-key` with an obviously-bogus value (e.g. `"hf_DEFINITELY_INVALID_xyz"`).
+- Server returns 400 with body `"API key validation failed: HF Embedding API error 401: ..."`.
+- The error banner element is `#settings-error-banner` (with the message in `#settings-error-banner-msg`) — NOT `#settings-error`. Banner has `display: flex` and `offsetParent !== null` when shown.
+- The field value rolls back to its previous length (`saveSetting()`'s rollback path) — verify by capturing `field.value.length` before the bad input and confirming it's unchanged after the validation failure.
+- Server-side `cli-credentials.huggingface` remains `true` (the bad value never landed in the DB).
 
 #### VEC-21: Settings UI — Switch Provider via Dropdown (Playwright-driven, full user flow)
 **Pre-state:** At least one provider key saved (e.g. HF key from VEC-20). Provider currently `"none"`.
