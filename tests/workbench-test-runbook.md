@@ -35,7 +35,7 @@ Historical incident notes appear in some test sections — those are records of 
 | 11. New Features v2 | 10 | NF-69 through NF-78 |
 | 12. Comprehensive Feature Verification | 32 | — |
 | 13. Regression Tests for Issue Fixes | ~50 | REG-* tests for landed fixes |
-| 14. MCP Tool Catalogue | 47 (45 tools × 1 happy path + 2 stdio + 10 negative + 5 e2e) | One row per tool + negative-path matrix + Phase 14b CLI driving |
+| 14. MCP Tool Catalogue | 49 (44 tools × 1 happy path + 2 stdio + 12 negative + 5 e2e + 3 log filter shapes) | One row per tool + negative-path matrix + Phase 14b CLI driving |
 | 15. Recent Regression Coverage | 13 | REG-220..228 + REG-MCP-REWORK-* |
 | **Total** | **~270** | |
 
@@ -45,7 +45,7 @@ Historical incident notes appear in some test sections — those are records of 
 - **Tool:** Playwright MCP (local, NOT Malory)
 - **Container user:** `workbench` (UID 1000)
 - **Workspace path:** `/data/workspace`
-- **MCP Tools:** 45 flat tools — `file_*` (8), `session_*` (19), `project_*` (12), `task_*` (6)
+- **MCP Tools:** 44 flat tools — `file_*` (8), `session_*` (19), `project_*` (11), `task_*` (5), `log_*` (1)
 - **Settings tabs:** General, Claude Code, Vector Search, System Prompts
 - **Session types:** Claude, Gemini, Codex (selected via + dropdown)
 - **Test Plan:** See `docs/work-specs/workbench-test-plan.md`
@@ -65,7 +65,7 @@ These changes affect many test steps. Read before executing.
 9. **Workspace path:** `/data/workspace` (not `/mnt/workspace`). Container user is `workbench` (not `hopper`).
 10. **CLI type indicator:** `.active-dot` replaced by CLI type label (C/G/X) with per-CLI colors.
 11. **Session creation:** `+` button opens dropdown: C Claude, G Gemini, X Codex, Terminal. `createSession(projectName, cliType)` accepts CLI type.
-12. **MCP tools rebuilt:** 17 tools (orig) → 3 action-routers (#150) → 45 flat tools (current). Names like `file_read`, `session_send_text`, `task_add` — no nested `action` arg.
+12. **MCP tools rebuilt:** 17 tools (orig) → 3 action-routers (#150) → 44 flat tools (current). Names like `file_read`, `session_send_text`, `task_add` — no nested `action` arg.
 
 ## How to Use This Runbook
 
@@ -2850,7 +2850,7 @@ Wait 30s for serialized pipelines to drain. `GET /api/logs?level=ERROR&module=qd
 
 ### NF-68: Only 3 MCP Tools
 **Action:** Fetch `/api/mcp/tools`.
-**Verify:** Exactly 45 tools, all flat names grouped by `file_/session_/project_/task_` prefix.
+**Verify:** Exactly 44 tools, all flat names grouped by `file_/session_/project_/task_/log_` prefix.
 
 ---
 
@@ -4496,7 +4496,7 @@ Then measure:
 
 ---
 
-## Phase 14: MCP Tool Catalogue (45 flat tools)
+## Phase 14: MCP Tool Catalogue (44 flat tools)
 
 End-to-end coverage for the flat MCP tool surface introduced in the `mcp-rework` work. Each tool gets one happy-path integration test; the layered safety net is:
 
@@ -4508,11 +4508,11 @@ For every test below: `${API}` = `${WORKBENCH_URL}/api/mcp/call`. Default reques
 
 ### MCP-CAT-00: Catalogue size and shape
 **Action:** `GET ${WORKBENCH_URL}/api/mcp/tools`
-**Verify:** `tools.length === 45`. Every name matches `/^(file|session|project|task)_/`. Counts: 8 file, 19 session, 12 project, 6 task.
+**Verify:** `tools.length === 44`. Every name matches `/^(file|session|project|task|log)_/`. Counts: 8 file, 19 session, 11 project, 5 task, 1 log.
 
-### MCP-CAT-01: Stdio server advertises 45 tools
+### MCP-CAT-01: Stdio server advertises 44 tools
 **Action:** Spawn `docker exec -i ${WORKBENCH_CONTAINER} node /app/mcp-server.js` and send `{jsonrpc:"2.0",id:1,method:"initialize"}` then `{jsonrpc:"2.0",id:2,method:"tools/list"}`.
-**Verify:** initialize → `serverInfo.name === "workbench"`. tools/list → 45 entries. No tool name contains `workbench_` (single-prefix).
+**Verify:** initialize → `serverInfo.name === "workbench"`. tools/list → 44 entries. No tool name contains `workbench_` (single-prefix).
 
 ### file_* (8 tools)
 
@@ -4522,7 +4522,7 @@ For every test below: `${API}` = `${WORKBENCH_URL}/api/mcp/call`. Default reques
 | MCP-F-02 | `file_create` | `{path:"mcp-test.txt", content:"a"}` | `{created:"mcp-test.txt"}` |
 | MCP-F-03 | `file_read` | `{path:"mcp-test.txt"}` | `{path, content:"a"}` |
 | MCP-F-04 | `file_update` | `{path:"mcp-test.txt", content:"b"}` | `{updated:"mcp-test.txt"}`. Re-read returns `"b"`. |
-| MCP-F-05 | `file_grep` | `{pattern:"workbench"}` | `{pattern, matches:[...]}` (array, may be empty) |
+| MCP-F-05 | `file_find` | `{pattern:"workbench"}` | `{pattern, matches:[...]}` (array, may be empty) |
 | MCP-F-06 | `file_search_documents` | `{query:"deployment"}` | `{configured:true, results:[]}` if vector off, else `results.length>=0` |
 | MCP-F-07 | `file_search_code` | `{query:"express"}` | same shape as F-06 |
 | MCP-F-08 | `file_delete` | `{path:"mcp-test.txt"}` | `{deleted:"mcp-test.txt"}`. Subsequent read returns 404. |
@@ -4537,7 +4537,7 @@ For every test below: `${API}` = `${WORKBENCH_URL}/api/mcp/call`. Default reques
 | MCP-S-04 | `session_config` | `{session_id, name:"renamed"}` | `{saved:true}` |
 | MCP-S-05 | `session_summarize` | `{session_id, project:<P>}` | summary object (may be empty for fresh session) |
 | MCP-S-06 | `session_export` | `{session_id, project:<P>}` | `{format, content}` for claude; structured for non-claude |
-| MCP-S-07 | `session_grep` | `{pattern:"hello"}` | `{pattern, results:{}}` (per-CLI keys, may be empty) |
+| MCP-S-07 | `session_find` | `{pattern:"hello"}` | `{pattern, results:{}}` (per-CLI keys, may be empty) |
 | MCP-S-08 | `session_search` | `{query:"any"}` | `{results:[]}` or `{configured:false}` if vector off |
 | MCP-S-09 | `session_prepare_pre_compact` | `{}` | Returns string containing "checklist" or "compact" |
 | MCP-S-10 | `session_resume_post_compact` | `{session_id, tail_lines:10}` | Returns prompt string with tail content |
@@ -4570,10 +4570,10 @@ After S-19, run `session_kill {session_id: mcp-cat-claude}` to clean up.
 
 | ID | Tool | Args | Verify |
 |----|------|------|--------|
-| MCP-P-01 | `project_list` | `{}` | `{projects:[{id,name,path,notes,state}, ...]}` |
+| MCP-P-01 | `project_find` | `{}` | `{projects:[{id,name,path,notes,state}, ...]}` |
 | MCP-P-02 | `project_get` | `{project:<P>}` | `{id, name:<P>, path, notes, state}` |
 | MCP-P-03 | `project_update` | `{project:<P>, notes:"runbook test note"}` | Updated row returned. Re-fetch via P-02 confirms. |
-| MCP-P-04 | `project_grep` | `{pattern:"workbench"}` | `{pattern, matches:[...]}` |
+| MCP-P-04 | `project_find` (with pattern) | `{pattern:"workbench"}` | `{pattern, matches:[...]}` |
 | MCP-P-05 | `project_sys_prompt_get` | `{project:<P>, cli:"claude"}` | `{project, cli, file:"CLAUDE.md", content}` |
 | MCP-P-06 | `project_sys_prompt_update` | `{project:<P>, cli:"claude", content:"# Test\n"}` | `{updated:true}`. P-05 then returns `"# Test\n"`. Restore previous via P-06. |
 | MCP-P-07 | `project_mcp_register` | `{mcp_name:"runbook-test", mcp_config:{command:"echo"}}` | `{registered:"runbook-test"}` |
@@ -4588,13 +4588,21 @@ After S-19, run `session_kill {session_id: mcp-cat-claude}` to clean up.
 | ID | Tool | Args | Verify |
 |----|------|------|--------|
 | MCP-T-01 | `task_add` | `{title:"runbook task", folder_path:"/"}` | Returns task with `id` (numeric). Save id. |
-| MCP-T-02 | `task_list` | `{folder_path:"/"}` | `{tasks:[..., {id, title:"runbook task"}, ...]}` |
+| MCP-T-02 | `task_find` | `{folder_path:"/"}` | `{tasks:[..., {id, title:"runbook task"}, ...]}` |
 | MCP-T-03 | `task_get` | `{task_id:<id>}` | Full task row |
 | MCP-T-04 | `task_update` | `{task_id, title:"renamed", description:"x", status:"done"}` | Returns updated row |
-| MCP-T-05 | `task_grep` | `{pattern:"renamed"}` | `{matches:[..., {id}, ...]}` |
+| MCP-T-05 | `task_find` (with pattern) | `{pattern:"renamed"}` | `{matches:[..., {id}, ...]}` |
 | MCP-T-06 | `task_move` | `{task_id, folder_path:"/inbox"}` | `{moved:true, task_id, folder_path:"/inbox"}` |
 
 After T-06 mark done by setting status=archived via T-04 to keep test DB clean.
+
+### log_* (1 tool)
+
+| ID | Tool | Args | Verify |
+|----|------|------|--------|
+| MCP-L-01 | `log_find` | `{level:"ERROR", since:"1h", limit:10}` | `{count:N, logs:[{id, ts, level:"ERROR", module, message, context}, ...]}`. Empty array is acceptable; `count` matches `logs.length`. |
+| MCP-L-02 | `log_find` (pattern) | `{pattern:"qdrant", since:"24h", limit:5}` | Pattern is regex over message + context; rows that don't match the regex are filtered. |
+| MCP-L-03 | `log_find` (since formats) | `{since:"30m"}` then `{since:"2026-04-28T00:00:00Z"}` | Both forms accepted. Invalid form (e.g. `{since:"notatime"}`) returns HTTP 400. |
 
 ### Negative-path coverage (validation/security)
 
@@ -4610,10 +4618,12 @@ After T-06 mark done by setting status=archived via T-04 to keep test DB clean.
 | MCP-NEG-08 | `session_send_key` | `{session_id, key:"NotAKey"}` | HTTP 400, `invalid key` |
 | MCP-NEG-09 | `session_wait` | `{seconds:0}` | HTTP 400 |
 | MCP-NEG-10 | `session_send_text` | `{session_id:"<dead-session-id>", text:"x"}` | HTTP 410, `tmux session not running` |
+| MCP-NEG-11 | `log_find` | `{level:"FOO"}` | HTTP 400, `invalid level` |
+| MCP-NEG-12 | `log_find` | `{since:"notatime"}` | HTTP 400, `invalid since` |
 
 ### Coverage assertion
 
-After Phase 14 completes, **every one of the 45 flat tools must have at least one PASS row above** (positive path) and at least one of MCP-NEG-* must touch each error category (404 unknown / 400 validation / 403 traversal / 410 dead session / 409 conflict). If any tool has no positive coverage, file an issue and FAIL Phase 14 as a whole.
+After Phase 14 completes, **every one of the 44 flat tools must have at least one PASS row above** (positive path) and at least one of MCP-NEG-* must touch each error category (404 unknown / 400 validation / 403 traversal / 410 dead session / 409 conflict). If any tool has no positive coverage, file an issue and FAIL Phase 14 as a whole.
 
 ---
 

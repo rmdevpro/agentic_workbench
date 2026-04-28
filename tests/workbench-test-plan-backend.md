@@ -21,7 +21,7 @@
 - `workbench_send_message`, `workbench_get_project_notes`, `workbench_get_session_notes`, `workbench_ask_cli`, `workbench_ask_quorum`, `workbench_smart_compaction` — all removed
 
 ### Changed modules
-- `mcp-tools.js` — 45 flat tools grouped by domain: `file_*` (8), `session_*` (19), `project_*` (12), `task_*` (6)
+- `mcp-tools.js` — 44 flat tools grouped by domain: `file_*` (8), `session_*` (19), `project_*` (11), `task_*` (5), `log_*` (1)
 - `mcp-server.js` — tool definitions updated to match
 - `db.js` — added `cli_type` column, `mcp_registry` and `mcp_project_enabled` tables, `searchSessionsByName()`
 - `safe-exec.js` — added `tmuxCreateGemini()`, `tmuxCreateCodex()`, user `workbench` (was `hopper`)
@@ -921,11 +921,11 @@ This is the highest-risk subsystem. It requires both granular stage tests and fu
 | ID | Capability | Layer | Status |
 |----|-----------|-------|--------|
 | MCS-01 | JSON-RPC `initialize` returns protocol version | Mock + Live | NONE |
-| MCS-02 | `tools/list` returns all 45 flat tools grouped by file_/session_/project_/task_ prefix | Mock | NONE |
+| MCS-02 | `tools/list` returns all 44 flat tools grouped by file_/session_/project_/task_ prefix | Mock | NONE |
 | MCS-03 | `tools/call` delegates to Workbench HTTP API | Live | NONE |
 | MCS-04a | `file_list` | Live | PASS |
 | MCS-04b | `file_read` | Live | PASS |
-| MCS-04c | `file_grep` | Live | PASS |
+| MCS-04c | `file_find` | Live | PASS |
 | MCS-04d | `file_create` | Live | PASS |
 | MCS-04e | `file_update` | Live | PASS |
 | MCS-04f | `file_delete` | Live | PASS |
@@ -943,8 +943,8 @@ This is the highest-risk subsystem. It requires both granular stage tests and fu
 | MCS-04r | `session_summarize` | Live | PASS |
 | MCS-04s | `session_prepare_pre_compact` | Live | PASS |
 | MCS-04t | `session_resume_post_compact` | Live | PASS |
-| MCS-04u | `session_grep` (claude filter) | Live | PASS |
-| MCS-04v | `session_grep` (all CLIs) | Live | PASS |
+| MCS-04u | `session_find` (claude filter) | Live | PASS |
+| MCS-04v | `session_find` (all CLIs) | Live | PASS |
 | MCS-04w | `session_search` | Live | PASS |
 | MCS-04x | `project_mcp_register` | Live | PASS |
 | MCS-04y | `project_mcp_unregister` | Live | PASS |
@@ -952,7 +952,7 @@ This is the highest-risk subsystem. It requires both granular stage tests and fu
 | MCS-04aa | `project_mcp_disable` | Live | PASS |
 | MCS-04ab | `project_mcp_list` | Live | PASS |
 | MCS-04ac | `project_mcp_list_enabled` | Live | PASS |
-| MCS-04ad | `task_list` | Live | PASS |
+| MCS-04ad | `task_find` | Live | PASS |
 | MCS-04ae | `task_add` | Live | PASS |
 | MCS-04af | `task_update {status:'done'}` | Live | PASS |
 | MCS-04ag | `task_update {status:'todo'}` | Live | PASS |
@@ -2617,9 +2617,9 @@ Single source of truth. Updated on every write/run. One row per scenario.
 | FS-05 | Mock + Live | tests/mock/routes.test.js, tests/live/routes-filesystem.test.js | Not started | - | Not run | |
 | FS-06 | Mock + Live | tests/mock/mcp-tools.test.js, tests/live/mcp-tools.test.js | Not started | - | Not run | |
 
-### 15.21 MCP Tools (Internal — 45 flat tools)
+### 15.21 MCP Tools (Internal — 44 flat tools)
 
-After the `mcp-rework` (commits `ce1b624` + `2f062f5`), the `workbench` MCP server exposes 45 flat tools across four domains: `file_*` (8), `session_*` (19), `project_*` (12), `task_*` (6). Tests live across three layers:
+After the `mcp-rework` (commits `ce1b624` + `2f062f5`), the `workbench` MCP server exposes 44 flat tools across four domains: `file_*` (8), `session_*` (19), `project_*` (11), `task_*` (5), `log_*` (1). Tests live across three layers:
 
 - **Mock** — `tests/mock/mcp-tools.test.js`. Catalogue size, dispatch, validation/error mapping. 9 tests, all pass with `node --test`.
 - **Live integration** — `tests/live/mcp-tools.test.js` and the runbook **Phase 14** matrix. One happy-path row per tool, exercised via `POST /api/mcp/call` against a deployed `${WORKBENCH_CONTAINER}`.
@@ -2629,7 +2629,7 @@ After the `mcp-rework` (commits `ce1b624` + `2f062f5`), the `workbench` MCP serv
 |----|-------|----------|---------------|
 | MCP-CAT-MOCK | Mock | Catalogue size = 45, group counts (file:8, session:19, project:12, task:6), every name flat | tests/mock/mcp-tools.test.js |
 | MCP-CAT-INT | Live | `GET /api/mcp/tools` returns 45, all flat-named | runbook MCP-CAT-00 |
-| MCP-CAT-STDIO | Live | `mcp-server.js` stdio: initialize → `serverInfo.name="workbench"`; tools/list → 45 tools, no `workbench_` double-prefix | runbook MCP-CAT-01 |
+| MCP-CAT-STDIO | Live | `mcp-server.js` stdio: initialize → `serverInfo.name="workbench"`; tools/list → 44 tools, no `workbench_` double-prefix | runbook MCP-CAT-01 |
 | MCP-F-01..08 | Live | Each `file_*` tool happy path | runbook Phase 14 file_* matrix |
 | MCP-S-01..19 | Live | Each `session_*` tool happy path (S-14..19 are tmux interaction) | runbook Phase 14 session_* matrix |
 | MCP-P-01..12 | Live | Each `project_*` tool happy path (incl. sys_prompt_*, mcp_*) | runbook Phase 14 project_* matrix |
@@ -2637,7 +2637,7 @@ After the `mcp-rework` (commits `ce1b624` + `2f062f5`), the `workbench` MCP serv
 | MCP-NEG-01..10 | Mock + Live | Error mapping: 404 unknown / 400 validation / 403 traversal / 410 dead session / 409 conflict | runbook Phase 14 negative-path matrix |
 | MCP-E2E-01..05 | Live e2e | Drive Claude/Gemini/Codex through full prompt→read cycle via `session_*` only. Hidden-default + override. | runbook Phase 14b |
 
-**Coverage assertion (gate):** every one of the 45 tool names must appear at least once in the Live or Live-e2e matrices with a PASS row before the rework can merge to main. Mock catalogue is automated on every commit and is non-negotiable as a precondition.
+**Coverage assertion (gate):** every one of the 44 tool names must appear at least once in the Live or Live-e2e matrices with a PASS row before the rework can merge to main. Mock catalogue is automated on every commit and is non-negotiable as a precondition.
 
 ### 15.22 MCP Tools (External/Admin) — REMOVED
 

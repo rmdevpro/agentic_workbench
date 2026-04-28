@@ -1155,7 +1155,7 @@ function registerCoreRoutes(
       vector_custom_url: '',
       vector_custom_key: '',
       vector_collection_documents: { enabled: true, dims: 384, patterns: ['*.md', '*.txt', '*.pdf', '*.rst', '*.adoc'] },
-      vector_collection_code: { enabled: false, dims: 384, patterns: ['*.js', '*.ts', '*.py', '*.go', '*.rs', '*.java', '*.sh', 'Dockerfile', 'Makefile', '*.yml', '*.yaml', '*.json'] },
+      vector_collection_code: { enabled: true, dims: 384, patterns: ['*.js', '*.ts', '*.py', '*.go', '*.rs', '*.java', '*.sh', 'Dockerfile', 'Makefile', '*.yml', '*.yaml', '*.json'] },
       vector_collection_claude: { enabled: true, dims: 384 },
       vector_collection_gemini: { enabled: true, dims: 384 },
       vector_collection_codex: { enabled: true, dims: 384 },

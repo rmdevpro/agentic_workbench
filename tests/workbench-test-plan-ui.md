@@ -34,7 +34,7 @@ This plan was originally written for a single-CLI (Claude) system with notes, me
 - **Tmux lifecycle** — periodic scan, idle timeouts, session limits
 - **CLI type indicator** — C/G/X with per-CLI colors
 - **Filter/sort dropdowns** — replaced filter buttons
-- **45 MCP tools** — flat names grouped by domain: `file_*` (8), `session_*` (19), `project_*` (12), `task_*` (6)
+- **45 MCP tools** — flat names grouped by domain: `file_*` (8), `session_*` (19), `project_*` (11), `task_*` (5), `log_*` (1)
 
 ---
 
@@ -1201,9 +1201,9 @@ Workbench wraps Claude Code sessions in tmux. Users interact with Claude through
 
 | ID | Tool | Verification | Gray-Box |
 |----|------|-------------|----------|
-| CLI-10 | `task_list` | Task list shown in terminal | -- |
+| CLI-10 | `task_find` | Task list shown in terminal | -- |
 | CLI-11 | `task_add` | Task added | Tasks API shows new task |
-| CLI-12 | `session_grep` | Search results shown | -- |
+| CLI-12 | `session_find` | Search results shown | -- |
 | CLI-13 | ~~`workbench_get_project_notes`~~ REMOVED | — | Notes endpoint deleted |
 | CLI-14 | ~~`workbench_smart_compaction`~~ REMOVED | — | Feature deleted |
 

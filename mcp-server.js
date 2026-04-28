@@ -83,7 +83,7 @@ const TOOLS = [
   T('file_delete', 'Delete a workspace file.', {
     path: { type: 'string' },
   }, ['path']),
-  T('file_grep', 'Recursive regex search across workspace files. Returns up to 200 matching lines.', {
+  T('file_find', 'Recursive regex search across workspace files (replaces the old file_grep). Returns up to 200 matching lines.', {
     pattern: P.pattern,
     file_type: { type: 'string', description: 'Restrict to files with this extension (e.g. js, py, md).' },
     context_lines: { type: 'number', description: 'Lines of context around each match (default 2).' },
@@ -137,7 +137,7 @@ const TOOLS = [
   }, ['session_id']),
 
   // session_* — search
-  T('session_grep', 'Regex search across session JSONLs. Filter by CLI with the cli arg.', {
+  T('session_find', 'Regex search across session JSONLs (replaces session_grep). Filter by CLI with the cli arg.', {
     pattern: P.pattern, cli: P.cli_or_csv,
   }, ['pattern']),
   T('session_search', 'Semantic search across session content. Filter by CLI with the cli arg. Requires a vector embedding provider.', {
@@ -165,7 +165,9 @@ const TOOLS = [
   }, ['seconds']),
 
   // project_*
-  T('project_list', 'List all registered projects.', {}),
+  T('project_find', 'List all projects, optionally filtered by case-insensitive regex over name + notes (replaces project_list and project_grep).', {
+    pattern: { type: 'string', description: 'Optional regex; if absent, returns every project.' },
+  }),
   T('project_get', 'Get a single project by name.', { project: P.project }, ['project']),
   T('project_update', 'Update project metadata (name / notes / state).', {
     project: P.project,
@@ -179,9 +181,6 @@ const TOOLS = [
   T('project_sys_prompt_update', 'Write a CLI’s system-prompt file in the project (CLAUDE.md / GEMINI.md / AGENTS.md).', {
     project: P.project, cli: P.cli, content: { type: 'string' },
   }, ['project', 'cli', 'content']),
-  T('project_grep', 'Case-insensitive regex search across project names and notes.', {
-    pattern: P.pattern,
-  }, ['pattern']),
   T('project_mcp_list', 'List MCP servers registered in the workbench (available to enable per project).', {}),
   T('project_mcp_register', 'Register an MCP server in the workbench so it can be enabled per project.', {
     mcp_name: { type: 'string', description: 'Server name as written into .mcp.json.' },
@@ -203,9 +202,10 @@ const TOOLS = [
   }, ['project']),
 
   // task_*
-  T('task_list', 'List tasks. Filter by folder_path or by status (todo / done / archived / all).', {
+  T('task_find', 'Find tasks. Optional filters: folder_path, status (todo / done / archived / all), pattern (regex over title + description). Replaces task_list and task_grep.', {
     folder_path: P.folder_path,
     filter: { type: 'string', enum: ['all', 'todo', 'done', 'archived'], description: 'Status filter (default todo).' },
+    pattern: { type: 'string', description: 'Optional case-insensitive regex over title + description.' },
   }),
   T('task_get', 'Get a single task by ID.', { task_id: P.task_id }, ['task_id']),
   T('task_add', 'Create a new task.', {
@@ -223,9 +223,15 @@ const TOOLS = [
     status: { type: 'string', enum: ['todo', 'done', 'archived'] },
     folder_path: P.folder_path,
   }, ['task_id']),
-  T('task_grep', 'Case-insensitive regex search across task titles and descriptions.', {
-    pattern: P.pattern,
-  }, ['pattern']),
+
+  // log_*
+  T('log_find', 'Query the workbench audit-log table. Optional filters: level (DEBUG/INFO/WARN/ERROR), module (e.g. qdrant-sync), since (1h / 30m / 24h / iso8601), pattern (regex over message + context), limit (default 200, max 5000). Returns rows newest-first.', {
+    level: { type: 'string', enum: ['DEBUG', 'INFO', 'WARN', 'ERROR'] },
+    module: { type: 'string', description: 'Source module name, e.g. qdrant-sync, ws-terminal.' },
+    since: { type: 'string', description: 'Lower bound. Relative (1h / 30m / 24h) or ISO 8601 timestamp.' },
+    pattern: { type: 'string', description: 'Optional case-insensitive regex over message + context.' },
+    limit: { type: 'number', description: 'Max rows (default 200, hard cap 5000).' },
+  }),
 ];
 
 async function executeTool(name, args) {

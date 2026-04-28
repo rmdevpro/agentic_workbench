@@ -10,12 +10,13 @@ You are an agent in the Workbench system. This system and its agents serve the u
 
 ## MCP Tools (server `workbench`)
 
-The Workbench server exposes 45 flat tools, grouped by domain:
+The Workbench server exposes 44 flat tools, grouped by domain:
 
-- `file_*` (8) — list, read, create, update, delete, grep, search_documents, search_code (workspace files)
-- `session_*` (19) — new, connect, restart, kill, list, config, summarize, prepare_pre_compact, resume_post_compact, export, info, grep, search, send_text, send_keys, send_key, read_screen, read_output, wait
-- `project_*` (12) — list, get, update, sys_prompt_get, sys_prompt_update, grep, mcp_list, mcp_register, mcp_unregister, mcp_enable, mcp_disable, mcp_list_enabled
-- `task_*` (6) — list, get, add, move, update, grep
+- `file_*` (8) — list, read, create, update, delete, find, search_documents, search_code (workspace files)
+- `session_*` (19) — new, connect, restart, kill, list, config, summarize, prepare_pre_compact, resume_post_compact, export, info, find, search, send_text, send_keys, send_key, read_screen, read_output, wait
+- `project_*` (11) — find, get, update, sys_prompt_get, sys_prompt_update, mcp_list, mcp_register, mcp_unregister, mcp_enable, mcp_disable, mcp_list_enabled
+- `task_*` (5) — find, get, add, move, update
+- `log_*` (1) — find
 
 To interact with another CLI session, use the `session_*` tools — they handle session lifecycle (`session_new` / `connect` / `restart` / `kill`), input (`session_send_text` for prompts, `session_send_key` to submit, `session_send_keys` for raw shell-style input), and output (`session_read_screen` for the visible pane, `session_read_output` for structured transcript). `session_wait` pauses between sending and reading so the CLI has time to respond. You do not need to know the underlying transport — the MCP tool surface is the interface.
 

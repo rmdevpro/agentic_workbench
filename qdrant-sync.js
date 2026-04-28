@@ -46,7 +46,7 @@ function _parseSetting(key, fallback) {
 function getCollectionConfig(col) {
   const defaults = {
     documents: { enabled: true, dims: 384, patterns: ['*.md', '*.txt', '*.pdf', '*.rst', '*.adoc'] },
-    code: { enabled: false, dims: 384, patterns: ['*.js', '*.ts', '*.py', '*.go', '*.rs', '*.java', '*.sh', 'Dockerfile', 'Makefile', '*.yml', '*.yaml', '*.json'] },
+    code: { enabled: true, dims: 384, patterns: ['*.js', '*.ts', '*.py', '*.go', '*.rs', '*.java', '*.sh', 'Dockerfile', 'Makefile', '*.yml', '*.yaml', '*.json'] },
     claude: { enabled: true, dims: 384 },
     gemini: { enabled: true, dims: 384 },
     codex: { enabled: true, dims: 384 },

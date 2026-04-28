@@ -154,7 +154,7 @@ handlers.file_delete = async (args) => {
   }
 };
 
-handlers.file_grep = async (args) => {
+handlers.file_find = async (args) => {
   require_(args, 'pattern');
   const ctx = args.context_lines || 2;
   // -m 50: cap matches per file. Without this a common pattern like
@@ -173,7 +173,7 @@ handlers.file_grep = async (args) => {
   } catch (e) {
     if (e.status === 1) return { pattern: args.pattern, matches: [] };
     if (e.code === 'ENOBUFS') {
-      throw new ToolError('grep output exceeded 16 MB — narrow your pattern or use file_type filter', 413);
+      throw new ToolError('find output exceeded 16 MB — narrow your pattern or use file_type filter', 413);
     }
     throw e;
   }
@@ -348,7 +348,7 @@ handlers.session_info = async (args) => {
   return info;
 };
 
-handlers.session_grep = async (args) => {
+handlers.session_find = async (args) => {
   require_(args, 'pattern');
   const cliFilter = args.cli ? args.cli.split(',').map(c => c.trim()) : VALID_CLI_TYPES;
   const results = {};
@@ -444,8 +444,15 @@ function _projectShape(p) {
   return { id: p.id, name: p.name, path: p.path, notes: p.notes || '', state: p.state || 'active' };
 }
 
-handlers.project_list = async () => {
-  return { projects: db.getProjects().map(_projectShape) };
+handlers.project_find = async (args = {}) => {
+  let projects = db.getProjects();
+  if (args.pattern) {
+    let re;
+    try { re = new RegExp(args.pattern, 'i'); }
+    catch (e) { throw new ToolError(`invalid regex: ${e.message}`); }
+    projects = projects.filter(p => re.test(p.name) || re.test(p.notes || ''));
+  }
+  return { projects: projects.map(_projectShape) };
 };
 
 handlers.project_get = async (args) => {
@@ -487,17 +494,6 @@ handlers.project_sys_prompt_update = async (args) => {
   if (!filename) throw new ToolError(`invalid cli: ${args.cli}. Must be claude, gemini, or codex`);
   fs.writeFileSync(join(p.path, filename), args.content);
   return { project: args.project, cli: args.cli, file: filename, updated: true };
-};
-
-handlers.project_grep = async (args) => {
-  require_(args, 'pattern');
-  let re;
-  try { re = new RegExp(args.pattern, 'i'); }
-  catch (e) { throw new ToolError(`invalid regex: ${e.message}`); }
-  const matches = db.getProjects()
-    .filter(p => re.test(p.name) || re.test(p.notes || ''))
-    .map(_projectShape);
-  return { pattern: args.pattern, matches };
 };
 
 handlers.project_mcp_list = async () => {
@@ -566,9 +562,17 @@ handlers.project_mcp_list_enabled = async (args) => {
 
 // ── task_* ───────────────────────────────────────────────────────────────────
 
-handlers.task_list = async (args) => {
-  if (args.folder_path) return { tasks: db.getTasksByFolder(args.folder_path) };
-  return { tasks: db.getAllTasks(args.filter || 'todo') };
+handlers.task_find = async (args = {}) => {
+  let tasks = args.folder_path
+    ? db.getTasksByFolder(args.folder_path)
+    : db.getAllTasks(args.filter || 'todo');
+  if (args.pattern) {
+    let re;
+    try { re = new RegExp(args.pattern, 'i'); }
+    catch (e) { throw new ToolError(`invalid regex: ${e.message}`); }
+    tasks = tasks.filter(t => re.test(t.title || '') || re.test(t.description || ''));
+  }
+  return { tasks };
 };
 
 handlers.task_get = async (args) => {
@@ -605,14 +609,41 @@ handlers.task_update = async (args) => {
   return db.getTask(id) || { updated: true };
 };
 
-handlers.task_grep = async (args) => {
-  require_(args, 'pattern');
-  let re;
-  try { re = new RegExp(args.pattern, 'i'); }
-  catch (e) { throw new ToolError(`invalid regex: ${e.message}`); }
-  const matches = db.getAllTasks('all')
-    .filter(t => re.test(t.title || '') || re.test(t.description || ''));
-  return { pattern: args.pattern, matches };
+// ── log_* ────────────────────────────────────────────────────────────────────
+
+const SINCE_RE = /^(\d+)\s*([smhd])$/;
+
+function _resolveSince(sinceArg) {
+  if (!sinceArg) return null;
+  const m = SINCE_RE.exec(String(sinceArg).trim());
+  if (!m) {
+    // Treat as ISO timestamp if not a relative form.
+    const d = new Date(sinceArg);
+    if (Number.isNaN(d.getTime())) throw new ToolError(`invalid since: ${sinceArg}. Use 1h / 30m / 24h / iso8601`);
+    return d.toISOString();
+  }
+  const n = parseInt(m[1], 10);
+  const unit = m[2];
+  const ms = unit === 's' ? n * 1000
+    : unit === 'm' ? n * 60_000
+    : unit === 'h' ? n * 3_600_000
+    : n * 86_400_000;
+  return new Date(Date.now() - ms).toISOString();
+}
+
+handlers.log_find = async (args = {}) => {
+  if (args.level && !['DEBUG', 'INFO', 'WARN', 'ERROR'].includes(args.level)) {
+    throw new ToolError(`invalid level: ${args.level}. Must be DEBUG / INFO / WARN / ERROR`);
+  }
+  const sinceTs = _resolveSince(args.since);
+  let rows = db.queryLogs({ level: args.level, module: args.module, since: sinceTs, limit: args.limit });
+  if (args.pattern) {
+    let re;
+    try { re = new RegExp(args.pattern, 'i'); }
+    catch (e) { throw new ToolError(`invalid regex: ${e.message}`); }
+    rows = rows.filter(r => re.test(r.message || '') || re.test(r.context || ''));
+  }
+  return { count: rows.length, logs: rows };
 };
 
 // ── Dispatch + HTTP ──────────────────────────────────────────────────────────

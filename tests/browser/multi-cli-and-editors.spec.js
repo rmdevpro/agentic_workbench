@@ -325,7 +325,7 @@ describe('Multi-CLI sessions, editors, and task panel (browser)', () => {
 
   it('MCP-03: file_grep finds pattern in files', async () => {
     const result = await apiPost('/api/mcp/call', {
-      tool: 'file_grep', args: { pattern: 'README' },
+      tool: 'file_find', args: { pattern: 'README' },
     });
     assert.ok(Array.isArray(result.result.matches));
   });
