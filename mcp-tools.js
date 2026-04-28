@@ -2,20 +2,41 @@
 
 const crypto = require('crypto');
 const fs = require('fs');
-const { readFile, readdir } = require('fs/promises');
-const { join, basename, resolve, relative, sep } = require('path');
+const { readdir } = require('fs/promises');
+const { join, basename, resolve, dirname } = require('path');
 const { execSync } = require('child_process');
 const safe = require('./safe-exec');
 const sessionUtils = require('./session-utils');
 const logger = require('./logger');
+const db = require('./db');
 
 const WORKSPACE = safe.WORKSPACE;
 const CLAUDE_HOME = safe.CLAUDE_HOME;
 const HOME = safe.HOME;
 
-const db = require('./db');
-
 const SESSION_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
+const VALID_CLI_TYPES = ['claude', 'gemini', 'codex'];
+const VALID_CLI_TYPES_FOR_NEW = ['claude', 'gemini', 'codex', 'bash'];
+const VALID_KEY_NAMES = new Set([
+  'Enter', 'Escape', 'Tab', 'Space', 'BSpace',
+  'Up', 'Down', 'Left', 'Right',
+  'Home', 'End', 'PageUp', 'PageDown',
+  'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12',
+]);
+
+class ToolError extends Error {
+  constructor(message, status = 400) {
+    super(message);
+    this.status = status;
+  }
+}
+
+function require_(args, ...keys) {
+  for (const k of keys) {
+    if (args[k] === undefined || args[k] === null || args[k] === '')
+      throw new ToolError(`${k} required`);
+  }
+}
 
 function validateSessionId(sessionId) {
   if (!sessionId) return false;
@@ -23,13 +44,23 @@ function validateSessionId(sessionId) {
   return SESSION_ID_PATTERN.test(sessionId);
 }
 
-function validateTaskId(taskId) {
-  return taskId != null && Number.isFinite(Number(taskId));
+function requireSessionId(args) {
+  if (!validateSessionId(args.session_id))
+    throw new ToolError('valid session_id required');
 }
 
-// Wrap qdrant.search so MCP callers get a helpful structured response when the
-// embeddings provider is disabled or qdrant isn't reachable, instead of a
-// generic error. Used by every search_* action across files/sessions.
+function requireTaskId(args) {
+  if (args.task_id == null || !Number.isFinite(Number(args.task_id)))
+    throw new ToolError('valid numeric task_id required');
+  return Number(args.task_id);
+}
+
+function resolveWorkspacePath(relPath) {
+  const full = relPath ? resolve(WORKSPACE, relPath) : WORKSPACE;
+  if (!full.startsWith(WORKSPACE)) throw new ToolError('path traversal blocked', 403);
+  return full;
+}
+
 async function _semanticSearch(collections, query, limit) {
   const qdrant = require('./qdrant-sync');
   if (qdrant.getEmbeddingProvider() === 'none') {
@@ -49,470 +80,184 @@ async function _semanticSearch(collections, query, limit) {
   }
 }
 
-/**
- * Resolve a workspace-relative path and validate it stays within the workspace.
- */
-function resolveWorkspacePath(relPath) {
-  const full = relPath ? resolve(WORKSPACE, relPath) : WORKSPACE;
-  if (!full.startsWith(WORKSPACE)) throw new Error('path traversal blocked');
-  return full;
-}
-
-// ── workbench_files ──────────────────────────────────────────────────────────
-
-async function handleFiles(args, res) {
-  switch (args.action) {
-    case 'list': {
-      const target = resolveWorkspacePath(args.path || '');
-      try {
-        const entries = fs.readdirSync(target).map(name => {
-          const full = join(target, name);
-          const isDir = fs.statSync(full).isDirectory();
-          return { name, type: isDir ? 'directory' : 'file' };
-        });
-        return { path: args.path || '/', entries };
-      } catch (e) {
-        return { path: args.path || '/', entries: [], error: e.code === 'ENOENT' ? 'directory not found' : e.message };
-      }
-    }
-    case 'read': {
-      if (!args.path) return res.status(400).json({ error: 'path required' });
-      const filePath = resolveWorkspacePath(args.path);
-      try {
-        return { path: args.path, content: fs.readFileSync(filePath, 'utf-8') };
-      } catch (e) {
-        return { error: e.code === 'ENOENT' ? 'file not found' : e.message };
-      }
-    }
-    case 'create': {
-      if (!args.path || !args.content) return res.status(400).json({ error: 'path and content required' });
-      const filePath = resolveWorkspacePath(args.path);
-      const dir = require('path').dirname(filePath);
-      fs.mkdirSync(dir, { recursive: true });
-      if (fs.existsSync(filePath)) return res.status(409).json({ error: 'file already exists, use update' });
-      fs.writeFileSync(filePath, args.content);
-      return { created: args.path };
-    }
-    case 'update': {
-      if (!args.path || !args.content) return res.status(400).json({ error: 'path and content required' });
-      const filePath = resolveWorkspacePath(args.path);
-      if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'file not found, use create' });
-      fs.writeFileSync(filePath, args.content);
-      return { updated: args.path };
-    }
-    case 'delete': {
-      if (!args.path) return res.status(400).json({ error: 'path required' });
-      const filePath = resolveWorkspacePath(args.path);
-      try {
-        fs.unlinkSync(filePath);
-        return { deleted: args.path };
-      } catch (e) {
-        return { error: e.code === 'ENOENT' ? 'file not found' : e.message };
-      }
-    }
-    case 'grep': {
-      if (!args.pattern) return res.status(400).json({ error: 'pattern required' });
-      const ctx = args.context_lines || 2;
-      const grepArgs = ['-rn', `--color=never`, `-C${ctx}`];
-      if (args.file_type) grepArgs.push(`--include=*.${args.file_type}`);
-      grepArgs.push('--', safe.shellEscape(args.pattern), safe.shellEscape(WORKSPACE));
-      try {
-        const out = execSync(`grep ${grepArgs.join(' ')}`, {
-          encoding: 'utf-8',
-          timeout: 10000,
-          maxBuffer: 1024 * 1024,
-        }).trim();
-        const lines = out.split('\n').slice(0, 200);
-        // Strip workspace prefix for cleaner output
-        const cleaned = lines.map(l => l.replace(WORKSPACE + '/', ''));
-        return { pattern: args.pattern, matches: cleaned };
-      } catch (e) {
-        // grep returns exit code 1 for no matches
-        if (e.status === 1) return { pattern: args.pattern, matches: [] };
-        return { error: e.message };
-      }
-    }
-    case 'search_documents': {
-      if (!args.query || args.query.length < 2)
-        return res.status(400).json({ error: 'query must be at least 2 characters' });
-      return await _semanticSearch(['documents'], args.query, args.limit || 10);
-    }
-    case 'search_code': {
-      if (!args.query || args.query.length < 2)
-        return res.status(400).json({ error: 'query must be at least 2 characters' });
-      return await _semanticSearch(['code'], args.query, args.limit || 10);
-    }
-    default:
-      return res.status(400).json({ error: `invalid action: ${args.action}` });
-  }
-}
-
-// ── workbench_sessions ───────────────────────────────────────────────────────
-
 async function ensureSessionTmux(session, projectPath) {
-  const hash = crypto.createHash('md5').update(session.id).digest('hex').substring(0, 4);
-  const tmux = safe.sanitizeTmuxName(`wb_${session.id.substring(0, 12)}_${hash}`);
+  const tmux = safe.tmuxNameFor(session.id);
   if (!(await safe.tmuxExists(tmux))) {
     const cliType = session.cli_type || 'claude';
-    let cliArgs = [];
-    if (cliType === 'claude' && !session.id.startsWith('new_')) cliArgs = ['--resume', session.id];
-    if (cliType === 'gemini') {
-      const cliSessId = session.cli_session_id;
-      cliArgs = cliSessId ? ['--resume', cliSessId] : ['--resume'];
+    const { args: resumeArgs, missing, expectedPath } = safe.buildResumeArgs(session, projectPath);
+    if (missing) {
+      throw new ToolError(`Cannot reattach session ${session.id} — JSONL missing at ${expectedPath}`, 410);
     }
-    if (cliType === 'codex') {
-      const cliSessId = session.cli_session_id;
-      cliArgs = cliSessId ? ['resume', cliSessId] : ['resume', '--last'];
-    }
-    safe.tmuxCreateCLI(tmux, projectPath, cliType, cliArgs);
+    safe.tmuxCreateCLI(tmux, projectPath, cliType, resumeArgs);
     await new Promise(r => setTimeout(r, 1000));
   }
   return tmux;
 }
 
-async function handleSessions(args, res) {
-  switch (args.action) {
-    case 'new': {
-      if (!args.project) return res.status(400).json({ error: 'project required' });
-      const cliType = args.cli || 'claude';
-      const VALID_CLI_TYPES = ['claude', 'gemini', 'codex'];
-      if (!VALID_CLI_TYPES.includes(cliType))
-        return res.status(400).json({ error: `invalid cli type: ${cliType}` });
-      const proj = db.getProject(args.project);
-      if (!proj) return res.status(404).json({ error: 'project not found' });
-      const projectPath = proj.path;
-      const tmpId = cliType === 'claude'
-        ? `new_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`
-        : crypto.randomUUID();
-      const hash = crypto.createHash('md5').update(tmpId).digest('hex').substring(0, 4);
-      const tmux = safe.sanitizeTmuxName(`wb_${tmpId.substring(0, 12)}_${hash}`);
-      safe.tmuxCreateCLI(tmux, projectPath, cliType);
-      db.upsertSession(tmpId, proj.id, args.prompt || 'New Session', cliType);
-      // MCP-created sessions are sub-sessions spawned by an agent, not by
-      // the human UI — default to hidden so they don't clutter the sidebar.
-      // Agents that explicitly want a visible session can pass hidden=false.
-      const shouldHide = args.hidden !== false;
-      if (shouldHide) db.setSessionState(tmpId, 'hidden');
-      return { session_id: tmpId, tmux, project: args.project, cli: cliType };
-    }
-    case 'connect': {
-      // Find session by name query or session_id, ensure tmux running, return tmux name
-      let session;
-      if (args.session_id) {
-        if (!validateSessionId(args.session_id))
-          return res.status(400).json({ error: 'invalid session_id format' });
-        session = db.getSessionFull(args.session_id);
-      } else if (args.query) {
-        const matches = db.searchSessionsByName(args.query);
-        if (matches.length === 0) return { error: 'no session found matching query' };
-        session = matches[0]; // Best match (most recently updated)
-      } else {
-        return res.status(400).json({ error: 'session_id or query required' });
-      }
-      if (!session) return { error: 'session not found' };
-      const projectPath = session.project_path || safe.resolveProjectPath(session.project_name);
-      const tmux = await ensureSessionTmux(session, projectPath);
-      return {
-        session_id: session.id,
-        name: session.name,
-        project: session.project_name,
-        cli: session.cli_type || 'claude',
-        tmux,
-      };
-    }
-    case 'restart': {
-      if (!validateSessionId(args.session_id))
-        return res.status(400).json({ error: 'session_id required' });
-      const session = db.getSessionFull(args.session_id);
-      if (!session) return { error: 'session not found' };
-      const killHash = crypto.createHash('md5').update(args.session_id).digest('hex').substring(0, 4);
-      const tmux = safe.sanitizeTmuxName(`wb_${args.session_id.substring(0, 12)}_${killHash}`);
-      // Kill existing tmux session
-      await safe.tmuxKill(tmux);
-      // Recreate
-      const projectPath = session.project_path || safe.resolveProjectPath(session.project_name);
-      const newTmux = await ensureSessionTmux(session, projectPath);
-      return { session_id: session.id, tmux: newTmux, cli: session.cli_type || 'claude', restarted: true };
-    }
-    case 'list': {
-      const project = args.project;
-      if (!project) return res.status(400).json({ error: 'project required' });
-      return await listSessions(project);
-    }
-    case 'config': {
-      if (!validateSessionId(args.session_id))
-        return res.status(400).json({ error: 'invalid session_id format' });
-      if (args.name !== undefined) db.renameSession(args.session_id, args.name);
-      if (args.state !== undefined) db.setSessionState(args.session_id, args.state);
-      if (args.notes !== undefined) db.setSessionNotes(args.session_id, args.notes);
-      return { saved: true };
-    }
-    case 'tokens': {
-      if (!validateSessionId(args.session_id))
-        return res.status(400).json({ error: 'invalid session_id format' });
-      // #156: route through getSessionInfo so cache dedupes vs UI polling.
-      const info = await sessionUtils.getSessionInfo(args.session_id);
-      if (!info) return { input_tokens: 0, model: null, max_tokens: 200000 };
-      return { input_tokens: info.input_tokens, model: info.model, max_tokens: info.max_tokens };
-    }
-    case 'summarize': {
-      if (!validateSessionId(args.session_id))
-        return res.status(400).json({ error: 'invalid session_id format' });
-      return await sessionUtils.summarizeSession(args.session_id, args.project);
-    }
-    case 'transition': {
-      const config = require('./config');
-      return config.getPrompt('session-transition', {});
-    }
-    case 'resume': {
-      if (!validateSessionId(args.session_id))
-        return res.status(400).json({ error: 'session_id required' });
-      const config = require('./config');
-      const session = db.getSessionFull(args.session_id);
-      const projectPath = session?.project_path || '';
-      const sessDir = sessionUtils.sessionsDir(projectPath);
-      const sessionFile = join(sessDir, `${args.session_id}.jsonl`);
-      let tail = '';
-      try {
-        const content = fs.readFileSync(sessionFile, 'utf-8');
-        const lines = content.trim().split('\n').filter(Boolean);
-        tail = lines.slice(-(args.tail_lines || 60)).join('\n');
-      } catch {
-        tail = '(could not read session file)';
-      }
-      return config.getPrompt('session-resume', { SESSION_TAIL: tail });
-    }
-    case 'grep': {
-      if (!args.pattern) return res.status(400).json({ error: 'pattern required' });
-      const cliFilter = args.cli ? args.cli.split(',').map(c => c.trim()) : ['claude', 'gemini', 'codex'];
-      const results = {};
+const SYS_PROMPT_FILES = { claude: 'CLAUDE.md', gemini: 'GEMINI.md', codex: 'AGENTS.md' };
 
-      for (const cli of cliFilter) {
-        let searchDirs = [];
-        switch (cli) {
-          case 'claude':
-            searchDirs = [join(CLAUDE_HOME, 'projects')];
-            break;
-          case 'gemini':
-            searchDirs = [join(HOME, '.gemini', 'tmp')];
-            break;
-          case 'codex':
-            searchDirs = [process.env.CODEX_HOME || join(HOME, '.codex', 'sessions')];
-            break;
-        }
-        const matches = [];
-        for (const dir of searchDirs) {
-          if (!fs.existsSync(dir)) continue;
-          try {
-            const out = execSync(
-              `grep -rn --color=never --include='*.jsonl' --include='*.json' -- ${safe.shellEscape(args.pattern)} ${safe.shellEscape(dir)}`,
-              { encoding: 'utf-8', timeout: 10000, maxBuffer: 1024 * 1024 },
-            ).trim();
-            if (out) {
-              const lines = out.split('\n').slice(0, 50);
-              matches.push(...lines.map(l => l.replace(dir + '/', '')));
-            }
-          } catch (e) {
-            if (e.status !== 1) logger.error('Session grep error', { module: 'mcp-tools', cli, err: e.message });
-          }
-        }
-        if (matches.length > 0) results[cli] = matches;
-      }
-      return { pattern: args.pattern, results };
-    }
-    case 'search_semantic': {
-      if (!args.query || args.query.length < 2)
-        return res.status(400).json({ error: 'query must be at least 2 characters' });
-      const cliFilter = args.cli ? args.cli.split(',').map(c => c.trim()) : ['claude', 'gemini', 'codex'];
-      const collections = cliFilter.map(c => c + '_sessions');
-      return await _semanticSearch(collections, args.query, args.limit || 10);
-    }
-    // MCP server management
-    case 'mcp_list_available':
-      return { servers: db.getMcpServers() };
-    case 'mcp_register': {
-      if (!args.mcp_name) return res.status(400).json({ error: 'mcp_name required' });
-      if (!args.mcp_config) return res.status(400).json({ error: 'mcp_config required (JSON object with command/args or url)' });
-      const transport = args.mcp_transport || 'stdio';
-      db.registerMcp(args.mcp_name, transport, args.mcp_config, args.mcp_description || '');
-      return { registered: args.mcp_name };
-    }
-    case 'mcp_unregister': {
-      if (!args.mcp_name) return res.status(400).json({ error: 'mcp_name required' });
-      db.unregisterMcp(args.mcp_name);
-      return { unregistered: args.mcp_name };
-    }
-    case 'mcp_enable': {
-      if (!args.mcp_name) return res.status(400).json({ error: 'mcp_name required' });
-      if (!args.project) return res.status(400).json({ error: 'project required' });
-      const proj = db.getProject(args.project);
-      if (!proj) return res.status(404).json({ error: 'project not found' });
-      const server = db.getMcpServer(args.mcp_name);
-      if (!server) return res.status(404).json({ error: 'MCP server not registered' });
-      db.enableMcpForProject(proj.id, args.mcp_name);
-      // Write .mcp.json to project directory
-      const enabled = db.getEnabledMcpForProject(proj.id);
-      const mcpJson = {};
-      for (const s of enabled) {
-        try { mcpJson[s.name] = JSON.parse(s.config); } catch { mcpJson[s.name] = s.config; }
-      }
-      fs.writeFileSync(join(proj.path, '.mcp.json'), JSON.stringify({ mcpServers: mcpJson }, null, 2));
-      // Restart the calling session if session_id provided
-      if (args.session_id) {
-        const session = db.getSessionFull(args.session_id);
-        if (session) {
-          const tmux = `wb_${safe.sanitizeTmuxName(args.session_id.substring(0, 12))}`;
-          await safe.tmuxKill(tmux);
-          const projectPath = session.project_path || proj.path;
-          await ensureSessionTmux(session, projectPath);
-        }
-      }
-      return { enabled: args.mcp_name, project: args.project };
-    }
-    case 'mcp_disable': {
-      if (!args.mcp_name) return res.status(400).json({ error: 'mcp_name required' });
-      if (!args.project) return res.status(400).json({ error: 'project required' });
-      const proj = db.getProject(args.project);
-      if (!proj) return res.status(404).json({ error: 'project not found' });
-      db.disableMcpForProject(proj.id, args.mcp_name);
-      // Rewrite .mcp.json
-      const enabled = db.getEnabledMcpForProject(proj.id);
-      const mcpJson = {};
-      for (const s of enabled) {
-        try { mcpJson[s.name] = JSON.parse(s.config); } catch { mcpJson[s.name] = s.config; }
-      }
-      fs.writeFileSync(join(proj.path, '.mcp.json'), JSON.stringify({ mcpServers: mcpJson }, null, 2));
-      // Restart the calling session if session_id provided
-      if (args.session_id) {
-        const session = db.getSessionFull(args.session_id);
-        if (session) {
-          const tmux = `wb_${safe.sanitizeTmuxName(args.session_id.substring(0, 12))}`;
-          await safe.tmuxKill(tmux);
-          const projectPath = session.project_path || proj.path;
-          await ensureSessionTmux(session, projectPath);
-        }
-      }
-      return { disabled: args.mcp_name, project: args.project };
-    }
-    case 'mcp_list_enabled': {
-      if (!args.project) return res.status(400).json({ error: 'project required' });
-      const proj = db.getProject(args.project);
-      if (!proj) return res.status(404).json({ error: 'project not found' });
-      return { servers: db.getEnabledMcpForProject(proj.id) };
-    }
-    default:
-      return res.status(400).json({ error: `invalid action: ${args.action}` });
-  }
-}
+const handlers = {};
 
-// ── workbench_tasks ──────────────────────────────────────────────────────────
+// ── file_* ───────────────────────────────────────────────────────────────────
 
-async function handleTasks(args, res) {
-  switch (args.action) {
-    case 'get': {
-      if (args.folder_path) {
-        return { tasks: db.getTasksByFolder(args.folder_path) };
-      }
-      return { tasks: db.getAllTasks(args.filter || 'todo') };
-    }
-    case 'add': {
-      if (!args.title || args.title.length > 500)
-        return res.status(400).json({ error: 'title required (max 500 chars)' });
-      const folderPath = args.folder_path || '/';
-      return db.addTask(folderPath, args.title, args.description || '', null, 'agent');
-    }
-    case 'complete': {
-      if (!validateTaskId(args.task_id))
-        return res.status(400).json({ error: 'valid numeric task_id required' });
-      db.updateTaskStatus(Number(args.task_id), 'done');
-      return { completed: true };
-    }
-    case 'reopen': {
-      if (!validateTaskId(args.task_id))
-        return res.status(400).json({ error: 'valid numeric task_id required' });
-      db.updateTaskStatus(Number(args.task_id), 'todo');
-      return { reopened: true };
-    }
-    case 'archive': {
-      if (!validateTaskId(args.task_id))
-        return res.status(400).json({ error: 'valid numeric task_id required' });
-      db.updateTaskStatus(Number(args.task_id), 'archived');
-      return { archived: true };
-    }
-    case 'move': {
-      if (!validateTaskId(args.task_id))
-        return res.status(400).json({ error: 'valid numeric task_id required' });
-      if (!args.folder_path) return res.status(400).json({ error: 'folder_path required' });
-      db.moveTask(Number(args.task_id), args.folder_path);
-      return { moved: true };
-    }
-    case 'update': {
-      if (!validateTaskId(args.task_id))
-        return res.status(400).json({ error: 'valid numeric task_id required' });
-      const taskId = Number(args.task_id);
-      if (args.title) db.updateTaskTitle(taskId, args.title);
-      if (args.description !== undefined) db.updateTaskDescription(taskId, args.description);
-      return db.getTask(taskId) || { updated: true };
-    }
-    default:
-      return res.status(400).json({ error: `invalid action: ${args.action}` });
-  }
-}
-
-// ── Route registration ───────────────────────────────────────────────────────
-
-function registerMcpRoutes(app) {
-  app.get('/api/mcp/tools', (req, res) => {
-    res.json({
-      tools: [
-        { name: 'workbench_files', description: 'Workspace file operations — read, write, list, delete, grep, and semantic search.' },
-        { name: 'workbench_sessions', description: 'Session operations across all CLIs — list, lookup, config, search, summarize.' },
-        { name: 'workbench_tasks', description: 'Task management — create, complete, reopen, archive, move, update.' },
-      ],
+handlers.file_list = async (args) => {
+  const target = resolveWorkspacePath(args.path || '');
+  try {
+    const entries = fs.readdirSync(target).map(name => {
+      const isDir = fs.statSync(join(target, name)).isDirectory();
+      return { name, type: isDir ? 'directory' : 'file' };
     });
-  });
+    return { path: args.path || '/', entries };
+  } catch (e) {
+    if (e.code === 'ENOENT') throw new ToolError('directory not found', 404);
+    throw e;
+  }
+};
 
-  app.post('/api/mcp/call', async (req, res) => {
-    const { tool, args } = req.body;
-    if (!args || !args.action) return res.status(400).json({ error: 'action required' });
+handlers.file_read = async (args) => {
+  require_(args, 'path');
+  const filePath = resolveWorkspacePath(args.path);
+  try {
+    return { path: args.path, content: fs.readFileSync(filePath, 'utf-8') };
+  } catch (e) {
+    if (e.code === 'ENOENT') throw new ToolError('file not found', 404);
+    throw e;
+  }
+};
 
-    try {
-      let result;
-      switch (tool) {
-        case 'workbench_files':
-          result = await handleFiles(args, res);
-          break;
-        case 'workbench_sessions':
-          result = await handleSessions(args, res);
-          break;
-        case 'workbench_tasks':
-          result = await handleTasks(args, res);
-          break;
-        default:
-          return res.status(404).json({ error: `Unknown tool: ${tool}` });
-      }
-      // If handler already sent response (via res.status().json()), don't send again
-      if (!res.headersSent) res.json({ result });
-    } catch (err) {
-      if (res.headersSent) return;
-      if (err.code === 'ENOENT') {
-        return res.status(404).json({ error: `Resource not found: ${err.message}` });
-      }
-      if (err instanceof SyntaxError) {
-        return res.status(400).json({ error: `Invalid input: ${err.message}` });
-      }
-      if (err.message && err.message.includes('traversal')) {
-        return res.status(403).json({ error: err.message });
-      }
-      logger.error('MCP tool call error', { module: 'mcp-tools', tool, action: args.action, err: err.message });
-      res.status(500).json({ error: err.message });
-    }
-  });
-}
+handlers.file_create = async (args) => {
+  require_(args, 'path', 'content');
+  const filePath = resolveWorkspacePath(args.path);
+  fs.mkdirSync(dirname(filePath), { recursive: true });
+  if (fs.existsSync(filePath)) throw new ToolError('file already exists, use file_update', 409);
+  fs.writeFileSync(filePath, args.content);
+  return { created: args.path };
+};
 
-async function listSessions(project) {
-  const projectPath = join(WORKSPACE, project);
-  const sDir = sessionUtils.sessionsDir(projectPath);
+handlers.file_update = async (args) => {
+  require_(args, 'path', 'content');
+  const filePath = resolveWorkspacePath(args.path);
+  if (!fs.existsSync(filePath)) throw new ToolError('file not found, use file_create', 404);
+  fs.writeFileSync(filePath, args.content);
+  return { updated: args.path };
+};
+
+handlers.file_delete = async (args) => {
+  require_(args, 'path');
+  const filePath = resolveWorkspacePath(args.path);
+  try {
+    fs.unlinkSync(filePath);
+    return { deleted: args.path };
+  } catch (e) {
+    if (e.code === 'ENOENT') throw new ToolError('file not found', 404);
+    throw e;
+  }
+};
+
+handlers.file_grep = async (args) => {
+  require_(args, 'pattern');
+  const ctx = args.context_lines || 2;
+  const grepArgs = ['-rn', '--color=never', `-C${ctx}`];
+  if (args.file_type) grepArgs.push(`--include=*.${args.file_type}`);
+  grepArgs.push('--', safe.shellEscape(args.pattern), safe.shellEscape(WORKSPACE));
+  try {
+    const out = execSync(`grep ${grepArgs.join(' ')}`, {
+      encoding: 'utf-8', timeout: 10000, maxBuffer: 1024 * 1024,
+    }).trim();
+    const lines = out.split('\n').slice(0, 200);
+    return { pattern: args.pattern, matches: lines.map(l => l.replace(WORKSPACE + '/', '')) };
+  } catch (e) {
+    if (e.status === 1) return { pattern: args.pattern, matches: [] };
+    throw e;
+  }
+};
+
+handlers.file_search_documents = async (args) => {
+  require_(args, 'query');
+  if (args.query.length < 2) throw new ToolError('query must be at least 2 characters');
+  return await _semanticSearch(['documents'], args.query, args.limit || 10);
+};
+
+handlers.file_search_code = async (args) => {
+  require_(args, 'query');
+  if (args.query.length < 2) throw new ToolError('query must be at least 2 characters');
+  return await _semanticSearch(['code'], args.query, args.limit || 10);
+};
+
+// ── session_* ────────────────────────────────────────────────────────────────
+
+handlers.session_new = async (args) => {
+  require_(args, 'project');
+  const cliType = args.cli || 'claude';
+  if (!VALID_CLI_TYPES_FOR_NEW.includes(cliType))
+    throw new ToolError(`invalid cli: ${cliType}. Must be one of: ${VALID_CLI_TYPES_FOR_NEW.join(', ')}`);
+  const proj = db.getProject(args.project);
+  if (!proj) throw new ToolError('project not found', 404);
+  if (cliType === 'bash') {
+    const tmpId = crypto.randomUUID();
+    const tmux = safe.tmuxNameFor(tmpId);
+    safe.tmuxCreateBash(tmux, proj.path);
+    return { session_id: tmpId, tmux, project: args.project, cli: 'bash' };
+  }
+  const tmpId = cliType === 'claude'
+    ? `new_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`
+    : crypto.randomUUID();
+  const tmux = safe.tmuxNameFor(tmpId);
+  safe.tmuxCreateCLI(tmux, proj.path, cliType);
+  db.upsertSession(tmpId, proj.id, args.name || 'New Session', cliType);
+  // MCP-spawned sessions default to hidden — agents creating sub-sessions
+  // shouldn't clutter the human's sidebar. Pass hidden:false to override.
+  if (args.hidden !== false) db.setSessionState(tmpId, 'hidden');
+  return { session_id: tmpId, tmux, project: args.project, cli: cliType };
+};
+
+handlers.session_connect = async (args) => {
+  let session;
+  if (args.session_id) {
+    requireSessionId(args);
+    session = db.getSessionFull(args.session_id);
+  } else if (args.query) {
+    const matches = db.searchSessionsByName(args.query);
+    if (matches.length === 0) throw new ToolError('no session found matching query', 404);
+    session = matches[0];
+  } else {
+    throw new ToolError('session_id or query required');
+  }
+  if (!session) throw new ToolError('session not found', 404);
+  const projectPath = session.project_path || safe.resolveProjectPath(session.project_name);
+  const tmux = await ensureSessionTmux(session, projectPath);
+  return {
+    session_id: session.id,
+    name: session.name,
+    project: session.project_name,
+    cli: session.cli_type || 'claude',
+    tmux,
+  };
+};
+
+handlers.session_restart = async (args) => {
+  requireSessionId(args);
+  const session = db.getSessionFull(args.session_id);
+  if (!session) throw new ToolError('session not found', 404);
+  const tmux = safe.tmuxNameFor(args.session_id);
+  await safe.tmuxKill(tmux);
+  const projectPath = session.project_path || safe.resolveProjectPath(session.project_name);
+  const newTmux = await ensureSessionTmux(session, projectPath);
+  return { session_id: session.id, tmux: newTmux, cli: session.cli_type || 'claude', restarted: true };
+};
+
+handlers.session_kill = async (args) => {
+  requireSessionId(args);
+  const tmux = safe.tmuxNameFor(args.session_id);
+  await safe.tmuxKill(tmux);
+  return { session_id: args.session_id, killed: true };
+};
+
+handlers.session_list = async (args) => {
+  require_(args, 'project');
+  const proj = db.getProject(args.project);
+  if (!proj) throw new ToolError('project not found', 404);
+  const sDir = sessionUtils.sessionsDir(proj.path);
   const sessions = [];
   try {
     const files = await readdir(sDir);
@@ -531,10 +276,370 @@ async function listSessions(project) {
     }
   } catch (err) {
     if (err.code !== 'ENOENT') {
-      logger.error('Error listing sessions', { module: 'mcp-tools', project, err: err.message });
+      logger.error('Error listing sessions', { module: 'mcp-tools', project: args.project, err: err.message });
     }
   }
-  return sessions.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+  return { sessions: sessions.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0)) };
+};
+
+handlers.session_config = async (args) => {
+  requireSessionId(args);
+  if (args.name !== undefined) db.renameSession(args.session_id, args.name);
+  if (args.state !== undefined) db.setSessionState(args.session_id, args.state);
+  if (args.notes !== undefined) db.setSessionNotes(args.session_id, args.notes);
+  return { saved: true };
+};
+
+handlers.session_summarize = async (args) => {
+  requireSessionId(args);
+  return await sessionUtils.summarizeSession(args.session_id, args.project);
+};
+
+handlers.session_prepare_pre_compact = async () => {
+  const config = require('./config');
+  return config.getPrompt('session-transition', {});
+};
+
+handlers.session_resume_post_compact = async (args) => {
+  requireSessionId(args);
+  const config = require('./config');
+  const session = db.getSessionFull(args.session_id);
+  const projectPath = session?.project_path || '';
+  const sessDir = sessionUtils.sessionsDir(projectPath);
+  const sessionFile = join(sessDir, `${args.session_id}.jsonl`);
+  let tail = '';
+  try {
+    const content = fs.readFileSync(sessionFile, 'utf-8');
+    const lines = content.trim().split('\n').filter(Boolean);
+    tail = lines.slice(-(args.tail_lines || 60)).join('\n');
+  } catch {
+    tail = '(could not read session file)';
+  }
+  return config.getPrompt('session-resume', { SESSION_TAIL: tail });
+};
+
+handlers.session_export = async (args) => {
+  requireSessionId(args);
+  const session = db.getSessionFull(args.session_id);
+  if (!session) throw new ToolError('session not found', 404);
+  const projectPath = session.project_path || '';
+  const cliType = session.cli_type || 'claude';
+  if (cliType === 'claude') {
+    const sessDir = sessionUtils.sessionsDir(projectPath);
+    const path = join(sessDir, `${args.session_id}.jsonl`);
+    try { return { format: 'jsonl', path, content: fs.readFileSync(path, 'utf-8') }; }
+    catch (e) { throw new ToolError(`session file not found: ${path}`, 404); }
+  }
+  // Gemini/Codex — return parsed transcript via summarizer's tail mechanism
+  return await sessionUtils.summarizeSession(args.session_id, args.project);
+};
+
+handlers.session_info = async (args) => {
+  requireSessionId(args);
+  const info = await sessionUtils.getSessionInfo(args.session_id);
+  if (!info) throw new ToolError('session not found', 404);
+  return info;
+};
+
+handlers.session_grep = async (args) => {
+  require_(args, 'pattern');
+  const cliFilter = args.cli ? args.cli.split(',').map(c => c.trim()) : VALID_CLI_TYPES;
+  const results = {};
+  for (const cli of cliFilter) {
+    let searchDirs = [];
+    switch (cli) {
+      case 'claude': searchDirs = [join(CLAUDE_HOME, 'projects')]; break;
+      case 'gemini': searchDirs = [join(HOME, '.gemini', 'tmp')]; break;
+      case 'codex':  searchDirs = [process.env.CODEX_HOME || join(HOME, '.codex', 'sessions')]; break;
+    }
+    const matches = [];
+    for (const dir of searchDirs) {
+      if (!fs.existsSync(dir)) continue;
+      try {
+        const out = execSync(
+          `grep -rn --color=never --include='*.jsonl' --include='*.json' -- ${safe.shellEscape(args.pattern)} ${safe.shellEscape(dir)}`,
+          { encoding: 'utf-8', timeout: 10000, maxBuffer: 1024 * 1024 },
+        ).trim();
+        if (out) matches.push(...out.split('\n').slice(0, 50).map(l => l.replace(dir + '/', '')));
+      } catch (e) {
+        if (e.status !== 1) logger.error('Session grep error', { module: 'mcp-tools', cli, err: e.message });
+      }
+    }
+    if (matches.length > 0) results[cli] = matches;
+  }
+  return { pattern: args.pattern, results };
+};
+
+handlers.session_search = async (args) => {
+  require_(args, 'query');
+  if (args.query.length < 2) throw new ToolError('query must be at least 2 characters');
+  const cliFilter = args.cli ? args.cli.split(',').map(c => c.trim()) : VALID_CLI_TYPES;
+  const collections = cliFilter.map(c => c + '_sessions');
+  return await _semanticSearch(collections, args.query, args.limit || 10);
+};
+
+handlers.session_send_text = async (args) => {
+  requireSessionId(args);
+  require_(args, 'text');
+  const tmux = safe.tmuxNameFor(args.session_id);
+  if (!(await safe.tmuxExists(tmux))) throw new ToolError(`tmux session not running: ${tmux}`, 410);
+  await safe.tmuxSendTextAsync(tmux, args.text);
+  return { sent: true, tmux };
+};
+
+handlers.session_send_keys = async (args) => {
+  requireSessionId(args);
+  require_(args, 'text');
+  const tmux = safe.tmuxNameFor(args.session_id);
+  if (!(await safe.tmuxExists(tmux))) throw new ToolError(`tmux session not running: ${tmux}`, 410);
+  await safe.tmuxExecAsync(['send-keys', '-t', tmux, args.text]);
+  return { sent: true, tmux };
+};
+
+handlers.session_send_key = async (args) => {
+  requireSessionId(args);
+  require_(args, 'key');
+  // Allow named keys from the whitelist OR a single printable ASCII char.
+  const isNamed = VALID_KEY_NAMES.has(args.key);
+  const isSingle = typeof args.key === 'string' && args.key.length === 1 && /^[\x20-\x7E]$/.test(args.key);
+  if (!isNamed && !isSingle) throw new ToolError(`invalid key: ${args.key}`);
+  const tmux = safe.tmuxNameFor(args.session_id);
+  if (!(await safe.tmuxExists(tmux))) throw new ToolError(`tmux session not running: ${tmux}`, 410);
+  await safe.tmuxSendKeyAsync(tmux, args.key);
+  return { sent: true, key: args.key, tmux };
+};
+
+handlers.session_read_screen = async (args) => {
+  requireSessionId(args);
+  const tmux = safe.tmuxNameFor(args.session_id);
+  if (!(await safe.tmuxExists(tmux))) throw new ToolError(`tmux session not running: ${tmux}`, 410);
+  const lines = Math.max(1, Math.min(args.lines || 200, 1000));
+  const { stdout } = await safe.tmuxExecAsync(['capture-pane', '-p', '-S', `-${lines}`, '-t', tmux]);
+  return { tmux, lines, screen: stdout };
+};
+
+handlers.session_read_output = async (args) => {
+  requireSessionId(args);
+  const result = await sessionUtils.summarizeSession(args.session_id, args.project);
+  return result;
+};
+
+handlers.session_wait = async (args) => {
+  const seconds = Math.max(0, Math.min(Number(args.seconds) || 0, 60));
+  if (!Number.isFinite(seconds) || seconds <= 0) throw new ToolError('seconds must be a positive number ≤ 60');
+  await new Promise(r => setTimeout(r, seconds * 1000));
+  return { waited_seconds: seconds };
+};
+
+// ── project_* ────────────────────────────────────────────────────────────────
+
+function _projectShape(p) {
+  return { id: p.id, name: p.name, path: p.path, notes: p.notes || '', state: p.state || 'active' };
 }
 
-module.exports = { registerMcpRoutes };
+handlers.project_list = async () => {
+  return { projects: db.getProjects().map(_projectShape) };
+};
+
+handlers.project_get = async (args) => {
+  require_(args, 'project');
+  const p = db.getProject(args.project);
+  if (!p) throw new ToolError('project not found', 404);
+  return _projectShape(p);
+};
+
+handlers.project_update = async (args) => {
+  require_(args, 'project');
+  const p = db.getProject(args.project);
+  if (!p) throw new ToolError('project not found', 404);
+  if (args.name !== undefined) db.renameProject(p.id, args.name);
+  if (args.notes !== undefined) db.setProjectNotes(p.id, args.notes);
+  if (args.state !== undefined) db.setProjectState(p.id, args.state);
+  return _projectShape(db.getProjectById(p.id));
+};
+
+handlers.project_sys_prompt_get = async (args) => {
+  require_(args, 'project', 'cli');
+  const p = db.getProject(args.project);
+  if (!p) throw new ToolError('project not found', 404);
+  const filename = SYS_PROMPT_FILES[args.cli];
+  if (!filename) throw new ToolError(`invalid cli: ${args.cli}. Must be claude, gemini, or codex`);
+  const path = join(p.path, filename);
+  let content = '';
+  try { content = fs.readFileSync(path, 'utf-8'); } catch (e) {
+    if (e.code !== 'ENOENT') throw e;
+  }
+  return { project: args.project, cli: args.cli, file: filename, content };
+};
+
+handlers.project_sys_prompt_update = async (args) => {
+  require_(args, 'project', 'cli', 'content');
+  const p = db.getProject(args.project);
+  if (!p) throw new ToolError('project not found', 404);
+  const filename = SYS_PROMPT_FILES[args.cli];
+  if (!filename) throw new ToolError(`invalid cli: ${args.cli}. Must be claude, gemini, or codex`);
+  fs.writeFileSync(join(p.path, filename), args.content);
+  return { project: args.project, cli: args.cli, file: filename, updated: true };
+};
+
+handlers.project_grep = async (args) => {
+  require_(args, 'pattern');
+  let re;
+  try { re = new RegExp(args.pattern, 'i'); }
+  catch (e) { throw new ToolError(`invalid regex: ${e.message}`); }
+  const matches = db.getProjects()
+    .filter(p => re.test(p.name) || re.test(p.notes || ''))
+    .map(_projectShape);
+  return { pattern: args.pattern, matches };
+};
+
+handlers.project_mcp_list = async () => {
+  return { servers: db.getMcpServers() };
+};
+
+handlers.project_mcp_register = async (args) => {
+  require_(args, 'mcp_name', 'mcp_config');
+  const transport = args.mcp_transport || 'stdio';
+  const cfgStr = typeof args.mcp_config === 'string' ? args.mcp_config : JSON.stringify(args.mcp_config);
+  db.registerMcp(args.mcp_name, transport, cfgStr, args.mcp_description || '');
+  return { registered: args.mcp_name };
+};
+
+handlers.project_mcp_unregister = async (args) => {
+  require_(args, 'mcp_name');
+  db.unregisterMcp(args.mcp_name);
+  return { unregistered: args.mcp_name };
+};
+
+function _writeProjectMcpJson(proj) {
+  const enabled = db.getEnabledMcpForProject(proj.id);
+  const mcpJson = {};
+  for (const s of enabled) {
+    try { mcpJson[s.name] = JSON.parse(s.config); } catch { mcpJson[s.name] = s.config; }
+  }
+  fs.writeFileSync(join(proj.path, '.mcp.json'), JSON.stringify({ mcpServers: mcpJson }, null, 2));
+}
+
+async function _restartCallingSession(args, projectPath) {
+  if (!args.session_id) return;
+  const session = db.getSessionFull(args.session_id);
+  if (!session) return;
+  const tmux = safe.tmuxNameFor(args.session_id);
+  await safe.tmuxKill(tmux);
+  await ensureSessionTmux(session, session.project_path || projectPath);
+}
+
+handlers.project_mcp_enable = async (args) => {
+  require_(args, 'mcp_name', 'project');
+  const proj = db.getProject(args.project);
+  if (!proj) throw new ToolError('project not found', 404);
+  if (!db.getMcpServer(args.mcp_name)) throw new ToolError('MCP server not registered', 404);
+  db.enableMcpForProject(proj.id, args.mcp_name);
+  _writeProjectMcpJson(proj);
+  await _restartCallingSession(args, proj.path);
+  return { enabled: args.mcp_name, project: args.project };
+};
+
+handlers.project_mcp_disable = async (args) => {
+  require_(args, 'mcp_name', 'project');
+  const proj = db.getProject(args.project);
+  if (!proj) throw new ToolError('project not found', 404);
+  db.disableMcpForProject(proj.id, args.mcp_name);
+  _writeProjectMcpJson(proj);
+  await _restartCallingSession(args, proj.path);
+  return { disabled: args.mcp_name, project: args.project };
+};
+
+handlers.project_mcp_list_enabled = async (args) => {
+  require_(args, 'project');
+  const proj = db.getProject(args.project);
+  if (!proj) throw new ToolError('project not found', 404);
+  return { servers: db.getEnabledMcpForProject(proj.id) };
+};
+
+// ── task_* ───────────────────────────────────────────────────────────────────
+
+handlers.task_list = async (args) => {
+  if (args.folder_path) return { tasks: db.getTasksByFolder(args.folder_path) };
+  return { tasks: db.getAllTasks(args.filter || 'todo') };
+};
+
+handlers.task_get = async (args) => {
+  const id = requireTaskId(args);
+  const task = db.getTask(id);
+  if (!task) throw new ToolError('task not found', 404);
+  return task;
+};
+
+handlers.task_add = async (args) => {
+  require_(args, 'title');
+  if (args.title.length > 500) throw new ToolError('title max 500 chars');
+  const folderPath = args.folder_path || '/';
+  return db.addTask(folderPath, args.title, args.description || '', null, 'agent');
+};
+
+handlers.task_move = async (args) => {
+  const id = requireTaskId(args);
+  require_(args, 'folder_path');
+  db.moveTask(id, args.folder_path);
+  return { moved: true, task_id: id, folder_path: args.folder_path };
+};
+
+handlers.task_update = async (args) => {
+  const id = requireTaskId(args);
+  if (args.title !== undefined) db.updateTaskTitle(id, args.title);
+  if (args.description !== undefined) db.updateTaskDescription(id, args.description);
+  if (args.status !== undefined) {
+    if (!['todo', 'done', 'archived'].includes(args.status))
+      throw new ToolError(`invalid status: ${args.status}. Must be todo, done, or archived`);
+    db.updateTaskStatus(id, args.status);
+  }
+  if (args.folder_path !== undefined) db.moveTask(id, args.folder_path);
+  return db.getTask(id) || { updated: true };
+};
+
+handlers.task_grep = async (args) => {
+  require_(args, 'pattern');
+  let re;
+  try { re = new RegExp(args.pattern, 'i'); }
+  catch (e) { throw new ToolError(`invalid regex: ${e.message}`); }
+  const matches = db.getAllTasks('all')
+    .filter(t => re.test(t.title || '') || re.test(t.description || ''));
+  return { pattern: args.pattern, matches };
+};
+
+// ── Dispatch + HTTP ──────────────────────────────────────────────────────────
+
+const TOOL_NAMES = Object.keys(handlers);
+
+async function dispatch(toolName, args) {
+  const handler = handlers[toolName];
+  if (!handler) throw new ToolError(`Unknown tool: ${toolName}`, 404);
+  return await handler(args || {});
+}
+
+function registerMcpRoutes(app) {
+  app.get('/api/mcp/tools', (req, res) => {
+    res.json({ tools: TOOL_NAMES });
+  });
+
+  app.post('/api/mcp/call', async (req, res) => {
+    const { tool, args } = req.body || {};
+    try {
+      const result = await dispatch(tool, args);
+      res.json({ result });
+    } catch (err) {
+      const status = err.status
+        || (err.code === 'ENOENT' ? 404
+            : err instanceof SyntaxError ? 400
+            : err.message?.includes('traversal') ? 403
+            : 500);
+      if (status === 500) {
+        logger.error('MCP tool call error', { module: 'mcp-tools', tool, err: err.message });
+      }
+      res.status(status).json({ error: err.message });
+    }
+  });
+}
+
+module.exports = { registerMcpRoutes, handlers, dispatch, TOOL_NAMES, ToolError };
