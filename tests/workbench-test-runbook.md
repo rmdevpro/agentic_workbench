@@ -2598,6 +2598,159 @@ Ask CLI, Quorum, Guides, Skills, and Prompts tests removed — features deleted 
 
 ---
 
+### Vector Search: `none` Provider + API Key Flow (VEC-01 through VEC-20)
+
+These tests verify the embedding provider lifecycle: default-`none` on fresh installs, per-provider key validation, qdrant-sync probe + restart serialization, and the MCP `configured:false` response when provider is disabled. Run with all keys removed first (restart the Space or wipe `/data/.workbench/workbench.db` settings rows for `gemini_api_key`/`codex_api_key`/`huggingface_api_key`/`vector_embedding_provider`) — each test assumes the prior state.
+
+API key sources (executor must have these on disk or as env):
+- Gemini: `/mnt/storage/credentials/api-keys/gemini.env` → `GEMINI_API_KEY=...`
+- OpenAI/Codex: `/mnt/storage/credentials/api-keys/openai.env` → `OPENAI_API_KEY=...`
+- HuggingFace: `/mnt/storage/credentials/api-keys/huggingface.env` → `HF_TOKEN=...`
+
+#### VEC-01: Default Provider on Fresh `/data`
+**Action:** `curl ${WORKBENCH_URL}/api/settings` (with gate cookie if needed).
+**Verify:** `vector_embedding_provider === "none"`. (NOT `"huggingface"` — that was the pre-fix default and would 404 on every deploy.)
+
+#### VEC-02: `/api/cli-credentials` Reports Three Providers
+**Action:** `curl ${WORKBENCH_URL}/api/cli-credentials`.
+**Verify:** Response is `{gemini: bool, openai: bool, huggingface: bool}` — all three keys present. On fresh install all three are `false`.
+
+#### VEC-03: Fresh Deploy Logs One INFO, Zero ERRORs
+**Action:** Wait 15s after Space `RUNNING`. `curl ${WORKBENCH_URL}/api/logs?module=qdrant-sync&since=5m&limit=20`.
+**Verify:** Exactly one INFO line whose message contains `"Vector sync disabled"` AND zero ERROR/WARN entries from `qdrant-sync`. (Pre-fix: 9+ per-file ERRORs from dead HF endpoint.)
+
+#### VEC-04: `vector_embedding_provider='none'` Skips Validation
+**Action:** `PUT /api/settings -d '{"key":"vector_embedding_provider","value":"none"}'`.
+**Verify:** `{saved: true}` returned in <500ms (no embedding-provider validation call hit). No 400 response.
+
+#### VEC-05: Invalid Gemini Key Rejected
+**Action:** `PUT /api/settings -d '{"key":"gemini_api_key","value":"AIzaSyDEFINITELY-INVALID"}'`.
+**Verify:** HTTP 400 with body containing `"validation failed"` AND `"API key not valid"` (Gemini API's response). Setting NOT persisted in DB.
+
+#### VEC-06: Valid Gemini Key Accepted; Credentials Update
+**Action:** `PUT /api/settings -d '{"key":"gemini_api_key","value":"<real-key-from-gemini.env>"}'`. Then `GET /api/cli-credentials`.
+**Verify:** PUT returns `{saved: true}`. Subsequent `cli-credentials` shows `gemini: true`.
+
+#### VEC-07: Switch to `gemini` Provider Starts Sync, No Per-File Errors
+**Action:** `PUT /api/settings -d '{"key":"vector_embedding_provider","value":"gemini"}'`. Wait 15s. `GET /api/logs?module=qdrant-sync&since=2m&limit=30`.
+**Verify:** Logs contain exactly one `"Qdrant sync starting"`, four `"Created Qdrant collection"` (documents, claude_sessions, gemini_sessions, codex_sessions), one `"Qdrant initial sync complete"`. ERROR count from qdrant-sync == 0. (Pre-fix: 9 "Collection 'documents' doesn't exist!" or "No embedding API key configured" per-file errors due to drop+restart race.)
+
+#### VEC-08: Valid Codex/OpenAI Key Accepted
+**Action:** `PUT /api/settings -d '{"key":"codex_api_key","value":"<real-key-from-openai.env>"}'`. Then `GET /api/cli-credentials`.
+**Verify:** PUT `{saved: true}`. `cli-credentials.openai === true`.
+
+#### VEC-09: Valid HuggingFace Key Accepted (Validates Against Router Endpoint)
+**Action:** `PUT /api/settings -d '{"key":"huggingface_api_key","value":"<real-key-from-huggingface.env>"}'`. Then `GET /api/cli-credentials`.
+**Verify:** PUT `{saved: true}` (validation hits `https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2/pipeline/feature-extraction` — not the dead legacy `api-inference.huggingface.co/models/...` URL). `cli-credentials.huggingface === true`.
+
+#### VEC-10: Invalid HF Key Rejected
+**Action:** `PUT /api/settings -d '{"key":"huggingface_api_key","value":"hf_DEFINITELY_INVALID"}'`.
+**Verify:** HTTP 400 with `"validation failed"` in body. `cli-credentials.huggingface` unchanged from prior state.
+
+#### VEC-11: Switch to `huggingface` Provider Works
+**Action:** `PUT /api/settings -d '{"key":"vector_embedding_provider","value":"huggingface"}'`.
+**Verify:** `{saved: true}`. (Validation reads HF key from DB and confirms it works against the router URL.)
+
+#### VEC-12: Switch Back to `none` Stops Sync
+**Action:** `PUT /api/settings -d '{"key":"vector_embedding_provider","value":"none"}'`. Wait 5s. `GET /api/logs?module=qdrant-sync&since=1m&limit=10`.
+**Verify:** A new `"Vector sync disabled"` INFO appears. Zero new ERRORs in `qdrant-sync` since the switch.
+
+#### VEC-13: Rapid-Fire Provider Switch Stress (Race Serialization)
+**Action:** With Gemini key already saved, fire 6 consecutive PUTs in a tight loop:
+```bash
+for v in gemini huggingface none gemini huggingface none; do
+  curl -X PUT ... -d "{\"key\":\"vector_embedding_provider\",\"value\":\"$v\"}"
+done
+```
+Wait 30s for serialized pipelines to drain. `GET /api/logs?level=ERROR&module=qdrant-sync&since=2m`.
+**Verify:** **Zero** ERRORs from qdrant-sync. Pipelines serialized via `reapplyConfig` coalescing — no overlapping `stop()`/`start()`/`scan` cycles. (Pre-fix: 9-18 per-file `"No embedding API key configured"` errors when scans crossed config flips.)
+
+#### VEC-14: MCP `search_documents` with provider=`none`
+**Action:** With provider=`none` set, call `POST /api/mcp/call` body `{"tool":"workbench_files","args":{"action":"search_documents","query":"hello"}}`.
+**Verify:** Response `{result: {configured: false, message: "Vector search is disabled. ...", results: []}}`. NOT a generic 500 error and NOT empty `{result: []}`.
+
+#### VEC-15: MCP `search_code` with provider=`none`
+**Action:** `POST /api/mcp/call` body `{"tool":"workbench_files","args":{"action":"search_code","query":"hello"}}`.
+**Verify:** Same shape as VEC-14 (`configured: false`, message, empty results).
+
+#### VEC-16: MCP `search_semantic` with provider=`none`
+**Action:** `POST /api/mcp/call` body `{"tool":"workbench_sessions","args":{"action":"search_semantic","query":"hello"}}`.
+**Verify:** Same shape as VEC-14 (`configured: false`, message, empty results).
+
+#### VEC-17: MCP `search_documents` with Active Provider Returns Real Results
+**Action:** Switch provider to `gemini` (with key saved). Wait 25s for initial scan. `POST /api/mcp/call` body `{"tool":"workbench_files","args":{"action":"search_documents","query":"workbench deployment guide"}}`.
+**Verify:** Response is an array of >0 result objects, each with `{collection: "documents", score: number, ...payload}`. Not the `configured:false` shape. (This confirms the search path actually embeds + queries qdrant when configured.)
+
+#### VEC-18: Settings UI — Vector Search Tab + `None` Option (Playwright-driven)
+**Steps:**
+1. `browser_navigate` to `${WORKBENCH_URL}`. If gate is shown, fill `${GATE_USER}`/`${GATE_PASS}` and click Sign In.
+2. `browser_evaluate`: `() => { openSettings(); return 'opened'; }` (the cog button calls `openSettings()`).
+3. `browser_evaluate` to switch tabs and **await the async loader** in one step:
+   ```js
+   async () => {
+     document.querySelector('button[data-settings-tab="vector"]').click();
+     await loadVectorSettings();
+     const sel = document.getElementById('setting-vector-provider');
+     return {
+       value: sel.value,
+       options: [...sel.options].map(o => ({ value: o.value, label: o.textContent.trim(), disabled: o.disabled })),
+     };
+   }
+   ```
+   (Plain `tab.click()` triggers `loadVectorSettings()` async — without an `await` your eval returns before the option-disable logic runs and you'll see false negatives.)
+**Verify:** `value === "none"`. `options` length ≥ 5 with first option `{value:"none", label:"None — disabled"}` and remaining values `huggingface`, `gemini`, `openai`, `custom`.
+
+#### VEC-19: Settings UI — Provider Options Gray Out Without Keys (Playwright-driven)
+**Pre-state:** No API keys saved (fresh `/data` from a Space restart).
+**Steps:**
+1. Open Settings and navigate to Vector Search tab as in VEC-18 (with `await loadVectorSettings()` in the eval).
+2. `browser_evaluate`: read the option mapping.
+3. Switch to **General** tab: `document.querySelector('button[data-settings-tab="general"]').click()` — note the API Keys section lives in the General tab, not its own tab.
+4. `browser_type` a valid Gemini key into `#setting-gemini-key`, then `browser_press_key` Tab to fire `onchange`.
+5. `browser_wait_for` 4000 ms (synchronous server-side validation against Gemini's API + DB write + qdrant restart).
+6. Re-open Vector Search tab AND `await loadVectorSettings()` in the same eval (per VEC-18).
+**Verify:**
+- Step 2: `gemini`, `openai`, `huggingface` options each have `disabled === true` and label suffix `"(no key — set in Settings → API Keys)"`. `none` and `custom` are enabled.
+- Step 6: After saving the Gemini key, the `gemini` option label becomes plain `"Gemini"` and `disabled === false`. Other unset providers remain disabled.
+
+#### VEC-20: Settings UI — HuggingFace API Key Field Saves and Validates (Playwright-driven)
+**Verified procedure** (run on hf-test post-fix):
+1. Open Settings → General tab. `browser_snapshot` to get refs for the three password fields. Confirm IDs `setting-gemini-key`, `setting-codex-key`, `setting-huggingface-key` all exist.
+2. `browser_type` a valid HF key into `#setting-huggingface-key` (use the key from `/mnt/storage/credentials/api-keys/huggingface.env`).
+3. `browser_press_key` Tab to fire `onchange` → server-side validation hits `https://router.huggingface.co/hf-inference/.../pipeline/feature-extraction` with the new key.
+4. `browser_wait_for` 4000 ms.
+5. `browser_evaluate`: `await fetch('/api/cli-credentials').then(r => r.json())`.
+**Verify:** `cli-credentials.huggingface === true`. (For the negative-path test: type a clearly-bogus key like `hf_xxx_invalid`. Server returns 400 with `"API key validation failed"`. The settings-error banner — `#settings-error` — surfaces the message; the field value rolls back to its previous state via `saveSetting()`'s rollback path.)
+
+#### VEC-21: Settings UI — Switch Provider via Dropdown (Playwright-driven, full user flow)
+**Pre-state:** At least one provider key saved (e.g. HF key from VEC-20). Provider currently `"none"`.
+**Steps:**
+1. Open Settings → Vector Search tab.
+2. `browser_select_option` on `#setting-vector-provider` with value `"huggingface"` (or `"gemini"` / `"openai"` if those keys are saved).
+3. `browser_wait_for` 10000 ms (allow validation, dropAllCollections, restart, and initial scan).
+4. `browser_evaluate`:
+   ```js
+   async () => {
+     const s = await fetch('/api/settings').then(r => r.json());
+     const errs = await fetch('/api/logs?level=ERROR&module=qdrant-sync&since=2m').then(r => r.json());
+     const all = await fetch('/api/logs?module=qdrant-sync&since=2m&limit=30').then(r => r.json());
+     return {
+       provider: s.vector_embedding_provider,
+       err_count: errs.count,
+       qdrant_starting: all.rows.filter(r => r.message.includes('Qdrant sync starting')).length,
+       collections_created: all.rows.filter(r => r.message.startsWith('Created Qdrant collection')).length,
+     };
+   }
+   ```
+**Verify:**
+- `provider` matches the value selected in step 2.
+- `err_count === 0` (qdrant-sync ERRORs).
+- `qdrant_starting >= 1` (a fresh restart cycle ran).
+- `collections_created === 4` (documents, claude_sessions, gemini_sessions, codex_sessions all created).
+- Repeat with `"none"` and verify a fresh `"Vector sync disabled"` INFO appears, no errors.
+
+---
+
 ## Phase 10: Multi-CLI Sessions, Lifecycle, MCP Management (16 blocks)
 
 ### NF-53: Filter Bar is Dropdown
