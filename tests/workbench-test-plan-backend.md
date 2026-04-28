@@ -160,6 +160,19 @@ Before functional testing begins, verify compliance with all ERQ-001 requirement
 
 Per WPR-103 §2, the test plan defines a two-layer strategy. Each layer has sub-categories for practical execution.
 
+### 2.0 Where tests run (host vs container)
+
+**Tests must execute inside the deployed `${WORKBENCH_CONTAINER}` (or an HF Space's container), never on the host machine's shell.** Workbench dev/prod hosts (M5, irina, others) hold the live SQLite database, the live `secrets.env` (with real Slack/GitHub webhook URLs and API keys), an active qdrant instance, and a running tmux server. Importing any project module from the host shell shares all of those with the test process.
+
+Concrete rules:
+
+- **Disallowed on the host shell of any workbench-running machine:** `npm test`, `npm run test:coverage`, `npm run test:live`, `npm run test:browser`, `node --test`, `c8`, `nyc`, ad-hoc `node -e` that `require()`s any project module. This includes "mock" tests — they still bring up the in-process Express app and fire real webhooks. A prior incident on the prod host nearly killed the active conversation when an "in-process" test mutated the live DB and webhook targets.
+- **Allowed:** Any of those commands run *inside* the container — e.g. `ssh ${WORKBENCH_HOST} 'docker exec -i ${WORKBENCH_CONTAINER} sh -c "cd /app && npm run test:coverage"'`. The container has its own DB, isolated webhooks (or a stub via test config), and its own tmux server.
+- **Browser tests** (`npm run test:browser`) can be driven from a developer workstation against a deployed `${WORKBENCH_URL}` because Playwright never imports server code. Don't run them from a workbench-host shell.
+- **Coverage runs** the same way — inside the container, never on the host. The c8 thresholds in `package.json` (`--lines 80 --branches 70`) gate container-internal runs only.
+
+If a test step or harness instruction in this plan implies a `node` command, assume "inside the container" unless it explicitly says otherwise.
+
 ### Layer 1: Mock Tests (Unit)
 
 **Framework:** `node:test` (built-in) with mocks for external dependencies.

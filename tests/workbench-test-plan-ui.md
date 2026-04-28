@@ -98,6 +98,12 @@ Before context threshold or autocompaction scenarios:
 
 ## 2. Test Strategy
 
+### 2.0 Where tests run (host vs container)
+
+**Run all UI tests against a deployed `${WORKBENCH_URL}` — never against an in-process app spun up from a workbench-host shell.** Playwright itself only loads HTTP and never imports server code, so it can run from a developer workstation, a deployed Space, or a dev container. The hard constraint: never run any of `npm test` / `npm run test:coverage` / `npm run test:live` / `npm run test:browser` / `node --test` / `c8` from the host shell of a machine that's actually running Workbench (e.g. M5, irina) — those commands import project modules into the host's Node process and end up using the live DB, live `secrets.env` (real webhooks, real API keys), and live tmux server.
+
+If you need browser tests against a Space, point the harness at the Space URL and run the harness from any non-Workbench-running machine. If you need browser tests against a dev container, run the harness inside that container or from another box pointing at it. The runbook's prerequisites section repeats this rule for an executor who skipped the plan.
+
 ### 2.1 Principle
 
 Workbench is a UI-first IDE/workbench. Browser tests are the primary acceptance layer. Backend tests verify plumbing; UI tests verify the product works.

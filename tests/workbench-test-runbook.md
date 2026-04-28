@@ -156,7 +156,31 @@ When a test fails:
 
 ## Prerequisites
 
-Before starting, verify all of the following:
+### Where to run (read first)
+
+**Tests run against a deployed container or HF Space — never against a host-machine clone of the repo.** The host that holds this repo may be a prod or dev workbench host (e.g. M5, irina); its database, webhook config, qdrant, and tmux state belong to the running workbench, not to the test harness. Running `npm test`, `npm run test:coverage`, `node --test`, `c8`, or any ad-hoc `node -e` that imports a project module from the host shell will:
+
+- spin up the in-process Express app on top of the live one (port collision or shadowed code),
+- fire real webhooks to whatever Slack/GitHub endpoints the live `secrets.env` points at,
+- run schema migrations against the live SQLite DB,
+- on a prior incident, nearly killed the active session.
+
+**Allowed:**
+
+- `ssh ${WORKBENCH_HOST} 'docker exec -i ${WORKBENCH_CONTAINER} sh -c "cd /app && npm test"'` — runs the suite inside the deployed container's own filesystem and DB.
+- `npm run test:browser` driven from a dev workstation against a deployed `${WORKBENCH_URL}` (Playwright doesn't import server code).
+- HF Space deploys + verification via curl/Playwright against the Space URL.
+
+**Not allowed (anywhere on the host shell of a workbench-running machine):**
+
+- `npm test` / `npm run test:coverage` / `npm run test:live` / `npm run test:browser` from the host repo
+- `node --test`, `c8`, `nyc`
+- `node -e` snippets that `require('./db.js')`, `./mcp-tools.js`, `./session-utils.js`, etc.
+- Even "mock" tests are forbidden from the host — they spin up the local Express app.
+
+If you need coverage, run it inside the container: `ssh ${WORKBENCH_HOST} 'docker exec -i ${WORKBENCH_CONTAINER} sh -c "cd /app && npm run test:coverage"'`.
+
+### Standard prereqs (verify before starting)
 
 1. **Workbench reachable:** `browser_navigate` to `${WORKBENCH_URL}` loads the page (gate page if a gate is configured, otherwise the workbench itself)
 2. **Login (if gate present):** Fill `${GATE_USER}` / `${GATE_PASS}`, click Sign In. Skip if no gate.
