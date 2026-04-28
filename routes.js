@@ -1232,33 +1232,20 @@ function registerCoreRoutes(
         }
       }
     }
-    // Single qdrant lifecycle event per settings change. Provider switch:
-    // drop all collections (old vectors use old model dims) AND clear sync
-    // state, THEN restart so the next run scans from scratch with the new
-    // provider's dims. Key-only changes: just restart (collections still
-    // valid). All sequenced in one async block to avoid the race where
-    // restart's ensureCollection runs concurrently with dropAllCollections.
+    // Single qdrant lifecycle hook for any settings change. reapplyConfig
+    // is internally serialized (coalesces rapid successive calls into one
+    // trailing apply), so consecutive PUTs from the user — e.g., save key,
+    // then switch provider — won't race overlapping stop/start/scan cycles.
     if ([
       'vector_embedding_provider',
       'vector_custom_url', 'vector_custom_key',
       'gemini_api_key', 'codex_api_key', 'huggingface_api_key',
     ].includes(key)) {
       const qdrant = require('./qdrant-sync');
-      const isProviderSwitch = key === 'vector_embedding_provider';
-      (async () => {
-        if (isProviderSwitch) {
-          try {
-            db.db.prepare('DELETE FROM qdrant_sync').run();
-            await qdrant.dropAllCollections();
-            logger.info('Embedding provider changed — cleared sync state, dropped collections', { module: 'routes', provider: value });
-          } catch (err) {
-            logger.warn('Failed to clear sync state on provider change', { module: 'routes', err: err.message });
-          }
-        }
-        await qdrant.restart();
-      })().catch(err =>
-        logger.warn('qdrant settings-change pipeline failed', { module: 'routes', settingKey: key, err: err.message })
-      );
+      qdrant.reapplyConfig({ dropCollections: key === 'vector_embedding_provider' })
+        .catch(err =>
+          logger.warn('qdrant.reapplyConfig after settings change failed', { module: 'routes', settingKey: key, err: err.message })
+        );
     }
     res.json({ saved: true });
   });

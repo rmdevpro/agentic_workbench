@@ -1073,8 +1073,7 @@ function stop() {
 // Stop + start. Used when settings change (provider/key updates) so a fresh
 // configuration takes effect without a server restart.
 async function restart() {
-  stop();
-  await start();
+  return reapplyConfig({ dropCollections: false });
 }
 
 // Drop every Qdrant collection this module manages. Used when the embedding
@@ -1088,6 +1087,52 @@ async function dropAllCollections() {
       logger.debug('drop collection failed (may not exist)', { module: 'qdrant-sync', collection: name, err: err.message });
     }
   }
+}
+
+// Single coordinated entry point for any settings-driven restart. Internally
+// serialized so rapid consecutive calls (e.g., key save followed quickly by
+// provider switch) don't run overlapping stop/start/scan sequences and race
+// on the shared collections.
+//
+// Coalescing: while one apply is running, additional calls are folded into
+// a single trailing apply that runs after the current one finishes. The
+// trailing apply uses dropCollections=true if ANY of the deferred calls
+// requested it (the strictest reset wins).
+let _applyInFlight = null;
+let _applyPending = null; // null | { dropCollections: bool }
+
+async function reapplyConfig({ dropCollections = false } = {}) {
+  if (_applyInFlight) {
+    if (_applyPending) {
+      _applyPending.dropCollections = _applyPending.dropCollections || dropCollections;
+    } else {
+      _applyPending = { dropCollections };
+    }
+    return _applyInFlight.then(async () => {
+      if (_applyPending) {
+        const next = _applyPending;
+        _applyPending = null;
+        return reapplyConfig(next);
+      }
+    });
+  }
+  _applyInFlight = (async () => {
+    try {
+      if (dropCollections) {
+        try {
+          await dropAllCollections();
+          db.db.prepare('DELETE FROM qdrant_sync').run();
+        } catch (err) {
+          logger.warn('Failed to drop collections / clear sync state', { module: 'qdrant-sync', err: err.message });
+        }
+      }
+      stop();
+      await start();
+    } finally {
+      _applyInFlight = null;
+    }
+  })();
+  return _applyInFlight;
 }
 
 async function search(query, collections = null, limit = 10) {
@@ -1176,4 +1221,4 @@ async function status() {
   return { available: true, running: _running, url: QDRANT_URL, collections };
 }
 
-module.exports = { start, stop, restart, search, status, embed, qdrantHealthy, reindexCollection, dropAllCollections, buildCandidateConfig, validateProviderConfig, getEmbeddingProvider };
+module.exports = { start, stop, restart, reapplyConfig, search, status, embed, qdrantHealthy, reindexCollection, dropAllCollections, buildCandidateConfig, validateProviderConfig, getEmbeddingProvider };
