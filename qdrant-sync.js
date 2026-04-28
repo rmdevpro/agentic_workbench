@@ -1077,6 +1077,19 @@ async function restart() {
   await start();
 }
 
+// Drop every Qdrant collection this module manages. Used when the embedding
+// provider changes — old vectors are incompatible with the new model's dims,
+// so the collections must be recreated from scratch.
+async function dropAllCollections() {
+  for (const name of Object.values(COLLECTIONS)) {
+    try {
+      await fetch(`${QDRANT_URL}/collections/${name}`, { method: 'DELETE' });
+    } catch (err) {
+      logger.debug('drop collection failed (may not exist)', { module: 'qdrant-sync', collection: name, err: err.message });
+    }
+  }
+}
+
 async function search(query, collections = null, limit = 10) {
   if (getEmbeddingProvider() === 'none') {
     const err = new Error('Vector search is disabled. Configure an embedding provider in Settings → Vector Search to enable semantic search.');
@@ -1163,4 +1176,4 @@ async function status() {
   return { available: true, running: _running, url: QDRANT_URL, collections };
 }
 
-module.exports = { start, stop, restart, search, status, embed, qdrantHealthy, reindexCollection, buildCandidateConfig, validateProviderConfig, getEmbeddingProvider };
+module.exports = { start, stop, restart, search, status, embed, qdrantHealthy, reindexCollection, dropAllCollections, buildCandidateConfig, validateProviderConfig, getEmbeddingProvider };

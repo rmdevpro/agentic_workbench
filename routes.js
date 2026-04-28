@@ -1232,33 +1232,32 @@ function registerCoreRoutes(
         }
       }
     }
-    if (key === 'vector_embedding_provider') {
-      // Provider changed — old embeddings are incompatible. Clear sync state and re-index.
-      try {
-        db.db.prepare('DELETE FROM qdrant_sync').run();
-        const qdrant = require('./qdrant-sync');
-        for (const col of ['documents', 'code', 'claude', 'gemini', 'codex']) {
-          qdrant.reindexCollection(col).catch(err =>
-            logger.error('Re-index after provider change failed', { module: 'routes', collection: col, err: err.message })
-          );
-        }
-        logger.info('Embedding provider changed — clearing sync state and re-indexing all collections', { module: 'routes', provider: value });
-      } catch (err) {
-        logger.error('Failed to trigger re-index on provider change', { module: 'routes', err: err.message });
-      }
-    }
-    // Wake qdrant-sync up if it had been disabled at startup (provider probe
-    // failed — e.g. fresh deploy with default-but-dead HF endpoint, or no
-    // key configured). restart() probes the new config and resumes sync if
-    // it now works. No-op if sync was already running.
+    // Single qdrant lifecycle event per settings change. Provider switch:
+    // drop all collections (old vectors use old model dims) AND clear sync
+    // state, THEN restart so the next run scans from scratch with the new
+    // provider's dims. Key-only changes: just restart (collections still
+    // valid). All sequenced in one async block to avoid the race where
+    // restart's ensureCollection runs concurrently with dropAllCollections.
     if ([
       'vector_embedding_provider',
       'vector_custom_url', 'vector_custom_key',
       'gemini_api_key', 'codex_api_key', 'huggingface_api_key',
     ].includes(key)) {
       const qdrant = require('./qdrant-sync');
-      qdrant.restart().catch(err =>
-        logger.warn('qdrant.restart after settings change failed', { module: 'routes', settingKey: key, err: err.message })
+      const isProviderSwitch = key === 'vector_embedding_provider';
+      (async () => {
+        if (isProviderSwitch) {
+          try {
+            db.db.prepare('DELETE FROM qdrant_sync').run();
+            await qdrant.dropAllCollections();
+            logger.info('Embedding provider changed — cleared sync state, dropped collections', { module: 'routes', provider: value });
+          } catch (err) {
+            logger.warn('Failed to clear sync state on provider change', { module: 'routes', err: err.message });
+          }
+        }
+        await qdrant.restart();
+      })().catch(err =>
+        logger.warn('qdrant settings-change pipeline failed', { module: 'routes', settingKey: key, err: err.message })
       );
     }
     res.json({ saved: true });
