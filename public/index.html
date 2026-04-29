@@ -2894,16 +2894,31 @@ build/**</textarea>
         });
       }
 
+      // jqueryFileTree's connector encodes filenames with encodeURIComponent
+      // before stuffing them in the <a rel="..."> attribute. Every consumer
+      // that uses the attribute as a real filesystem path MUST decode it
+      // first — otherwise spaces become literal "%20" chars and downstream
+      // /api/file-raw / /api/move / openFileTab calls fail with ENOENT
+      // because the OS doesn't know that file (the directory is named
+      // "video project", not "video%20project"). Encoded-to-encoded comparisons
+      // (drag source vs drop dest) can stay raw, but the moment a value is
+      // used as a path argument, it must round-trip through this helper.
+      function relAttrToPath(el) {
+        const raw = $(el).attr('rel') || '';
+        try { return decodeURIComponent(raw); }
+        catch { return raw; /* malformed escape — return as-is */ }
+      }
+
       // Double-click file to open in new tab
       $(treeEl).on('dblclick', 'li.file a', function(e) {
         e.preventDefault();
-        const path = $(this).attr('rel') || '';
+        const path = relAttrToPath(this);
         if (path) openFileTab(path.trim());
       });
 
       // Make file and directory links draggable
       $(treeEl).on('dragstart', 'a', function(e) {
-        const path = $(this).attr('rel') || '';
+        const path = relAttrToPath(this);
         e.originalEvent.dataTransfer.setData('text/plain', path.trim());
         e.originalEvent.dataTransfer.effectAllowed = 'copy';
       });
@@ -2916,7 +2931,7 @@ build/**</textarea>
         e.preventDefault();
         e.stopPropagation();
         removeContextMenu();
-        const path = $(this).attr('rel') || '';
+        const path = relAttrToPath(this);
         const isDir = $(this).closest('li').hasClass('directory');
         const menu = document.createElement('div');
         menu.className = 'context-menu';
@@ -2995,7 +3010,7 @@ build/**</textarea>
         e.stopPropagation();
         $(this).css('background', '').css('color', '');
         const source = e.originalEvent.dataTransfer.getData('text/plain').trim();
-        const dest = $(this).attr('rel') || '';
+        const dest = relAttrToPath(this);
         if (!source || !dest || source === dest) return;
         await fetch('/api/move', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: source.replace(/\/$/, ''), destination: dest.replace(/\/$/, '') }) });
         const srcParent = source.replace(/[^/]+\/?$/, '');
@@ -3731,10 +3746,15 @@ build/**</textarea>
         if (mounts.indexOf(mount) === 0) header.click();
       }
 
-      // Capture directory clicks via event delegation
+      // Capture directory clicks via event delegation. jqueryFileTree
+      // url-encodes filenames in rel="…" — decode before using as a path,
+      // same reasoning as relAttrToPath in the file-browser handler.
       $('#jqft-tree').on('click', 'a', function() {
-        const rel = $(this).attr('rel');
-        if (rel) selectPath(rel);
+        const raw = $(this).attr('rel');
+        if (!raw) return;
+        let rel;
+        try { rel = decodeURIComponent(raw); } catch { rel = raw; }
+        selectPath(rel);
       });
     }
 
