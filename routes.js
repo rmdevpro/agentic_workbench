@@ -19,12 +19,10 @@ const crypto = require('crypto');
 const express = require('express');
 const { registerMcpRoutes } = require('./mcp-tools');
 const { registerWebhookRoutes } = require('./webhooks');
-// Replaced the upstream jqueryFileTree node connector with a local one
-// that (a) lists directories before files (the upstream interleaves them
-// alphabetically — looks wrong next to every other file browser) and
-// (b) is async (the upstream uses readdirSync + statSync per entry, which
-// blocks the event loop on large directories). Same response shape so
-// the front-end script doesn't change.
+// File-tree directory listing endpoint. Replaced the upstream jqueryFileTree
+// node connector (was 2014-era sync I/O, no folder-first sort, no in-place
+// refresh on the front-end) with a JSON endpoint feeding a vanilla-JS tree
+// component in public/index.html.
 
 const SESSION_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 const PROJECT_NAME_MAX_LEN = 255;
@@ -540,39 +538,25 @@ function registerCoreRoutes(
     }
   });
 
-  // ── POST /api/jqueryfiletree ───────────────────────────────────────────────
+  // ── POST /api/files/list ───────────────────────────────────────────────────
+  // Lists a directory's immediate children. Folder-first, case-insensitive
+  // alpha within each group. Used by the FileTree component in
+  // public/index.html. Returns JSON, no HTML, no encoding gotchas.
 
-  app.post('/api/jqueryfiletree', async (req, res) => {
-    const dir = req.body.dir;
+  app.post('/api/files/list', async (req, res) => {
+    const dirPath = req.body.path;
+    if (!dirPath) return res.status(400).json({ error: 'path required' });
     const fsp = require('fs/promises');
-    let dirDecoded;
-    try { dirDecoded = decodeURIComponent(dir); } catch { dirDecoded = dir; }
-    let html = '<ul class="jqueryFileTree" style="display: none;">';
     try {
-      const entries = await fsp.readdir(dirDecoded, { withFileTypes: true });
-      // Sort directories and files separately (case-insensitive), then emit
-      // dirs first. Matches every conventional file browser.
-      const dirs = entries.filter(e => e.isDirectory()).map(e => e.name);
-      const files = entries.filter(e => !e.isDirectory()).map(e => e.name);
-      const cmp = (a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' });
-      dirs.sort(cmp);
-      files.sort(cmp);
-      const escAttr = (s) => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-      const escText = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      for (const name of dirs) {
-        const ffEncoded = dir + encodeURIComponent(name);
-        html += `<li class="directory collapsed"><a href="#" rel="${escAttr(ffEncoded)}/">${escText(name)}</a></li>`;
-      }
-      for (const name of files) {
-        const ext = (name.split('.')[1] || '').toLowerCase();
-        const ffEncoded = dir + encodeURIComponent(name);
-        html += `<li class="file ext_${escAttr(ext)}"><a href="#" rel="${escAttr(ffEncoded)}">${escText(name)}</a></li>`;
-      }
-    } catch (e) {
-      html += `Could not load directory: ${dirDecoded}`;
+      const dirents = await fsp.readdir(dirPath, { withFileTypes: true });
+      const cmp = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+      const dirs = dirents.filter(e => e.isDirectory()).sort(cmp).map(e => ({ name: e.name, kind: 'directory' }));
+      const files = dirents.filter(e => !e.isDirectory()).sort(cmp).map(e => ({ name: e.name, kind: 'file' }));
+      res.json({ path: dirPath, entries: [...dirs, ...files] });
+    } catch (err) {
+      const status = err.code === 'ENOENT' ? 404 : err.code === 'EACCES' ? 403 : 500;
+      res.status(status).json({ error: err.message, code: err.code });
     }
-    html += '</ul>';
-    res.send(html);
   });
 
   // ── POST /api/projects ─────────────────────────────────────────────────────

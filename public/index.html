@@ -6,23 +6,38 @@
   <title>Workbench</title>
   <link rel="icon" href="/favicon.ico" type="image/x-icon">
   <link rel="stylesheet" href="/lib/xterm/css/xterm.css">
-  <link rel="stylesheet" href="/lib/jqueryfiletree/jQueryFileTree.min.css">
   <link rel="stylesheet" href="/lib/toastui-editor/toastui-editor.css">
   <style>
-    /* Override jQueryFileTree hardcoded colors to use theme variables */
-    UL.jqueryFileTree A { color: var(--text-primary); }
-    UL.jqueryFileTree A:hover { color: var(--accent); background: var(--bg-tertiary); }
-    UL.jqueryFileTree LI.selected > A { color: var(--accent); }
-    /* jqueryFileTree puts the folder icon as a background-image on the LI's
-       20px left padding, and renders the name in an inline-block <a> sized to
-       the text. Click handler is bound to the <a> only — so clicking the icon
-       (or the empty row to the right of the name) does nothing. Extend the <a>
-       to cover the whole row width and overlap the icon zone so the entire
-       row, including the icon, is clickable. */
-    UL.jqueryFileTree LI > A { display: block; padding-left: 20px; margin-left: -20px; }
+    /* FileTree component (vanilla JS, replaces 2014-era jqueryFileTree).
+       Renders a tree of mounts → directories → files. Each row is a flex
+       container so the entire row (icon, name, padding) is clickable; the
+       hover/selected states use theme variables for dark/light parity. */
+    .ft-tree { font-size: 12px; font-family: monospace; }
+    .ft-mount { margin-bottom: 4px; }
+    .ft-children { padding-left: 16px; }
+    .ft-children[hidden] { display: none; }
+    .ft-row {
+      display: flex; align-items: center; gap: 4px;
+      padding: 2px 6px; cursor: pointer; user-select: none;
+      white-space: nowrap; overflow: hidden;
+      border-radius: 3px; color: var(--text-primary);
+    }
+    .ft-row:hover { background: var(--bg-tertiary); }
+    .ft-row.ft-selected { background: var(--bg-tertiary); color: var(--accent); }
+    .ft-row.ft-mount-header { color: var(--text-secondary); padding: 4px 6px; }
+    .ft-arrow {
+      display: inline-block; width: 10px; font-size: 10px;
+      transition: transform 0.15s; flex-shrink: 0;
+    }
+    .ft-arrow.ft-expanded { transform: rotate(90deg); }
+    .ft-arrow.ft-spacer { visibility: hidden; }
+    .ft-icon { flex-shrink: 0; font-size: 12px; }
+    .ft-name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+    .ft-row.ft-drop-target { background: var(--accent); color: var(--bg-primary); }
+    .ft-row.ft-loading .ft-arrow { opacity: 0.5; }
+    .ft-error { padding: 4px 6px; color: var(--danger); font-size: 11px; }
   </style>
   <script src="/lib/jquery/jquery.min.js"></script>
-  <script src="/lib/jqueryfiletree/jQueryFileTree.min.js"></script>
   <style>
     :root {
       --bg-primary: #0d1117;
@@ -2011,7 +2026,7 @@ build/**</textarea>
         // POLL_ON_FOCUS_DEBOUNCE_MS window) reuse the snapshot via
         // refreshFileTree() which preserves expanded state.
         const POLL_ON_FOCUS_DEBOUNCE_MS = 1000;
-        if (!fileBrowserInitialized) {
+        if (!_fileBrowserTree) {
           loadFiles();
         } else if (!loadPanelData._lastFileRefresh || Date.now() - loadPanelData._lastFileRefresh > POLL_ON_FOCUS_DEBOUNCE_MS) {
           loadPanelData._lastFileRefresh = Date.now();
@@ -2715,346 +2730,458 @@ build/**</textarea>
       }
     }
 
-    // File Browser
-    let fileBrowserInitialized = false;
+    // ── FileTree component ──────────────────────────────────────────────────
+    // Vanilla-JS file tree, replaces 2014-era jqueryFileTree.
+    // Used by both #file-browser-tree (right panel) and #jqft-tree (project picker).
+    //
+    // opts:
+    //   el                    — container element
+    //   mounts                — [{path}, …] from /api/mounts
+    //   foldersOnly           — when true, render only directories (project picker)
+    //   autoExpandFirstMount  — expand the first mount on init
+    //   draggable             — wire dragstart / dragover / drop
+    //   onFileOpen(path)      — dblclick on a file
+    //   onSelect(path, isDir) — single click on any row
+    //   onContextMenu(path, isDir, e) — right-click
+    //   onDrop(source, dest)  — drop a row onto a directory row
+    //
+    // Returns: { refresh, refreshDirectory, navigate, expand, collapse,
+    //            getSelected, getDeepestExpanded }
+    function createFileTree(opts) {
+      const {
+        el,
+        mounts = [],
+        foldersOnly = false,
+        autoExpandFirstMount = false,
+        draggable = false,
+        onFileOpen = () => {},
+        onSelect = () => {},
+        onContextMenu = null,
+        onDrop = null,
+      } = opts;
 
-    async function refreshFileTree() {
-      const treeEl = document.getElementById('file-browser-tree');
-      // Snapshot top-level mount-header expansion + every directory inside
-      // each mount (jqueryFileTree marks open dirs with class `expanded`).
-      const expandedMounts = new Set();
-      document.querySelectorAll('#file-browser-tree > div').forEach(section => {
-        const header = section.querySelector('[style*="cursor"]');
-        const container = section.querySelector('div:last-child');
-        if (header && container && container.style.display !== 'none') {
-          const mountPath = header.textContent.replace(/[▶▼]/g, '').trim();
-          expandedMounts.add(mountPath);
-        }
-      });
-      const expandedPaths = new Set();
-      treeEl.querySelectorAll('li.expanded > a[rel]').forEach(a => {
-        expandedPaths.add(a.getAttribute('rel'));
-      });
-
-      // Wait for loadFiles to actually finish building mount sections before
-      // trying to re-expand them. The previous version fired a 100ms timer
-      // and lost the race against /api/mounts on slower connections, so the
-      // mount-header re-click would target nothing and the tree would stay
-      // collapsed (the user-visible bug).
-      fileBrowserInitialized = false;
-      await loadFiles();
-
-      // Re-expand top-level mount headers — synchronous DOM is built now.
-      document.querySelectorAll('#file-browser-tree > div').forEach(section => {
-        const header = section.querySelector('[style*="cursor"]');
-        const mountPath = header?.textContent?.replace(/[▶▼]/g, '').trim();
-        if (mountPath && expandedMounts.has(mountPath)) {
-          header.click();
-        }
-      });
-
-      // Re-expand inner directories. jqueryFileTree loads children
-      // asynchronously on click, so deeper paths only become clickable
-      // after their parent's load resolves — repeat passes until nothing
-      // is left to expand or progress stops.
-      const remaining = new Set(expandedPaths);
-      let pass = 0;
-      const expandPass = () => {
-        if (remaining.size === 0 || pass++ > 30) return;
-        let progressed = false;
-        const candidates = [...remaining].sort((a, b) => a.length - b.length);
-        for (const path of candidates) {
-          const link = Array.from(treeEl.querySelectorAll('a[rel]'))
-            .find(a => a.getAttribute('rel') === path);
-          if (!link) continue;
-          const li = link.closest('li');
-          if (!li || !li.classList.contains('directory')) {
-            remaining.delete(path);
-            continue;
-          }
-          if (li.classList.contains('expanded')) {
-            remaining.delete(path);
-            continue;
-          }
-          $(link).click();
-          progressed = true;
-        }
-        if (progressed || remaining.size > 0) setTimeout(expandPass, 250);
+      const state = {
+        expandOrder: [],   // paths in order of most-recent expand (for getDeepestExpanded fallback)
+        selected: null,
       };
-      setTimeout(expandPass, 200);
-    }
-    function autoNavigateFileTree() {
-      // Navigate file tree to active session's CWD
-      const projPath = _getActiveProjectPath();
-      if (!projPath) return;
-      const treeEl = document.getElementById('file-browser-tree');
-      const target = projPath.replace(/\/?$/, '/');
 
-      // Collapse all currently expanded directories
-      $(treeEl).find('li.expanded > a').each(function() { $(this).click(); });
-
-      // Expand mount that contains the target — find headers by their mount-arrow child
-      const mountSections = treeEl.querySelectorAll('.mount-arrow');
-      for (const arrow of mountSections) {
-        const h = arrow.parentElement;
-        const mountPath = h.textContent.replace(/[▶▼▸▾]/g, '').trim();
-        if (!target.startsWith(mountPath)) {
-          // Collapse this mount if expanded
-          const container = h.nextElementSibling;
-          if (container && container.style.display !== 'none') h.click();
-          continue;
+      function escAttr(s) {
+        if (window.CSS && CSS.escape) return CSS.escape(s);
+        return String(s).replace(/(["\\])/g, '\\$1');
+      }
+      function nameFromPath(p) {
+        return p.replace(/\/$/, '').split('/').filter(Boolean).pop() || p;
+      }
+      // First-cut icon picker. Single SVG glyph (folder/file) with
+      // category-based variants. Material Icon Theme port lands as a
+      // follow-up commit in the same branch (planned).
+      function pickIcon(kind, name) {
+        if (kind === 'directory' || kind === 'mount') return { glyph: '📁', cls: 'ft-icon-dir' };
+        const ext = (name.split('.').pop() || '').toLowerCase();
+        if (['png','jpg','jpeg','gif','svg','webp','ico','bmp'].includes(ext)) return { glyph: '🖼', cls: 'ft-icon-image' };
+        if (['md','mdx','markdown'].includes(ext)) return { glyph: '📝', cls: 'ft-icon-md' };
+        if (['pdf'].includes(ext)) return { glyph: '📕', cls: 'ft-icon-pdf' };
+        if (['json','yaml','yml','toml','xml'].includes(ext)) return { glyph: '🧾', cls: 'ft-icon-data' };
+        if (['zip','tar','tgz','gz','bz2','xz','7z','rar'].includes(ext)) return { glyph: '📦', cls: 'ft-icon-archive' };
+        if (['js','ts','tsx','jsx','py','go','rs','java','c','cpp','h','hpp','sh','bash','zsh','rb','php','sql','dockerfile'].includes(ext)) return { glyph: '⟨⟩', cls: 'ft-icon-code' };
+        if (['css','scss','less','html','htm'].includes(ext)) return { glyph: '🎨', cls: 'ft-icon-web' };
+        if (['log','txt','env','cfg','conf','ini','csv','tsv'].includes(ext)) return { glyph: '📄', cls: 'ft-icon-text' };
+        return { glyph: '📄', cls: 'ft-icon-file' };
+      }
+      function rowByPath(path) {
+        return el.querySelector(`.ft-row[data-path="${escAttr(path)}"]`);
+      }
+      function childrenForRow(row) {
+        const next = row.nextElementSibling;
+        return next && next.classList.contains('ft-children') ? next : null;
+      }
+      function createRow(path, kind, displayName) {
+        const row = document.createElement('div');
+        row.className = `ft-row ft-${kind === 'mount' ? 'mount-header' : kind === 'directory' ? 'dir' : 'file'}`;
+        row.dataset.path = path;
+        row.dataset.kind = kind;
+        const arrow = document.createElement('span');
+        arrow.className = 'ft-arrow' + (kind === 'file' ? ' ft-spacer' : '');
+        arrow.textContent = kind === 'file' ? '' : '▶';
+        row.appendChild(arrow);
+        const icon = pickIcon(kind, displayName || nameFromPath(path));
+        const iconEl = document.createElement('span');
+        iconEl.className = `ft-icon ${icon.cls}`;
+        iconEl.textContent = icon.glyph;
+        row.appendChild(iconEl);
+        const name = document.createElement('span');
+        name.className = 'ft-name';
+        name.textContent = displayName || nameFromPath(path);
+        row.appendChild(name);
+        if (draggable) row.draggable = true;
+        return row;
+      }
+      function renderMounts() {
+        el.innerHTML = '';
+        el.classList.add('ft-tree');
+        for (const mount of mounts) {
+          const path = mount.path.replace(/\/?$/, '/');
+          const section = document.createElement('div');
+          section.className = 'ft-mount';
+          section.dataset.path = path;
+          const row = createRow(path, 'mount', mount.path);
+          const children = document.createElement('div');
+          children.className = 'ft-children';
+          children.hidden = true;
+          section.appendChild(row);
+          section.appendChild(children);
+          el.appendChild(section);
         }
-        // Expand this mount
-        const container = h.nextElementSibling;
-        if (container && container.style.display === 'none') h.click();
+        if (autoExpandFirstMount && mounts.length) {
+          expand(mounts[0].path.replace(/\/?$/, '/'));
+        }
+      }
 
-        // Sequentially expand path segments with delays for jQueryFileTree loading
-        const expandNext = () => {
-          const links = treeEl.querySelectorAll('a[rel]');
-          let expanded = false;
-          for (const a of links) {
-            const rel = a.getAttribute('rel');
-            if (target.startsWith(rel)) {
-              const li = a.closest('li');
-              if (li && li.classList.contains('directory') && !li.classList.contains('expanded')) {
-                $(a).click();
-                expanded = true;
-                setTimeout(expandNext, 300);
-                return;
-              }
+      async function loadDirectory(row, childrenEl) {
+        row.classList.add('ft-loading');
+        try {
+          const dirPath = row.dataset.path;
+          const res = await fetch('/api/files/list', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: dirPath }),
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            childrenEl.innerHTML = `<div class="ft-error">${escHtml(err.error || res.statusText)}</div>`;
+            row.dataset.loaded = '1';
+            return;
+          }
+          const data = await res.json();
+          let entries = (data.entries || []);
+          if (foldersOnly) entries = entries.filter(e => e.kind === 'directory');
+          diffChildren(childrenEl, entries, dirPath);
+          row.dataset.loaded = '1';
+        } finally {
+          row.classList.remove('ft-loading');
+        }
+      }
+      // Reconcile an existing children container against fresh entries:
+      // remove rows whose path is gone, add new rows in sort position,
+      // leave unchanged rows + their loaded subtrees alone.
+      function diffChildren(childrenEl, freshEntries, parentPath) {
+        const expected = freshEntries.map(e => ({
+          path: parentPath + e.name + (e.kind === 'directory' ? '/' : ''),
+          name: e.name,
+          kind: e.kind,
+        }));
+        const expectedPaths = new Set(expected.map(x => x.path));
+        // Remove rows no longer present
+        const existingByPath = new Map();
+        for (const child of childrenEl.children) {
+          if (child.classList.contains('ft-row')) existingByPath.set(child.dataset.path, child);
+        }
+        for (const [path, rowEl] of existingByPath) {
+          if (!expectedPaths.has(path)) {
+            const after = rowEl.nextElementSibling;
+            rowEl.remove();
+            if (after && after.classList.contains('ft-children')) after.remove();
+            existingByPath.delete(path);
+          }
+        }
+        // Walk expected, inserting any new rows in order
+        let cursor = null;
+        for (const x of expected) {
+          let row = existingByPath.get(x.path);
+          if (!row) {
+            row = createRow(x.path, x.kind, x.name);
+            const insertAfter = cursor
+              ? (cursor.nextElementSibling && cursor.nextElementSibling.classList.contains('ft-children')
+                  ? cursor.nextElementSibling : cursor)
+              : null;
+            if (insertAfter) insertAfter.after(row); else childrenEl.prepend(row);
+            if (x.kind === 'directory') {
+              const sub = document.createElement('div');
+              sub.className = 'ft-children';
+              sub.hidden = true;
+              row.after(sub);
             }
           }
-          // Done expanding — scroll to target
-          const targetLink = Array.from(treeEl.querySelectorAll('a[rel]')).find(a => a.getAttribute('rel') === target);
-          if (targetLink) {
-            // Select it
-            $(treeEl).find('li.selected').removeClass('selected');
-            $(targetLink).closest('li').addClass('selected');
-            targetLink.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          }
-        };
-        setTimeout(expandNext, 300);
-        break;
-      }
-    }
-
-    async function loadFiles() {
-      if (fileBrowserInitialized) return;
-      fileBrowserInitialized = true;
-
-      const treeEl = document.getElementById('file-browser-tree');
-      treeEl.innerHTML = '';
-
-      // Fetch actual volume mounts from container
-      let mounts = [];
-      try {
-        const res = await fetch('/api/mounts');
-        mounts = await res.json();
-      } catch {}
-      if (mounts.length === 0) mounts = [{ path: '/', type: 'unknown' }];
-
-      // Create a collapsible tree for each mount
-      for (const mount of mounts) {
-        const section = document.createElement('div');
-        section.style.cssText = 'margin-bottom:4px';
-        const header = document.createElement('div');
-        header.style.cssText = 'font-size:12px;font-family:monospace;color:var(--text-secondary);padding:4px 6px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:4px';
-        header.innerHTML = '<span class="mount-arrow" style="font-size:10px;transition:transform 0.15s">&#9654;</span> ' + mount.path;
-        const treeContainer = document.createElement('div');
-        treeContainer.style.cssText = 'display:none;padding-left:4px';
-        section.appendChild(header);
-        section.appendChild(treeContainer);
-        treeEl.appendChild(section);
-
-        // Click header to expand/collapse mount
-        header.addEventListener('click', function() {
-          const arrow = header.querySelector('.mount-arrow');
-          if (treeContainer.style.display === 'none') {
-            treeContainer.style.display = '';
-            arrow.style.transform = 'rotate(90deg)';
-            // Init tree on first expand
-            if (!treeContainer.dataset.initialized) {
-              treeContainer.dataset.initialized = '1';
-              $(treeContainer).fileTree({
-                root: mount.path.replace(/\/?$/, '/'),
-                script: '/api/jqueryfiletree',
-                folderEvent: 'click',
-                expandSpeed: 150,
-                collapseSpeed: 150,
-                multiFolder: true,
-                onlyFolders: false,
-              }, function(filePath) {
-                // Single click does nothing — double click opens file
-              });
-            }
-          } else {
-            treeContainer.style.display = 'none';
-            arrow.style.transform = '';
-          }
-        });
+          cursor = row;
+        }
       }
 
-      // jqueryFileTree's connector encodes filenames with encodeURIComponent
-      // before stuffing them in the <a rel="..."> attribute. Every consumer
-      // that uses the attribute as a real filesystem path MUST decode it
-      // first — otherwise spaces become literal "%20" chars and downstream
-      // /api/file-raw / /api/move / openFileTab calls fail with ENOENT
-      // because the OS doesn't know that file (the directory is named
-      // "video project", not "video%20project"). Encoded-to-encoded comparisons
-      // (drag source vs drop dest) can stay raw, but the moment a value is
-      // used as a path argument, it must round-trip through this helper.
-      function relAttrToPath(el) {
-        const raw = $(el).attr('rel') || '';
-        try { return decodeURIComponent(raw); }
-        catch { return raw; /* malformed escape — return as-is */ }
+      async function expand(path) {
+        const row = rowByPath(path);
+        if (!row) return false;
+        if (row.dataset.kind !== 'directory' && row.dataset.kind !== 'mount') return false;
+        const children = childrenForRow(row);
+        if (!children) return false;
+        children.hidden = false;
+        row.querySelector('.ft-arrow')?.classList.add('ft-expanded');
+        // Track expand order (most-recent last) for getDeepestExpanded
+        const i = state.expandOrder.indexOf(path);
+        if (i >= 0) state.expandOrder.splice(i, 1);
+        state.expandOrder.push(path);
+        if (!row.dataset.loaded) await loadDirectory(row, children);
+        return true;
+      }
+      function collapse(path) {
+        const row = rowByPath(path);
+        if (!row) return false;
+        const children = childrenForRow(row);
+        if (!children) return false;
+        children.hidden = true;
+        row.querySelector('.ft-arrow')?.classList.remove('ft-expanded');
+        const i = state.expandOrder.indexOf(path);
+        if (i >= 0) state.expandOrder.splice(i, 1);
+        return true;
+      }
+      async function toggle(path) {
+        const row = rowByPath(path);
+        if (!row) return;
+        const children = childrenForRow(row);
+        if (!children) return;
+        if (children.hidden) await expand(path); else collapse(path);
+      }
+      async function refresh() {
+        // Re-fetch every loaded directory + diff in place. No rebuild, no flicker.
+        const loadedRows = el.querySelectorAll('.ft-row[data-loaded="1"]');
+        for (const row of loadedRows) {
+          const children = childrenForRow(row);
+          if (children) await loadDirectory(row, children);
+        }
+      }
+      async function refreshDirectory(path) {
+        const row = rowByPath(path) || rowByPath(path.replace(/\/?$/, '/'));
+        const children = row && childrenForRow(row);
+        if (children) await loadDirectory(row, children);
+      }
+      async function navigate(targetPath) {
+        const target = targetPath.replace(/\/?$/, '/');
+        const mountSection = [...el.querySelectorAll('.ft-mount')].find(s => target.startsWith(s.dataset.path));
+        if (!mountSection) return false;
+        const mountPath = mountSection.dataset.path;
+        const rel = target.slice(mountPath.length);
+        const segments = rel.split('/').filter(Boolean);
+        await expand(mountPath);
+        let curr = mountPath;
+        for (const seg of segments) {
+          curr = curr + seg + '/';
+          const row = rowByPath(curr);
+          if (!row) break;
+          if (row.dataset.kind === 'directory') await expand(curr);
+        }
+        const final = rowByPath(target) || rowByPath(target.replace(/\/$/, ''));
+        if (final) {
+          selectRow(final);
+          final.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        return true;
+      }
+      function selectRow(row) {
+        el.querySelectorAll('.ft-row.ft-selected').forEach(r => r.classList.remove('ft-selected'));
+        row.classList.add('ft-selected');
+        state.selected = row.dataset.path;
+      }
+      function getSelected() { return state.selected; }
+      function getDeepestExpanded() {
+        // Most-recently-expanded path wins (matches the old "last clicked dir"
+        // semantics that getSelectedFileBrowserDir relied on).
+        if (state.expandOrder.length) return state.expandOrder[state.expandOrder.length - 1];
+        if (mounts.length) return mounts[0].path.replace(/\/?$/, '/');
+        return null;
       }
 
-      // Double-click file to open in new tab
-      $(treeEl).on('dblclick', 'li.file a', function(e) {
-        e.preventDefault();
-        const path = relAttrToPath(this);
-        if (path) openFileTab(path.trim());
-      });
-
-      // Make file and directory links draggable
-      $(treeEl).on('dragstart', 'a', function(e) {
-        const path = relAttrToPath(this);
-        e.originalEvent.dataTransfer.setData('text/plain', path.trim());
-        e.originalEvent.dataTransfer.effectAllowed = 'copy';
-      });
-      $(treeEl).on('mouseenter', 'a', function() {
-        $(this).attr('draggable', 'true');
-      });
-
-      // ── Context menu ──
-      $(treeEl).on('contextmenu', 'a', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        removeContextMenu();
-        const path = relAttrToPath(this);
-        const isDir = $(this).closest('li').hasClass('directory');
-        const menu = document.createElement('div');
-        menu.className = 'context-menu';
-        menu.style.left = e.pageX + 'px';
-        menu.style.top = e.pageY + 'px';
-
-        if (isDir) {
-          menu.innerHTML = `
-            <div class="context-menu-item" data-action="new-file">New File</div>
-            <div class="context-menu-item" data-action="new-folder">New Folder</div>
-            <div class="context-menu-item" data-action="upload">Upload</div>
-            <div class="context-menu-divider"></div>
-            <div class="context-menu-item" data-action="rename">Rename</div>
-            <div class="context-menu-item" data-action="delete" style="color:var(--danger)">Delete</div>
-          `;
+      el.addEventListener('click', async (e) => {
+        const row = e.target.closest('.ft-row');
+        if (!row || !el.contains(row)) return;
+        const kind = row.dataset.kind;
+        const path = row.dataset.path;
+        if (kind === 'directory' || kind === 'mount') {
+          await toggle(path);
         } else {
-          menu.innerHTML = `
-            <div class="context-menu-item" data-action="open">Open</div>
-            <div class="context-menu-divider"></div>
-            <div class="context-menu-item" data-action="rename">Rename</div>
-            <div class="context-menu-item" data-action="delete" style="color:var(--danger)">Delete</div>
-          `;
+          selectRow(row);
         }
-
-        menu.addEventListener('click', async (ev) => {
-          const action = ev.target.dataset.action;
-          if (!action) return;
-          removeContextMenu();
-          if (action === 'open') {
-            openFileTab(path.trim());
-          } else if (action === 'new-file') {
-            const name = prompt('File name:', 'new-file.md');
-            if (!name) return;
-            const newPath = path.replace(/\/?$/, '/') + name;
-            await fetch('/api/file-new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: newPath }) });
-            refreshFileBrowserDir(path);
-            openFileTab(newPath);
-          } else if (action === 'new-folder') {
-            const name = prompt('Folder name:');
-            if (!name) return;
-            await fetch('/api/mkdir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: path.replace(/\/?$/, '/') + name }) });
-            refreshFileBrowserDir(path);
-          } else if (action === 'upload') {
-            selectedUploadDir = path;
-            document.getElementById('file-upload-input').click();
-          } else if (action === 'rename') {
-            const oldName = path.split('/').filter(Boolean).pop();
-            const newName = prompt('New name:', oldName);
-            if (!newName || newName === oldName) return;
-            const parentDir = path.replace(/[^/]+\/?$/, '');
-            await fetch('/api/rename', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ oldPath: path.replace(/\/$/, ''), newPath: parentDir + newName + (isDir ? '/' : '') }) });
-            refreshFileBrowserDir(parentDir || '/');
-          } else if (action === 'delete') {
-            const name = path.split('/').filter(Boolean).pop();
-            if (!confirm(`Delete "${name}"${isDir ? ' and all its contents' : ''}?`)) return;
-            await fetch('/api/file?path=' + encodeURIComponent(path.replace(/\/$/, '')), { method: 'DELETE' });
-            const parentDir = path.replace(/[^/]+\/?$/, '');
-            refreshFileBrowserDir(parentDir || '/');
-          }
+        onSelect(path, kind === 'directory' || kind === 'mount');
+      });
+      el.addEventListener('dblclick', (e) => {
+        const row = e.target.closest('.ft-row');
+        if (!row || !el.contains(row)) return;
+        if (row.dataset.kind === 'file') onFileOpen(row.dataset.path);
+      });
+      if (onContextMenu) {
+        el.addEventListener('contextmenu', (e) => {
+          const row = e.target.closest('.ft-row');
+          if (!row || !el.contains(row)) return;
+          e.preventDefault();
+          e.stopPropagation();
+          const isDir = row.dataset.kind === 'directory' || row.dataset.kind === 'mount';
+          onContextMenu(row.dataset.path, isDir, e);
         });
+      }
+      if (draggable) {
+        el.addEventListener('dragstart', (e) => {
+          const row = e.target.closest('.ft-row');
+          if (!row || !el.contains(row)) return;
+          e.dataTransfer.setData('text/plain', row.dataset.path);
+          e.dataTransfer.effectAllowed = 'move';
+        });
+      }
+      if (onDrop) {
+        el.addEventListener('dragover', (e) => {
+          const row = e.target.closest('.ft-row');
+          if (!row || !el.contains(row)) return;
+          if (row.dataset.kind !== 'directory' && row.dataset.kind !== 'mount') return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          el.querySelectorAll('.ft-row.ft-drop-target').forEach(r => r.classList.remove('ft-drop-target'));
+          row.classList.add('ft-drop-target');
+        });
+        el.addEventListener('dragleave', (e) => {
+          const row = e.target.closest('.ft-row');
+          if (row) row.classList.remove('ft-drop-target');
+        });
+        el.addEventListener('drop', async (e) => {
+          const row = e.target.closest('.ft-row');
+          if (!row || !el.contains(row)) return;
+          e.preventDefault();
+          row.classList.remove('ft-drop-target');
+          if (row.dataset.kind !== 'directory' && row.dataset.kind !== 'mount') return;
+          const sourcePath = e.dataTransfer.getData('text/plain');
+          const destPath = row.dataset.path;
+          if (!sourcePath || !destPath || sourcePath === destPath) return;
+          await onDrop(sourcePath, destPath);
+        });
+      }
 
-        document.body.appendChild(menu);
-      });
-
-      // Drop on directory to move files
-      $(treeEl).on('dragover', 'li.directory > a', function(e) {
-        e.preventDefault();
-        e.originalEvent.dataTransfer.dropEffect = 'move';
-        $(this).css('background', 'var(--accent)').css('color', 'var(--bg-primary)');
-      });
-      $(treeEl).on('dragleave', 'li.directory > a', function() {
-        $(this).css('background', '').css('color', '');
-      });
-      $(treeEl).on('drop', 'li.directory > a', async function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        $(this).css('background', '').css('color', '');
-        const source = e.originalEvent.dataTransfer.getData('text/plain').trim();
-        const dest = relAttrToPath(this);
-        if (!source || !dest || source === dest) return;
-        await fetch('/api/move', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: source.replace(/\/$/, ''), destination: dest.replace(/\/$/, '') }) });
-        const srcParent = source.replace(/[^/]+\/?$/, '');
-        refreshFileBrowserDir(srcParent || '/');
-        refreshFileBrowserDir(dest);
-      });
+      renderMounts();
+      return { refresh, refreshDirectory, navigate, expand, collapse, getSelected, getDeepestExpanded };
     }
 
+    // ── File-browser singleton ───────────────────────────────────────────────
+    let _fileBrowserTree = null;
     let selectedUploadDir = null;
 
     function removeContextMenu() {
       document.querySelectorAll('.context-menu').forEach(m => m.remove());
     }
     document.addEventListener('click', removeContextMenu);
+
+    function _fileBrowserContextMenu(path, isDir, e) {
+      removeContextMenu();
+      const menu = document.createElement('div');
+      menu.className = 'context-menu';
+      menu.style.left = e.pageX + 'px';
+      menu.style.top = e.pageY + 'px';
+      if (isDir) {
+        menu.innerHTML = `
+          <div class="context-menu-item" data-action="new-file">New File</div>
+          <div class="context-menu-item" data-action="new-folder">New Folder</div>
+          <div class="context-menu-item" data-action="upload">Upload</div>
+          <div class="context-menu-divider"></div>
+          <div class="context-menu-item" data-action="rename">Rename</div>
+          <div class="context-menu-item" data-action="delete" style="color:var(--danger)">Delete</div>
+        `;
+      } else {
+        menu.innerHTML = `
+          <div class="context-menu-item" data-action="open">Open</div>
+          <div class="context-menu-divider"></div>
+          <div class="context-menu-item" data-action="rename">Rename</div>
+          <div class="context-menu-item" data-action="delete" style="color:var(--danger)">Delete</div>
+        `;
+      }
+      menu.addEventListener('click', async (ev) => {
+        const action = ev.target.dataset.action;
+        if (!action) return;
+        removeContextMenu();
+        if (action === 'open') {
+          openFileTab(path);
+        } else if (action === 'new-file') {
+          const name = prompt('File name:', 'new-file.md');
+          if (!name) return;
+          const newPath = path.replace(/\/?$/, '/') + name;
+          await fetch('/api/file-new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: newPath }) });
+          await _fileBrowserTree?.refreshDirectory(path);
+          openFileTab(newPath);
+        } else if (action === 'new-folder') {
+          const name = prompt('Folder name:');
+          if (!name) return;
+          await fetch('/api/mkdir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: path.replace(/\/?$/, '/') + name }) });
+          await _fileBrowserTree?.refreshDirectory(path);
+        } else if (action === 'upload') {
+          selectedUploadDir = path;
+          document.getElementById('file-upload-input').click();
+        } else if (action === 'rename') {
+          const oldName = path.split('/').filter(Boolean).pop();
+          const newName = prompt('New name:', oldName);
+          if (!newName || newName === oldName) return;
+          const parentDir = path.replace(/[^/]+\/?$/, '');
+          await fetch('/api/rename', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ oldPath: path.replace(/\/$/, ''), newPath: parentDir + newName + (isDir ? '/' : '') }) });
+          await _fileBrowserTree?.refreshDirectory(parentDir || '/');
+        } else if (action === 'delete') {
+          const name = path.split('/').filter(Boolean).pop();
+          if (!confirm(`Delete "${name}"${isDir ? ' and all its contents' : ''}?`)) return;
+          await fetch('/api/file?path=' + encodeURIComponent(path.replace(/\/$/, '')), { method: 'DELETE' });
+          const parentDir = path.replace(/[^/]+\/?$/, '');
+          await _fileBrowserTree?.refreshDirectory(parentDir || '/');
+        }
+      });
+      document.body.appendChild(menu);
+    }
+
+    async function _fileBrowserDrop(sourcePath, destPath) {
+      await fetch('/api/move', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: sourcePath.replace(/\/$/, ''), destination: destPath.replace(/\/$/, '') }),
+      });
+      const srcParent = sourcePath.replace(/[^/]+\/?$/, '') || '/';
+      await _fileBrowserTree?.refreshDirectory(srcParent);
+      await _fileBrowserTree?.refreshDirectory(destPath);
+    }
+
+    async function loadFiles() {
+      if (_fileBrowserTree) return; // singleton, idempotent
+      const treeEl = document.getElementById('file-browser-tree');
+      let mounts = [];
+      try {
+        const res = await fetch('/api/mounts');
+        mounts = await res.json();
+      } catch {}
+      if (!mounts.length) mounts = [{ path: '/' }];
+      _fileBrowserTree = createFileTree({
+        el: treeEl,
+        mounts,
+        autoExpandFirstMount: true,
+        draggable: true,
+        onFileOpen: (p) => openFileTab(p),
+        onContextMenu: _fileBrowserContextMenu,
+        onDrop: _fileBrowserDrop,
+      });
+    }
+
+    async function refreshFileTree() {
+      if (!_fileBrowserTree) { await loadFiles(); return; }
+      await _fileBrowserTree.refresh();
+    }
+    function autoNavigateFileTree() {
+      const projPath = _getActiveProjectPath();
+      if (!projPath || !_fileBrowserTree) return;
+      _fileBrowserTree.navigate(projPath);
+    }
+    async function refreshFileBrowserDir(dirPath) {
+      if (!_fileBrowserTree) return;
+      await _fileBrowserTree.refreshDirectory(dirPath);
+    }
+    function getSelectedFileBrowserDir() {
+      if (!_fileBrowserTree) return null;
+      const sel = _fileBrowserTree.getSelected();
+      // If a file is selected, use its parent directory as the target;
+      // otherwise fall back to the deepest-expanded directory.
+      if (sel && !sel.endsWith('/')) {
+        return sel.replace(/[^/]+$/, '');
+      }
+      return sel || _fileBrowserTree.getDeepestExpanded();
+    }
     document.addEventListener('click', () => {
       document.querySelectorAll('.new-session-menu').forEach(m => m.style.display = 'none');
     });
-
-    function refreshFileBrowserDir(dirPath) {
-      const treeEl = document.getElementById('file-browser-tree');
-      const link = treeEl.querySelector(`a[rel="${dirPath}"], a[rel="${dirPath}/"]`);
-      if (link) {
-        const li = link.closest('li.directory');
-        if (li) {
-          const childUl = li.querySelector(':scope > ul');
-          if (childUl) childUl.remove();
-          li.classList.remove('expanded');
-          li.classList.add('collapsed');
-          $(link).trigger('click');
-        }
-      }
-    }
-
-
-    function getSelectedFileBrowserDir() {
-      // Find the last clicked/expanded directory in the file browser tree
-      const treeEl = document.getElementById('file-browser-tree');
-      const expanded = treeEl.querySelectorAll('li.directory.expanded > a');
-      if (expanded.length > 0) return expanded[expanded.length - 1].getAttribute('rel');
-      // Fallback to first mount root
-      const firstMount = treeEl.querySelector('[data-initialized] li.directory > a');
-      if (firstMount) return firstMount.getAttribute('rel');
-      return null;
-    }
 
     async function fileBrowserNewFolder() {
       const targetDir = getSelectedFileBrowserDir();
@@ -3069,23 +3196,15 @@ build/**</textarea>
         });
         const data = await res.json();
         if (data.error) return alert('Error: ' + data.error);
-        // Refresh the expanded directory
-        const expandedDir = document.querySelector('#file-browser-tree li.directory.expanded > a');
-        if (expandedDir) {
-          const parentLi = expandedDir.closest('li.directory.expanded');
-          if (parentLi) {
-            const subUl = parentLi.querySelector('ul');
-            if (subUl) subUl.remove();
-            parentLi.classList.remove('expanded');
-            parentLi.classList.add('collapsed');
-            expandedDir.click();
-          }
-        }
+        await _fileBrowserTree?.refreshDirectory(targetDir);
       } catch (err) { alert('Error: ' + err.message); }
     }
 
     async function fileBrowserUpload(files) {
-      const targetDir = getSelectedFileBrowserDir();
+      // Prefer the explicit upload-target set by the context menu's "Upload"
+      // action; fall back to the panel's selected/expanded directory.
+      const targetDir = selectedUploadDir || getSelectedFileBrowserDir();
+      selectedUploadDir = null;
       if (!targetDir) return alert('Expand a directory in the file browser first');
       for (const file of files) {
         try {
@@ -3102,19 +3221,7 @@ build/**</textarea>
         } catch (err) { alert('Upload failed: ' + err.message); }
       }
       document.getElementById('file-upload-input').value = '';
-      // Refresh the expanded directory by collapsing and re-clicking it
-      const expandedDir = document.querySelector('#file-browser-tree li.directory.expanded > a');
-      if (expandedDir) {
-        const parentLi = expandedDir.closest('li.directory.expanded');
-        if (parentLi) {
-          // Remove children and re-trigger expansion
-          const subUl = parentLi.querySelector('ul');
-          if (subUl) subUl.remove();
-          parentLi.classList.remove('expanded');
-          parentLi.classList.add('collapsed');
-          expandedDir.click();
-        }
-      }
+      await _fileBrowserTree?.refreshDirectory(targetDir);
     }
 
     // Tab switches don't reload the right-side panel. The Files tree and
@@ -3693,7 +3800,7 @@ build/**</textarea>
       `;
       document.body.appendChild(overlay);
 
-      // Fetch mounts and create a tree root per mount (same as file browser)
+      // Fetch mounts and create a folders-only tree spanning every mount
       let mounts = [];
       try {
         const res = await fetch('/api/mounts');
@@ -3702,59 +3809,17 @@ build/**</textarea>
       if (mounts.length === 0) mounts = [{ path: window._workspace || '/data/workspace' }];
 
       const treeEl = document.getElementById('jqft-tree');
+      treeEl.innerHTML = '';
       function selectPath(path) {
         document.getElementById('picker-path').value = path;
         document.getElementById('picker-name').value = path.replace(/\/$/, '').split('/').filter(Boolean).pop();
       }
-
-      for (const mount of mounts) {
-        const section = document.createElement('div');
-        section.style.cssText = 'margin-bottom:4px';
-        const header = document.createElement('div');
-        header.style.cssText = 'font-size:12px;font-family:monospace;color:var(--text-secondary);padding:4px 6px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:4px';
-        header.innerHTML = '<span class="mount-arrow" style="font-size:10px;transition:transform 0.15s">&#9654;</span> ' + mount.path;
-        const treeContainer = document.createElement('div');
-        treeContainer.style.cssText = 'display:none;padding-left:4px';
-        section.appendChild(header);
-        section.appendChild(treeContainer);
-        treeEl.appendChild(section);
-
-        header.addEventListener('click', function() {
-          const arrow = header.querySelector('.mount-arrow');
-          if (treeContainer.style.display === 'none') {
-            treeContainer.style.display = '';
-            arrow.style.transform = 'rotate(90deg)';
-            if (!treeContainer.dataset.initialized) {
-              treeContainer.dataset.initialized = '1';
-              $(treeContainer).fileTree({
-                root: mount.path.replace(/\/?$/, '/'),
-                script: '/api/jqueryfiletree',
-                folderEvent: 'click',
-                expandSpeed: 200,
-                collapseSpeed: 200,
-                multiFolder: false,
-                onlyFolders: true,
-              }, function(path) { selectPath(path); });
-            }
-          } else {
-            treeContainer.style.display = 'none';
-            arrow.style.transform = '';
-          }
-        });
-
-        // Auto-expand first mount
-        if (mounts.indexOf(mount) === 0) header.click();
-      }
-
-      // Capture directory clicks via event delegation. jqueryFileTree
-      // url-encodes filenames in rel="…" — decode before using as a path,
-      // same reasoning as relAttrToPath in the file-browser handler.
-      $('#jqft-tree').on('click', 'a', function() {
-        const raw = $(this).attr('rel');
-        if (!raw) return;
-        let rel;
-        try { rel = decodeURIComponent(raw); } catch { rel = raw; }
-        selectPath(rel);
+      window._pickerTree = createFileTree({
+        el: treeEl,
+        mounts,
+        foldersOnly: true,
+        autoExpandFirstMount: true,
+        onSelect: (path, isDir) => { if (isDir) selectPath(path); },
       });
     }
 
@@ -3779,7 +3844,8 @@ build/**</textarea>
       const parentPath = document.getElementById('picker-path').value.trim() || (window._workspace || '/data/workspace');
       const name = prompt('New folder name:');
       if (!name) return;
-      const newPath = parentPath.replace(/\/$/, '') + '/' + name;
+      const parentNormalized = parentPath.replace(/\/?$/, '/');
+      const newPath = parentNormalized + name;
       try {
         const res = await fetch('/api/mkdir', {
           method: 'POST',
@@ -3788,20 +3854,8 @@ build/**</textarea>
         });
         const data = await res.json();
         if (data.error) return alert('Error: ' + data.error);
-        // Refresh the tree and select the new folder
-        $('#jqft-tree').html('');
-        $('#jqft-tree').fileTree({
-          root: (window._workspace || '/data/workspace').replace(/\/?$/, '/'),
-          script: '/api/jqueryfiletree',
-          folderEvent: 'click',
-          expandSpeed: 200,
-          collapseSpeed: 200,
-          multiFolder: false,
-          onlyFolders: true,
-        }, function(path) {
-          document.getElementById('picker-path').value = path;
-          document.getElementById('picker-name').value = path.replace(/\/$/, '').split('/').filter(Boolean).pop();
-        });
+        // Refresh the parent in place so the new folder appears.
+        await window._pickerTree?.refreshDirectory(parentNormalized);
         // Set the new folder as selected
         document.getElementById('picker-path').value = newPath + '/';
         document.getElementById('picker-name').value = name;
