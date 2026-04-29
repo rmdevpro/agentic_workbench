@@ -472,7 +472,13 @@ function registerCoreRoutes(
       if (!filePath) return res.status(400).send('path required');
       const fileStat = await stat(filePath);
       if (!fileStat.isFile()) return res.status(400).send('not a file');
-      if (fileStat.size > 10 * 1024 * 1024) return res.status(413).send('file too large (>10MB)');
+      // 50 MB cap — covers common training samples / contact sheets / hires
+      // review composites that the file browser legitimately needs to render.
+      // The previous 10 MB cap was too tight for the model-snapshot directories
+      // under /mnt/storage which routinely have larger PNG composites.
+      const MAX_RAW_BYTES = 50 * 1024 * 1024;
+      if (fileStat.size > MAX_RAW_BYTES)
+        return res.status(413).send(`file too large (${fileStat.size} bytes > ${MAX_RAW_BYTES} byte limit)`);
       res.sendFile(filePath);
     } catch (err) {
       res.status(400).send(`Cannot read file: ${err.message}`);
