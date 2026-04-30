@@ -8,7 +8,7 @@ const fsp = require('fs/promises');
 const fixtures = require('../fixtures/test-data');
 const { freshRequire } = require('../helpers/module');
 
-const SAFE_PATH = path.join(__dirname, '..', '..', 'safe-exec.js');
+const SAFE_PATH = path.join(__dirname, '..', '..', 'src', 'safe-exec.js');
 
 function freshSafe(env = {}) {
   const prev = {

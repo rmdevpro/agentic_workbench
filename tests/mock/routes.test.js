@@ -6,7 +6,7 @@ const express = require('express');
 const os = require('node:os');
 const path = require('node:path');
 const fixtures = require('../fixtures/test-data');
-const registerCoreRoutes = require('../../routes.js');
+const registerCoreRoutes = require('../../src/routes.js');
 const { withServer, req } = require('../helpers/with-server');
 
 function makeApp(overrides = {}) {

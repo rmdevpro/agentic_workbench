@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fsp = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const createTmuxLifecycle = require('../../tmux-lifecycle.js');
+const createTmuxLifecycle = require('../../src/tmux-lifecycle.js');
 
 function makeLifecycle(overrides = {}) {
   const killed = [];

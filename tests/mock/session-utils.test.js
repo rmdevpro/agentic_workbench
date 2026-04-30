@@ -59,10 +59,10 @@ async function setupEnv(t) {
   t.mock.method(fs, 'watchFile', function (p, o, l) {
     return orig.wf.call(this, rewrite(p), o, l);
   });
-  const db = freshRequire(path.join(__dirname, '../../db.js'));
-  const safe = freshRequire(path.join(__dirname, '../../safe-exec.js'));
-  freshRequire(path.join(__dirname, '../../config.js'));
-  const su = freshRequire(path.join(__dirname, '../../session-utils.js'));
+  const db = freshRequire(path.join(__dirname, '../../src/db.js'));
+  const safe = freshRequire(path.join(__dirname, '../../src/safe-exec.js'));
+  freshRequire(path.join(__dirname, '../../src/config.js'));
+  const su = freshRequire(path.join(__dirname, '../../src/session-utils.js'));
   t.after(() => {
     for (const [k, v] of Object.entries(prev)) {
       if (v === undefined) delete process.env[k];

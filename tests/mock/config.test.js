@@ -9,7 +9,7 @@ const path = require('node:path');
 const fixtures = require('../fixtures/test-data');
 const { freshRequire } = require('../helpers/module');
 
-const CONFIG_PATH = path.join(__dirname, '..', '..', 'config.js');
+const CONFIG_PATH = path.join(__dirname, '..', '..', 'src', 'config.js');
 
 async function setupConfigFixture(t) {
   const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'bp-config-'));

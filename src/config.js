@@ -6,7 +6,7 @@ const { join } = require('path');
 const { promisify } = require('util');
 const readFileAsync = promisify(readFile);
 
-const CONFIG_DIR = join(__dirname, 'config');
+const CONFIG_DIR = join(__dirname, '..', 'config');
 const PROMPTS_DIR = join(CONFIG_DIR, 'prompts');
 
 let _defaultsCache = {};

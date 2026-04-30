@@ -9,7 +9,7 @@ const { freshRequire } = require('../helpers/module');
 const path = require('node:path');
 
 test('WHK-08 / WHK-09 / WHK-11: fireEvent sends filtered payloads with correct modes', (t) => {
-  const db = require('../../db.js');
+  const db = require('../../src/db.js');
   t.mock.method(db, 'getSetting', () => JSON.stringify(fixtures.webhooks.hooks));
   const requests = [];
   const factory = (_o) => ({
@@ -24,7 +24,7 @@ test('WHK-08 / WHK-09 / WHK-11: fireEvent sends filtered payloads with correct m
   });
   t.mock.method(http, 'request', factory);
   t.mock.method(https, 'request', factory);
-  const { fireEvent } = freshRequire(path.join(__dirname, '../../webhooks.js'));
+  const { fireEvent } = freshRequire(path.join(__dirname, '../../src/webhooks.js'));
 
   fireEvent('session_created', { session_id: 's1', project: 'p' });
   fireEvent('task_added', { task_id: 7, project: 'p', text: 'T' });
@@ -39,7 +39,7 @@ test('WHK-08 / WHK-09 / WHK-11: fireEvent sends filtered payloads with correct m
 });
 
 test('WHK-10: delivery failure does not crash', (t) => {
-  const db = require('../../db.js');
+  const db = require('../../src/db.js');
   t.mock.method(db, 'getSetting', () =>
     JSON.stringify([{ url: 'http://localhost:9999/fail', events: ['*'], mode: 'event_only' }]),
   );
@@ -54,12 +54,12 @@ test('WHK-10: delivery failure does not crash', (t) => {
     };
     return r;
   });
-  const { fireEvent } = freshRequire(path.join(__dirname, '../../webhooks.js'));
+  const { fireEvent } = freshRequire(path.join(__dirname, '../../src/webhooks.js'));
   assert.doesNotThrow(() => fireEvent('test', {}));
 });
 
 test('WHK-11: event filtering prevents non-matching events', (t) => {
-  const db = require('../../db.js');
+  const db = require('../../src/db.js');
   t.mock.method(db, 'getSetting', () =>
     JSON.stringify([{ url: 'http://localhost:9999', events: ['task_added'], mode: 'event_only' }]),
   );
@@ -72,7 +72,7 @@ test('WHK-11: event filtering prevents non-matching events', (t) => {
     end() {},
     setTimeout() {},
   }));
-  const { fireEvent } = freshRequire(path.join(__dirname, '../../webhooks.js'));
+  const { fireEvent } = freshRequire(path.join(__dirname, '../../src/webhooks.js'));
   fireEvent('session_created', { session_id: 's1' });
   assert.equal(requests.length, 0);
 });

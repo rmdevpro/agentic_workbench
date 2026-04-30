@@ -6,7 +6,7 @@ const path = require('node:path');
 const { freshRequire } = require('../helpers/module');
 const fixtures = require('../fixtures/test-data');
 
-const LOGGER_PATH = path.join(__dirname, '..', '..', 'logger.js');
+const LOGGER_PATH = path.join(__dirname, '..', '..', 'src', 'logger.js');
 
 function withLoggerEnv(level, fn) {
   const prev = process.env.LOG_LEVEL;

@@ -7,7 +7,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const express = require('express');
-const { registerMcpRoutes, TOOL_NAMES } = require('../../mcp-tools.js');
+const { registerMcpRoutes, TOOL_NAMES } = require('../../src/mcp-tools.js');
 const { withServer, req } = require('../helpers/with-server');
 
 function startMcpApp() {

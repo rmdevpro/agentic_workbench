@@ -4,9 +4,9 @@
   "description": "Web-based CLI workbench for AI coding agents",
   "private": true,
   "scripts": {
-    "start": "node server.js",
+    "start": "node src/server.js",
     "test": "node --test tests/mock/*.test.js",
-    "test:coverage": "c8 --reporter=text --reporter=lcov --lines 80 --branches 70 --include='*.js' --exclude='tests/**' --exclude='scripts/**' --exclude='public/**' --exclude='node_modules/**' node --test tests/mock/*.test.js",
+    "test:coverage": "c8 --reporter=text --reporter=lcov --lines 80 --branches 70 --include='src/**/*.js' --exclude='tests/**' --exclude='scripts/**' --exclude='public/**' --exclude='node_modules/**' node --test tests/mock/*.test.js",
     "test:live": "MAX_TMUX_SESSIONS=50 node --test --test-concurrency=1 tests/live/*.test.js",
     "test:browser": "node --test-timeout 600000 --test tests/browser/*.test.js",
     "lint": "eslint ."

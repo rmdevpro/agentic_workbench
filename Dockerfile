@@ -41,6 +41,13 @@ RUN npm ci --omit=dev && chown -R workbench:workbench /app
 # Copy app source
 COPY --chown=workbench:workbench . .
 
+# Backwards-compat symlinks: existing /data/.claude/.claude.json files
+# (copied between hosts via the dev/prod swap) reference /app/mcp-server.js
+# and /app/server.js at the old root locations. Keep them resolvable after
+# the move into src/ so we don't have to rewrite every host's MCP config.
+RUN ln -s /app/src/mcp-server.js /app/mcp-server.js && \
+    ln -s /app/src/server.js /app/server.js
+
 # Entrypoint sets up /data structure at runtime (volume may be empty on first run)
 COPY --chown=workbench:workbench entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
@@ -57,4 +64,4 @@ WORKDIR /data
 EXPOSE 7860
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]
-CMD ["node", "/app/server.js"]
+CMD ["node", "/app/src/server.js"]

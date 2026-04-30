@@ -9,11 +9,11 @@ const express = require('express');
 const { withServer, req } = require('../helpers/with-server');
 
 // Reuse the route test helper from routes.test.js
-const registerCoreRoutes = require('../../routes');
+const registerCoreRoutes = require('../../src/routes');
 const Database = require('better-sqlite3');
-const safe = require('../../safe-exec');
-const config = require('../../config');
-const sessionUtils = require('../../session-utils');
+const safe = require('../../src/safe-exec');
+const config = require('../../src/config');
+const sessionUtils = require('../../src/session-utils');
 
 function makeApp() {
   const tmpDir = path.join(os.tmpdir(), 'bp-newroute-' + Date.now());

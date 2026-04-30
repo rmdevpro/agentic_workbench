@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fsp = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const createKeepalive = require('../../keepalive.js');
+const createKeepalive = require('../../src/keepalive.js');
 
 async function makeEnv({
   credentials,

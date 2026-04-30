@@ -2,8 +2,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { handleVoiceConnection } = require('../../voice');
-const db = require('../../db');
+const { handleVoiceConnection } = require('../../src/voice');
+const db = require('../../src/db');
 
 // Mock WebSocket
 function mockWs() {

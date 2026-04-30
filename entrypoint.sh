@@ -58,7 +58,7 @@ if [ ! -f "$CLAUDE/settings.json" ]; then
 fi
 
 # Register Workbench MCP server globally
-claude mcp add-json --scope user workbench '{"command":"node","args":["/app/mcp-server.js"]}' 2>/dev/null || true
+claude mcp add-json --scope user workbench '{"command":"node","args":["/app/src/mcp-server.js"]}' 2>/dev/null || true
 
 # Install Workbench slash commands as global skills
 if [ -d /app/config/skills ]; then

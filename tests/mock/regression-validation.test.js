@@ -17,9 +17,9 @@ const assert = require('node:assert/strict');
 // ── Module 1: session-resolver.js ────────────────────────────────────────
 
 test('REGVAL-2: broken session-resolver is detected by mock test assertions', async () => {
-  const createResolver = require('../../session-resolver.js');
+  const createResolver = require('../../src/session-resolver.js');
 
-  const original = require.cache[require.resolve('../../session-resolver.js')];
+  const original = require.cache[require.resolve('../../src/session-resolver.js')];
   const origExports = original.exports;
 
   original.exports = () => ({
@@ -30,7 +30,7 @@ test('REGVAL-2: broken session-resolver is detected by mock test assertions', as
   });
 
   try {
-    const broken = require('../../session-resolver.js');
+    const broken = require('../../src/session-resolver.js');
     const resolver = broken({});
     assert.throws(
       () => resolver.start(),
@@ -47,9 +47,9 @@ test('REGVAL-2: broken session-resolver is detected by mock test assertions', as
 // ── Module 2: ws-terminal.js ─────────────────────────────────────────────
 
 test('REGVAL-3: broken ws-terminal is detected by mock test assertions', async () => {
-  const createWsTerminal = require('../../ws-terminal.js');
+  const createWsTerminal = require('../../src/ws-terminal.js');
 
-  const original = require.cache[require.resolve('../../ws-terminal.js')];
+  const original = require.cache[require.resolve('../../src/ws-terminal.js')];
   const origExports = original.exports;
 
   original.exports = () => ({
@@ -60,7 +60,7 @@ test('REGVAL-3: broken ws-terminal is detected by mock test assertions', async (
   });
 
   try {
-    const broken = require('../../ws-terminal.js');
+    const broken = require('../../src/ws-terminal.js');
     const wsTerminal = broken({});
     assert.throws(
       () => wsTerminal.handleUpgrade({}, {}, Buffer.alloc(0)),
@@ -77,8 +77,8 @@ test('REGVAL-3: broken ws-terminal is detected by mock test assertions', async (
 // ── Cross-cutting: verify critical modules export the expected interface ──
 
 test('REGVAL-SHAPE: critical module exports match expected interface', () => {
-  const createResolver = require('../../session-resolver.js');
-  const createWsTerminal = require('../../ws-terminal.js');
+  const createResolver = require('../../src/session-resolver.js');
+  const createWsTerminal = require('../../src/ws-terminal.js');
 
   assert.equal(typeof createResolver, 'function', 'session-resolver.js must export a function');
   assert.equal(typeof createWsTerminal, 'function', 'ws-terminal.js must export a function');

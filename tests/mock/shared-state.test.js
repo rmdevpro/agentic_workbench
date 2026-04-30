@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 function freshRequire() {
-  const modPath = require.resolve('../../shared-state.js');
+  const modPath = require.resolve('../../src/shared-state.js');
   delete require.cache[modPath];
   return require(modPath);
 }

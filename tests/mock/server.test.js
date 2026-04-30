@@ -9,6 +9,7 @@ const { spawn } = require('node:child_process');
 const fixtures = require('../fixtures/test-data');
 
 const ROOT = path.join(__dirname, '..', '..');
+const SRC = path.join(ROOT, 'src');
 
 test('ENG-20: all application modules importable', () => {
   const modules = [
@@ -28,7 +29,7 @@ test('ENG-20: all application modules importable', () => {
     'mcp-tools',
   ];
   for (const m of modules)
-    assert.doesNotThrow(() => require(path.join(ROOT, m)), `Failed to require ${m}`);
+    assert.doesNotThrow(() => require(path.join(SRC, m)), `Failed to require ${m}`);
 });
 
 test('ENG-04: package.json dependencies are exact-version pinned', async () => {
@@ -61,7 +62,7 @@ test('ENG-09: no bare catch {} blocks in application code', () => {
     'webhooks.js',
   ];
   for (const file of files) {
-    const fp = path.join(ROOT, file);
+    const fp = path.join(SRC, file);
     if (!fs.existsSync(fp)) continue;
     const content = fs.readFileSync(fp, 'utf-8');
     const matches = content.match(/catch\s*\(\s*\w*\s*\)\s*\{\s*\}/g);
@@ -78,7 +79,7 @@ test('ENG-12: no blocking I/O in async functions', () => {
     'routes.js',
   ];
   for (const file of asyncFiles) {
-    const content = fs.readFileSync(path.join(ROOT, file), 'utf-8');
+    const content = fs.readFileSync(path.join(SRC, file), 'utf-8');
     const syncCalls = content.match(/\breadFileSync\b|\bwriteFileSync\b|\bexecSync\b/g);
     if (syncCalls && file !== 'config.js') {
       assert.fail(`${file} contains blocking I/O call: ${syncCalls.join(', ')}`);
@@ -95,7 +96,7 @@ test('SRV-05: uncaught exception exits with structured error', async () => {
 
   try {
     const trigger = path.join(ROOT, 'tests', 'fixtures', 'trigger-uncaught.js');
-    const child = spawn(process.execPath, ['server.js'], {
+    const child = spawn(process.execPath, ['src/server.js'], {
       cwd: ROOT,
       env: {
         ...process.env,

@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const createSessionResolver = require('../../session-resolver.js');
+const createSessionResolver = require('../../src/session-resolver.js');
 
 function makeResolver({ filesByDir = new Map(), tmuxAlive = new Set(), configValues = {} } = {}) {
   const sessions = new Map();

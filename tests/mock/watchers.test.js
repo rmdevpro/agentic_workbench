@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const createWatchers = require('../../watchers.js');
+const createWatchers = require('../../src/watchers.js');
 
 function makeEnv(overrides = {}) {
   const watched = new Map(),
@@ -328,7 +328,7 @@ test('WAT-MCP-02: registerMcpServer skips when already registered correctly', as
   const fsp = require('node:fs/promises');
   const path = require('node:path');
   const tmpClaudeHome = await fsp.mkdtemp(path.join(require('node:os').tmpdir(), 'bp-wat-mcp2-'));
-  const expectedArgs = [path.join(__dirname, '../../mcp-server.js')];
+  const expectedArgs = [path.join(__dirname, '../../src/mcp-server.js')];
   await fsp.writeFile(
     path.join(tmpClaudeHome, 'settings.json'),
     JSON.stringify({

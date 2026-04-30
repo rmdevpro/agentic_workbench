@@ -7,7 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { freshRequire } = require('../helpers/module');
 
-const DB_PATH = path.join(__dirname, '..', '..', 'db.js');
+const DB_PATH = path.join(__dirname, '..', '..', 'src', 'db.js');
 
 async function withDb(fn) {
   const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'bp-db-'));

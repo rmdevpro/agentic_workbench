@@ -138,7 +138,7 @@ function parseCookie(req, name) {
 }
 
 function serveGatePage(res) {
-  const html = fs.readFileSync(join(__dirname, 'public', 'gate.html'), 'utf-8');
+  const html = fs.readFileSync(join(__dirname, '..', 'public', 'gate.html'), 'utf-8');
   res.type('html').send(html.replace(
     '// __GATE_MODE_INJECT__',
     `const __GATE_MODE__ = '${authMode}';`
@@ -177,17 +177,17 @@ app.use((req, res, next) => {
   serveGatePage(res);
 });
 
-app.use(express.static(join(__dirname, 'public')));
-app.use('/lib/xterm', express.static(join(__dirname, 'node_modules/@xterm/xterm')));
-app.use('/lib/xterm-fit', express.static(join(__dirname, 'node_modules/@xterm/addon-fit')));
+app.use(express.static(join(__dirname, '..', 'public')));
+app.use('/lib/xterm', express.static(join(__dirname, '..', 'node_modules/@xterm/xterm')));
+app.use('/lib/xterm-fit', express.static(join(__dirname, '..', 'node_modules/@xterm/addon-fit')));
 app.use(
   '/lib/xterm-web-links',
-  express.static(join(__dirname, 'node_modules/@xterm/addon-web-links')),
+  express.static(join(__dirname, '..', 'node_modules/@xterm/addon-web-links')),
 );
-app.use('/lib/jqueryfiletree', express.static(join(__dirname, 'node_modules/jqueryfiletree/dist')));
-app.use('/lib/jquery', express.static(join(__dirname, 'node_modules/jquery/dist')));
-app.use('/lib/codemirror', express.static(join(__dirname, 'public/lib/codemirror')));
-app.use('/lib/toastui-editor', express.static(join(__dirname, 'public/lib/toastui-editor')));
+app.use('/lib/jqueryfiletree', express.static(join(__dirname, '..', 'node_modules/jqueryfiletree/dist')));
+app.use('/lib/jquery', express.static(join(__dirname, '..', 'node_modules/jquery/dist')));
+app.use('/lib/codemirror', express.static(join(__dirname, '..', 'public/lib/codemirror')));
+app.use('/lib/toastui-editor', express.static(join(__dirname, '..', 'public/lib/toastui-editor')));
 
 // ── Route registration ──────────────────────────────────────────────────────
 

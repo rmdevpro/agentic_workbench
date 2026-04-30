@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const createWsTerminal = require('../../ws-terminal.js');
+const createWsTerminal = require('../../src/ws-terminal.js');
 
 class FakePty {
   constructor() {
