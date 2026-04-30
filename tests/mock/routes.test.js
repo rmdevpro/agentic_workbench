@@ -157,6 +157,12 @@ function makeApp(overrides = {}) {
     getAllSettings: () => Object.fromEntries(settings),
     getSetting: (k, fb = null) => (settings.has(k) ? settings.get(k) : fb),
     setSetting: (k, v) => settings.set(k, v),
+    searchSessionsByName: (q) => {
+      const needle = String(q).toLowerCase();
+      return [...sessions.values()]
+        .filter((s) => (s.name || '').toLowerCase().includes(needle))
+        .map((s) => ({ ...s, project_name: projectById.get(s.project_id)?.name }));
+    },
     DATA_DIR: '/tmp/bp-data',
   };
   const existsFn = overrides.tmuxExists ?? (async () => false);
@@ -1350,6 +1356,8 @@ test('SRCH-02: GET /api/search returns 500 when searchSessions throws', async ()
   fs.mkdirSync(testProj2, { recursive: true });
   // Build a fresh db for this app
   const { db: db2 } = makeApp({ workspace: WORKSPACE2 });
+  // #230: /api/search now calls db.searchSessionsByName; force it to throw
+  db2.searchSessionsByName = () => { throw new Error('search exploded'); };
   // Build a fresh app that throws on sessionUtils methods
   const throwingApp = express();
   throwingApp.use(express.json({ limit: '5mb' }));

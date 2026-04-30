@@ -1472,7 +1472,21 @@ function registerCoreRoutes(
       if (!q || q.length < 2) return res.json({ results: [] });
       if (q.length > SEARCH_QUERY_MAX_LEN)
         return res.status(400).json({ error: `query too long (max ${SEARCH_QUERY_MAX_LEN})` });
-      const results = await sessionUtils.searchSessions(q, null, 20);
+      // #230: sidebar search filters by name only — UI renders r.name, so
+      // transcript-content matches surface sessions whose names don't contain
+      // the query and break user expectations.
+      const rows = db.searchSessionsByName(q);
+      const results = rows.map((s) => ({
+        session_id: s.id,
+        sessionId: s.id,
+        project: s.project_name,
+        name: s.name,
+        match_count: 1,
+        matchCount: 1,
+        snippets: [s.name],
+        matches: [{ type: 'name', text: s.name }],
+        cli_type: s.cli_type || 'claude',
+      }));
       res.json({ results });
     } catch (err) {
       res.status(500).json({ error: err.message });
