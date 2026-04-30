@@ -46,7 +46,7 @@ function _parseSetting(key, fallback) {
 function getCollectionConfig(col) {
   const defaults = {
     documents: { enabled: true, dims: 384, patterns: ['*.md', '*.txt', '*.pdf', '*.rst', '*.adoc'] },
-    code: { enabled: false, dims: 384, patterns: ['*.js', '*.ts', '*.py', '*.go', '*.rs', '*.java', '*.sh', 'Dockerfile', 'Makefile', '*.yml', '*.yaml', '*.json'] },
+    code: { enabled: true, dims: 384, patterns: ['*.js', '*.ts', '*.py', '*.go', '*.rs', '*.java', '*.sh', 'Dockerfile', 'Makefile', '*.yml', '*.yaml', '*.json'] },
     claude: { enabled: true, dims: 384 },
     gemini: { enabled: true, dims: 384 },
     codex: { enabled: true, dims: 384 },
@@ -825,10 +825,12 @@ async function scanClaudeSessions() {
   let total = 0;
   const projectDirs = await readdir(projectsDir, { withFileTypes: true });
   for (const pDir of projectDirs) {
+    if (!_running) return total;
     if (!pDir.isDirectory()) continue;
     const sessDir = join(projectsDir, pDir.name);
     const files = await readdir(sessDir);
     for (const file of files) {
+      if (!_running) return total;
       if (!file.endsWith('.jsonl')) continue;
       try {
         total += await syncSessionFile(
@@ -838,6 +840,13 @@ async function scanClaudeSessions() {
           cfg.dims,
         );
       } catch (err) {
+        // #233: provider flipped to 'none' mid-scan — the embed call throws
+        // "No embedding API key configured" as the cancellation signal.
+        // Same swallow as scanCollection at line 789.
+        if (err.message === 'No embedding API key configured' && getEmbeddingProvider() === 'none') {
+          logger.debug('Claude session scan aborted — provider switched to none', { module: 'qdrant-sync' });
+          return total;
+        }
         // Capture err.cause too — node-fetch puts the underlying transport
         // error (ECONNRESET / ETIMEDOUT / UND_ERR_*) there. Without it,
         // 'fetch failed' is undebuggable.
@@ -864,11 +873,13 @@ async function scanGeminiSessions() {
   try {
     const projectDirs = await readdir(geminiBase, { withFileTypes: true });
     for (const pDir of projectDirs) {
+      if (!_running) return total;
       if (!pDir.isDirectory()) continue;
       const chatsDir = join(geminiBase, pDir.name, 'chats');
       if (!existsSync(chatsDir)) continue;
       const files = await readdir(chatsDir);
       for (const file of files) {
+        if (!_running) return total;
         if (!file.endsWith('.json')) continue;
         try {
           total += await syncSessionFile(
@@ -878,6 +889,10 @@ async function scanGeminiSessions() {
             cfg.dims,
           );
         } catch (err) {
+          if (err.message === 'No embedding API key configured' && getEmbeddingProvider() === 'none') {
+            logger.debug('Gemini session scan aborted — provider switched to none', { module: 'qdrant-sync' });
+            return total;
+          }
           logger.error('Gemini session sync error', { module: 'qdrant-sync', file, err: err.message });
         }
       }
@@ -897,6 +912,7 @@ async function scanCodexSessions() {
   const walkDir = async (dir) => {
     const entries = await readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
+      if (!_running) return;
       const full = join(dir, entry.name);
       if (entry.isDirectory()) {
         await walkDir(full);
@@ -904,6 +920,10 @@ async function scanCodexSessions() {
         try {
           total += await syncSessionFile(full, COLLECTIONS.codex, parseCodexSession, cfg.dims);
         } catch (err) {
+          if (err.message === 'No embedding API key configured' && getEmbeddingProvider() === 'none') {
+            logger.debug('Codex session scan aborted — provider switched to none', { module: 'qdrant-sync' });
+            return;
+          }
           logger.error('Codex session sync error', { module: 'qdrant-sync', file: full, err: err.message });
         }
       }

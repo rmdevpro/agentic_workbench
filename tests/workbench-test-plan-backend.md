@@ -21,7 +21,7 @@
 - `workbench_send_message`, `workbench_get_project_notes`, `workbench_get_session_notes`, `workbench_ask_cli`, `workbench_ask_quorum`, `workbench_smart_compaction` — all removed
 
 ### Changed modules
-- `mcp-tools.js` — 17 tools consolidated to 3 (`workbench_files`, `workbench_sessions`, `workbench_tasks`)
+- `mcp-tools.js` — 44 flat tools grouped by domain: `file_*` (8), `session_*` (19), `project_*` (11), `task_*` (5), `log_*` (1)
 - `mcp-server.js` — tool definitions updated to match
 - `db.js` — added `cli_type` column, `mcp_registry` and `mcp_project_enabled` tables, `searchSessionsByName()`
 - `safe-exec.js` — added `tmuxCreateGemini()`, `tmuxCreateCodex()`, user `workbench` (was `hopper`)
@@ -159,6 +159,20 @@ Before functional testing begins, verify compliance with all ERQ-001 requirement
 ## 2. Test Strategy: Two Layers
 
 Per WPR-103 §2, the test plan defines a two-layer strategy. Each layer has sub-categories for practical execution.
+
+### 2.0 Where tests run (host vs container)
+
+**Tests must execute inside the deployed `${WORKBENCH_CONTAINER}` (or an HF Space's container), never on the host machine's shell.** Workbench dev/prod hosts (M5, irina, others) hold the live SQLite database, the live `secrets.env` (with real Slack/GitHub webhook URLs and API keys), an active qdrant instance, and a running tmux server. Importing any project module from the host shell shares all of those with the test process.
+
+Concrete rules:
+
+- **Disallowed on the host shell of any workbench-running machine:** `npm test`, `npm run test:coverage`, `npm run test:live`, `npm run test:browser`, `node --test`, `c8`, `nyc`, ad-hoc `node -e` that `require()`s any project module. This includes "mock" tests — they still bring up the in-process Express app and fire real webhooks. A prior incident on the prod host nearly killed the active conversation when an "in-process" test mutated the live DB and webhook targets.
+- **Allowed:** Any of those commands run *inside* the container — e.g. `ssh ${WORKBENCH_HOST} 'docker exec -i ${WORKBENCH_CONTAINER} sh -c "cd /app && npm run test:coverage"'`. The container has its own DB, isolated webhooks (or a stub via test config), and its own tmux server.
+- **Browser tests** can be exercised via the Playwright MCP server (driven from inside Claude Code) pointed at a deployed `${WORKBENCH_URL}` — an HF Space or the irina dev container. Playwright drives Chromium against HTTP and never imports server code, so MCP-mediated `browser_*` calls against the Space URL are safe. The `npm run test:browser` wrapper, by contrast, IS forbidden on the host shell — it spins up via Node.
+- **Headed / visual checks** use Hymie or Hymie2 (remote desktops with real Firefox) against the deployed URL — required for bugs that depend on actual rendering rather than a headless DOM snapshot.
+- **Coverage runs** the same way — inside the container, never on the host. The c8 thresholds in `package.json` (`--lines 80 --branches 70`) gate container-internal runs only.
+
+If a test step or harness instruction in this plan implies a `node` command, assume "inside the container" unless it explicitly says otherwise.
 
 ### Layer 1: Mock Tests (Unit)
 
@@ -374,7 +388,19 @@ These self-tests gate the threshold and stress suites. If priming is inaccurate,
 
 ### 3.9 Coverage Gating
 
-Minimum structural coverage threshold: **80% line coverage, 70% branch coverage** measured by running the full mock test suite through `c8`. The engineering gate does not pass if coverage is below threshold. Structural coverage is the primary mechanism for verifying that all programmatic logic has corresponding test coverage (WPR-103 §2.6).
+Three thresholds, applied independently. **All three must pass for the gate to clear.**
+
+| Layer | Threshold | Measurement |
+|---|---|---|
+| Mock (structural) | **≥ 85% lines, ≥ 70% branches** | `c8` over `tests/mock/*.test.js`, run inside the deployed container. Tracks how much of the codebase is exercised by the unit suite. |
+| Live (feature) | **100% of features** | Every API endpoint, every MCP tool (currently 45), every backend feature in §15 must have at least one PASS row in `tests/live/`. Functional coverage, not line coverage. |
+| UI (feature) | **100% of features** | Every UI surface in §5 of the UI plan, every user-visible feature, every settings field, every dialog must have at least one PASS row in `tests/browser/` (or runbook UI phase). |
+
+**The "100% feature coverage" gate is not negotiable.** A feature without a live AND a UI test (where each layer applies) is a coverage failure. Don't ship features without both.
+
+The 85% mock threshold reflects that some defensive branches and trivial error paths aren't worth dedicated unit tests. The 100% feature thresholds reflect repeated incidents (most cited: a 785-test suite that caught zero of 38 filed bugs — see §0) where line coverage was high but features still shipped broken because the tests covered the easy paths and skipped user-visible ones.
+
+Reporting rule: report the actual count, not a rounded percentage. "44 of 45 MCP tools have a live PASS row, 1 outstanding" beats "~98% covered" — the gate fails the moment you can name an untested feature.
 
 ### 3.10 Baseline Reset Protocol
 
@@ -895,44 +921,44 @@ This is the highest-risk subsystem. It requires both granular stage tests and fu
 | ID | Capability | Layer | Status |
 |----|-----------|-------|--------|
 | MCS-01 | JSON-RPC `initialize` returns protocol version | Mock + Live | NONE |
-| MCS-02 | `tools/list` returns all 3 tools (workbench_files, workbench_sessions, workbench_tasks) | Mock | NONE |
+| MCS-02 | `tools/list` returns all 44 flat tools grouped by file_/session_/project_/task_ prefix | Mock | NONE |
 | MCS-03 | `tools/call` delegates to Workbench HTTP API | Live | NONE |
-| MCS-04a | `workbench_files action=list` | Live | PASS |
-| MCS-04b | `workbench_files action=read` | Live | PASS |
-| MCS-04c | `workbench_files action=grep` | Live | PASS |
-| MCS-04d | `workbench_files action=create` | Live | PASS |
-| MCS-04e | `workbench_files action=update` | Live | PASS |
-| MCS-04f | `workbench_files action=delete` | Live | PASS |
-| MCS-04g | `workbench_files action=search_documents` | Live | PASS |
-| MCS-04h | `workbench_files action=search_code` | Live | PASS |
-| MCS-04i | `workbench_sessions action=list` | Live | PASS |
-| MCS-04j | `workbench_sessions action=new` (claude) | Live | PASS |
-| MCS-04k | `workbench_sessions action=new` (gemini) | Live | PASS |
-| MCS-04l | `workbench_sessions action=new` (codex) | Live | PASS |
-| MCS-04m | `workbench_sessions action=connect` (by id) | Live | PASS |
-| MCS-04n | `workbench_sessions action=connect` (by query) | Live | PASS |
-| MCS-04o | `workbench_sessions action=restart` | Live | PASS |
-| MCS-04p | `workbench_sessions action=config` | Live | PASS |
-| MCS-04q | `workbench_sessions action=tokens` | Live | PASS |
-| MCS-04r | `workbench_sessions action=summarize` | Live | PASS |
-| MCS-04s | `workbench_sessions action=transition` | Live | PASS |
-| MCS-04t | `workbench_sessions action=resume` | Live | PASS |
-| MCS-04u | `workbench_sessions action=grep` (claude filter) | Live | PASS |
-| MCS-04v | `workbench_sessions action=grep` (all CLIs) | Live | PASS |
-| MCS-04w | `workbench_sessions action=search_semantic` | Live | PASS |
-| MCS-04x | `workbench_sessions action=mcp_register` | Live | PASS |
-| MCS-04y | `workbench_sessions action=mcp_unregister` | Live | PASS |
-| MCS-04z | `workbench_sessions action=mcp_enable` | Live | PASS |
-| MCS-04aa | `workbench_sessions action=mcp_disable` | Live | PASS |
-| MCS-04ab | `workbench_sessions action=mcp_list_available` | Live | PASS |
-| MCS-04ac | `workbench_sessions action=mcp_list_enabled` | Live | PASS |
-| MCS-04ad | `workbench_tasks action=get` | Live | PASS |
-| MCS-04ae | `workbench_tasks action=add` | Live | PASS |
-| MCS-04af | `workbench_tasks action=complete` | Live | PASS |
-| MCS-04ag | `workbench_tasks action=reopen` | Live | PASS |
-| MCS-04ah | `workbench_tasks action=archive` | Live | PASS |
-| MCS-04ai | `workbench_tasks action=move` | Live | PASS |
-| MCS-04aj | `workbench_tasks action=update` | Live | PASS |
+| MCS-04a | `file_list` | Live | PASS |
+| MCS-04b | `file_read` | Live | PASS |
+| MCS-04c | `file_find` | Live | PASS |
+| MCS-04d | `file_create` | Live | PASS |
+| MCS-04e | `file_update` | Live | PASS |
+| MCS-04f | `file_delete` | Live | PASS |
+| MCS-04g | `file_search_documents` | Live | PASS |
+| MCS-04h | `file_search_code` | Live | PASS |
+| MCS-04i | `session_list` | Live | PASS |
+| MCS-04j | `session_new` (claude) | Live | PASS |
+| MCS-04k | `session_new` (gemini) | Live | PASS |
+| MCS-04l | `session_new` (codex) | Live | PASS |
+| MCS-04m | `session_connect` (by id) | Live | PASS |
+| MCS-04n | `session_connect` (by query) | Live | PASS |
+| MCS-04o | `session_restart` | Live | PASS |
+| MCS-04p | `session_config` | Live | PASS |
+| MCS-04q | `session_info` | Live | PASS |
+| MCS-04r | `session_summarize` | Live | PASS |
+| MCS-04s | `session_prepare_pre_compact` | Live | PASS |
+| MCS-04t | `session_resume_post_compact` | Live | PASS |
+| MCS-04u | `session_find` (claude filter) | Live | PASS |
+| MCS-04v | `session_find` (all CLIs) | Live | PASS |
+| MCS-04w | `session_search` | Live | PASS |
+| MCS-04x | `project_mcp_register` | Live | PASS |
+| MCS-04y | `project_mcp_unregister` | Live | PASS |
+| MCS-04z | `project_mcp_enable` | Live | PASS |
+| MCS-04aa | `project_mcp_disable` | Live | PASS |
+| MCS-04ab | `project_mcp_list` | Live | PASS |
+| MCS-04ac | `project_mcp_list_enabled` | Live | PASS |
+| MCS-04ad | `task_find` | Live | PASS |
+| MCS-04ae | `task_add` | Live | PASS |
+| MCS-04af | `task_update {status:'done'}` | Live | PASS |
+| MCS-04ag | `task_update {status:'todo'}` | Live | PASS |
+| MCS-04ah | `task_update {status:'archived'}` | Live | PASS |
+| MCS-04ai | `task_move` | Live | PASS |
+| MCS-04aj | `task_update` | Live | PASS |
 | MCS-05 | Invalid tool name returns error | Mock | NONE |
 | MCS-06 | Malformed JSON-RPC request handling | Mock | NONE |
 | MCS-07 | `notifications/initialized` no-op | Live | NONE |
@@ -2591,36 +2617,27 @@ Single source of truth. Updated on every write/run. One row per scenario.
 | FS-05 | Mock + Live | tests/mock/routes.test.js, tests/live/routes-filesystem.test.js | Not started | - | Not run | |
 | FS-06 | Mock + Live | tests/mock/mcp-tools.test.js, tests/live/mcp-tools.test.js | Not started | - | Not run | |
 
-### 15.21 MCP Tools (Internal)
+### 15.21 MCP Tools (Internal — 44 flat tools)
 
-| ID | Layer | Test File | Status | Last Run | Result | Notes |
-|----|-------|-----------|--------|----------|--------|-------|
-| MCP-01 | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-02 | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-03 | Mock + Live | tests/mock/mcp-tools.test.js, tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-04 | Mock | tests/mock/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-05 | Mock | tests/mock/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06a | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06b | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06c | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06d | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06e | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06f | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06g | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06h | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06i | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06j | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06k | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06l | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06m | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06n | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06o | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06p | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-06q | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-07 | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-08 | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-09 | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
-| MCP-10 | Live | tests/live/mcp-tools.test.js | Not started | - | Not run | |
+After the `mcp-rework` (commits `ce1b624` + `2f062f5`), the `workbench` MCP server exposes 44 flat tools across four domains: `file_*` (8), `session_*` (19), `project_*` (11), `task_*` (5), `log_*` (1). Tests live across three layers:
+
+- **Mock** — `tests/mock/mcp-tools.test.js`. Catalogue size, dispatch, validation/error mapping. 9 tests, all pass with `node --test`.
+- **Live integration** — `tests/live/mcp-tools.test.js` and the runbook **Phase 14** matrix. One happy-path row per tool, exercised via `POST /api/mcp/call` against a deployed `${WORKBENCH_CONTAINER}`.
+- **Live e2e** — runbook **Phase 14b** (`MCP-E2E-01..05`). Drives real CLI panes via `session_*` tools end-to-end for Claude/Gemini/Codex.
+
+| ID | Layer | Coverage | Test artefact |
+|----|-------|----------|---------------|
+| MCP-CAT-MOCK | Mock | Catalogue size = 45, group counts (file:8, session:19, project:12, task:6), every name flat | tests/mock/mcp-tools.test.js |
+| MCP-CAT-INT | Live | `GET /api/mcp/tools` returns 45, all flat-named | runbook MCP-CAT-00 |
+| MCP-CAT-STDIO | Live | `mcp-server.js` stdio: initialize → `serverInfo.name="workbench"`; tools/list → 44 tools, no `workbench_` double-prefix | runbook MCP-CAT-01 |
+| MCP-F-01..08 | Live | Each `file_*` tool happy path | runbook Phase 14 file_* matrix |
+| MCP-S-01..19 | Live | Each `session_*` tool happy path (S-14..19 are tmux interaction) | runbook Phase 14 session_* matrix |
+| MCP-P-01..12 | Live | Each `project_*` tool happy path (incl. sys_prompt_*, mcp_*) | runbook Phase 14 project_* matrix |
+| MCP-T-01..06 | Live | Each `task_*` tool happy path (status transitions via task_update) | runbook Phase 14 task_* matrix |
+| MCP-NEG-01..10 | Mock + Live | Error mapping: 404 unknown / 400 validation / 403 traversal / 410 dead session / 409 conflict | runbook Phase 14 negative-path matrix |
+| MCP-E2E-01..05 | Live e2e | Drive Claude/Gemini/Codex through full prompt→read cycle via `session_*` only. Hidden-default + override. | runbook Phase 14b |
+
+**Coverage assertion (gate):** every one of the 44 tool names must appear at least once in the Live or Live-e2e matrices with a PASS row before the rework can merge to main. Mock catalogue is automated on every commit and is non-negotiable as a precondition.
 
 ### 15.22 MCP Tools (External/Admin) — REMOVED
 

@@ -157,6 +157,12 @@ function makeApp(overrides = {}) {
     getAllSettings: () => Object.fromEntries(settings),
     getSetting: (k, fb = null) => (settings.has(k) ? settings.get(k) : fb),
     setSetting: (k, v) => settings.set(k, v),
+    searchSessionsByName: (q) => {
+      const needle = String(q).toLowerCase();
+      return [...sessions.values()]
+        .filter((s) => (s.name || '').toLowerCase().includes(needle))
+        .map((s) => ({ ...s, project_name: projectById.get(s.project_id)?.name }));
+    },
     DATA_DIR: '/tmp/bp-data',
   };
   const existsFn = overrides.tmuxExists ?? (async () => false);
@@ -174,6 +180,7 @@ function makeApp(overrides = {}) {
       tmuxSendKeysAsync: async () => {},
       claudeExecAsync: overrides.claudeExecAsync ?? (async () => 'ok'),
       gitCloneAsync: async () => 'cloned',
+      sanitizeErrorForClient: (msg) => msg,
     },
     config: {
       get: (k, fb) =>
@@ -212,6 +219,24 @@ function makeApp(overrides = {}) {
         model: 'claude-sonnet-4-6',
         max_tokens: 200000,
       }),
+      // #156: getSessionInfo + invalidateSessionInfoCache became part of the
+      // routes.js contract. Mocks must stub them or routes return 500 on
+      // any path that touches the cache (config PUT, tokens, list, delete).
+      getSessionInfo: async (sessionId) => ({
+        id: sessionId,
+        cli_type: 'claude',
+        name: 'mock session',
+        state: 'active',
+        active: false,
+        input_tokens: 50000,
+        max_tokens: 200000,
+        message_count: 0,
+        timestamp: new Date().toISOString(),
+        model: 'claude-sonnet-4-6',
+      }),
+      invalidateSessionInfoCache: () => {},
+      discoverGeminiSessions: () => [],
+      discoverCodexSessions: () => [],
     },
     keepalive: {
       getStatus: async () => ({
@@ -411,7 +436,7 @@ test('session creation success path with webhook event', async () => {
   await withFullServer(async ({ port, db, firedEvents }) => {
     const r = await req(port, 'POST', '/api/sessions', {
       project: 'test-project',
-      prompt: 'Test prompt',
+      name: 'Test session',
     });
     assert.equal(r.status, 200);
     const body = await r.json();
@@ -715,12 +740,16 @@ test('summary error returns 500', async () => {
   });
 });
 
-test('tokens missing project returns null', async () => {
+test('tokens endpoint works without project param (#156)', async () => {
+  // Pre-#156 the route required ?project=…; post-#156 the project is
+  // looked up via getSessionInfo so the param is optional. Response shape
+  // is {input_tokens, model, max_tokens}, not the legacy {tokens}.
   await withFullServer(async ({ port, db }) => {
     const p = db.ensureProject('tp2', '/workspace/tp2');
     db.upsertSession('tok2', p.id, 'Tok');
     const r = await (await req(port, 'GET', '/api/sessions/tok2/tokens')).json();
-    assert.equal(r.tokens, null, 'Missing project param should return tokens: null');
+    assert.ok('input_tokens' in r, 'response must include input_tokens');
+    assert.ok('max_tokens' in r, 'response must include max_tokens');
   });
 });
 
@@ -1198,7 +1227,7 @@ test('SES-20: POST /api/sessions rejects overlong project name', async () => {
   await withFullServer(async ({ port }) => {
     const r = await req(port, 'POST', '/api/sessions', {
       project: 'x'.repeat(256),
-      prompt: 'hi',
+      name: 'hi',
     });
     assert.equal(r.status, 400);
     const body = await r.json();
@@ -1206,11 +1235,11 @@ test('SES-20: POST /api/sessions rejects overlong project name', async () => {
   });
 });
 
-test('SES-21: POST /api/sessions rejects overlong prompt', async () => {
+test('SES-21: POST /api/sessions rejects overlong name', async () => {
   await withFullServer(async ({ port }) => {
     const r = await req(port, 'POST', '/api/sessions', {
       project: 'test-project',
-      prompt: 'x'.repeat(50001),
+      name: 'x'.repeat(50001),
     });
     assert.equal(r.status, 400);
     const body = await r.json();
@@ -1327,6 +1356,8 @@ test('SRCH-02: GET /api/search returns 500 when searchSessions throws', async ()
   fs.mkdirSync(testProj2, { recursive: true });
   // Build a fresh db for this app
   const { db: db2 } = makeApp({ workspace: WORKSPACE2 });
+  // #230: /api/search now calls db.searchSessionsByName; force it to throw
+  db2.searchSessionsByName = () => { throw new Error('search exploded'); };
   // Build a fresh app that throws on sessionUtils methods
   const throwingApp = express();
   throwingApp.use(express.json({ limit: '5mb' }));
@@ -1344,6 +1375,7 @@ test('SRCH-02: GET /api/search returns 500 when searchSessions throws', async ()
       tmuxSendKeysAsync: async () => {},
       claudeExecAsync: async () => 'ok',
       gitCloneAsync: async () => 'cloned',
+      sanitizeErrorForClient: (msg) => msg,
     },
     config: { get: (k, fb) => fb, getPrompt: () => '' },
     sessionUtils: {
@@ -1357,6 +1389,12 @@ test('SRCH-02: GET /api/search returns 500 when searchSessions throws', async ()
       getTokenUsage: async () => {
         throw new Error('token exploded');
       },
+      getSessionInfo: async () => {
+        throw new Error('info exploded');
+      },
+      invalidateSessionInfoCache: () => {},
+      discoverGeminiSessions: () => [],
+      discoverCodexSessions: () => [],
     },
     keepalive: {
       getStatus: async () => ({ running: false, mode: 'always' }),

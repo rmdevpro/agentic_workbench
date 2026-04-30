@@ -34,7 +34,7 @@ This plan was originally written for a single-CLI (Claude) system with notes, me
 - **Tmux lifecycle** — periodic scan, idle timeouts, session limits
 - **CLI type indicator** — C/G/X with per-CLI colors
 - **Filter/sort dropdowns** — replaced filter buttons
-- **3 MCP tools** — workbench_files, workbench_sessions, workbench_tasks (consolidated from 17)
+- **45 MCP tools** — flat names grouped by domain: `file_*` (8), `session_*` (19), `project_*` (11), `task_*` (5), `log_*` (1)
 
 ---
 
@@ -97,6 +97,17 @@ Before context threshold or autocompaction scenarios:
 ---
 
 ## 2. Test Strategy
+
+### 2.0 Where tests run (host vs container)
+
+**Run all UI tests against a deployed `${WORKBENCH_URL}` — never against an in-process app spun up from a workbench-host shell.** Two acceptable surfaces:
+
+1. **Playwright MCP** (driven from inside Claude Code in this session) → pointed at a deployed Space URL or the irina dev container's URL. The MCP server drives Chromium against HTTP only, never imports server code — so `browser_navigate` / `browser_evaluate` calls against the Space are safe.
+2. **Hymie / Hymie2** (remote desktops with real Firefox) → for headed/visual bugs that need actual rendering, also pointed at the deployed URL.
+
+The hard constraint: never run `npm test`, `npm run test:coverage`, `npm run test:live`, `npm run test:browser`, `node --test`, or `c8` from the host shell of a machine that's actually running Workbench (e.g. M5, irina). Those commands import project modules into the host's Node process and end up using the live DB, live `secrets.env` (real webhooks, real API keys), and live tmux server. The Playwright *MCP* path is fine; the Playwright *npm wrapper* path is not.
+
+The runbook's prerequisites section repeats this rule for an executor who skipped the plan.
 
 ### 2.1 Principle
 
@@ -196,6 +207,30 @@ All shared utilities live in `tests/helpers/`:
 | `visual-review-rubric.md` | Versioned visual review criteria |
 | `llm-judge-rubric.md` | Versioned LLM-as-judge rubric: judge model (Haiku), rating scale (1-5), minimum acceptable (3/5), evaluation dimensions |
 
+### 3.4a Prescribed UI Test Methodology
+
+UI tests follow one prescribed pattern, with one exception. Both surfaces drive the **deployed `${WORKBENCH_URL}`** (HF Space or irina dev container). Neither uses a synthetic stand-in for the CLI.
+
+**Default — Playwright MCP (headless Chromium):**
+
+- Driven from inside this Claude Code session via the Playwright MCP server. `browser_navigate` / `browser_evaluate` / `browser_click` / etc.
+- Exercises the **full stack**: UI → WebSocket → tmux pane → real Claude / Gemini / Codex CLI → session JSONL → status-bar / sidebar updates.
+- Used for every UI test that is not specifically about real-rendering or OAuth input. This is the default.
+
+**Exception — Hymie / Hymie2 (real Firefox, headed):**
+
+- For visual / rendering bugs that headless Chromium cannot accurately model (font metrics, scrollbar behavior, layout edge cases under real fonts).
+- For CLI-input bugs (Ink keyboard handling, /login paste-back, anything that touches how a real terminal forwards keypresses to a TUI).
+- Driven via the Hymie MCP tools (`mcp__hymie__*` / `mcp__hymie2__*`) against the same `${WORKBENCH_URL}`.
+
+**Forbidden as test surfaces:**
+
+- Synthetic CLI substitutes (e.g. spawning a `bash` session via `session_new {cli:"bash"}` to "test" `session_send_*` instead of using a real Claude/Gemini/Codex pane). The `session_*` tools are tested by driving real CLI sessions, not by sending text to a generic shell. If the live CLI isn't authenticated on the test host, fix that — don't substitute.
+- Mocked WebSocket layers, mocked tmux, in-process app spun up next to the deployed one. The deployed Space/container is the only valid target.
+- `npm run test:browser` from the host shell of any workbench-running machine (M5, irina). See §2.0.
+
+The "no synthetic CLI" rule is part of the 100% feature-coverage gate (§3.7). A `session_*` test row that exercised a bash session instead of a real CLI does not count as covering that tool.
+
 ### 3.5 Baseline Reset Protocol
 
 Every test starts from a known clean state:
@@ -229,10 +264,22 @@ The rubric file is version-controlled so future reviewers use identical criteria
 
 ### 3.7 Coverage Gating
 
+Two thresholds, both applied independently — **both must pass.**
+
+**Structural coverage (client-side JS):**
 - Client-side JS coverage via `page.coverage.startJSCoverage()` / `stopJSCoverage()`
-- Threshold: >= 90% line / 80% branch on client-side JS
+- Threshold: ≥ 90% line / 80% branch on client-side JS
 - Coverage gate file (`z-coverage-gate.spec.js`) aggregates all reports and asserts thresholds
 - All 54 registered JS functions must be exercised
+
+**Feature coverage (UI surfaces): 100%, no exceptions.**
+- Every UI element listed in §5 (sidebar, main area, status bar, right panel, settings modal, auth modal, dynamic overlays — 139 elements) must have at least one PASS row in a Playwright spec or in the runbook's UI phases.
+- Every JS function in §6 (54 functions) must be exercised by name in at least one spec.
+- Every workflow in §8 must have at least one passing end-to-end test.
+- Every CLI category in §9 must have at least one terminal-mediated test that exercises the actual category.
+- A UI surface without a UI test is a gate failure. "Mostly covered", "almost all elements", "~95%" are NOT acceptable wording — report the count of uncovered surfaces explicitly. The gate fails the moment any surface from the inventories has no PASS row.
+
+The structural-coverage threshold (90/80) and the feature-coverage threshold (100%) are independent. A spec can boost structural coverage without hitting any new UI surface; it can hit a UI surface without raising structural coverage. The gate cares about both.
 
 ---
 
@@ -1029,6 +1076,31 @@ Messages panel and inter-session messaging removed. Replaced by tmux (#51). MSG-
 |----|----------|-------|-------|------------------|
 | LIFE-01 | Tmux session killed externally while tab open | Live | Open session, `docker exec` kill the tmux session | Tab status changes to "disconnected"; reconnect attempts; eventually `noReconnect` triggers ("No tmux session"); tab remains closable; no console errors |
 
+### 7.41 Recent UI Regressions (mcp-rework + issue fixes)
+
+Coverage for UI-visible fixes shipped in the canonical branch on or after the MCP rework. Cross-referenced from runbook **Phase 15**.
+
+| ID | Scenario | Layer | Issue | Expected Outcome |
+|----|----------|-------|-------|------------------|
+| UI-REG-220 | Auto-respawn keeps the same session_id; status bar tracks the live JSONL after kill+reattach | Live | #220 | Token count and message count update on the original session row, never silently re-key to a new UUID |
+| UI-REG-223 | Primary action buttons readable in dark theme (Start Session / Add Project / Authenticate) | Visual | #223 | Background is `var(--btn-primary)` (#1f6feb), legible against `--bg-secondary`. No washed-out near-white blue. |
+| UI-REG-224 | Click on folder icon area expands the directory | Live | #224 | `elementFromPoint(li.left + 8, mid)` returns `<a>`. Clicking the icon toggles `expanded` class on the LI. Same for the project picker (`#jqft-tree`). |
+| UI-REG-225 | Default-model dropdown uses CLI aliases | Live | #225 | `#setting-model` options are `Opus`/`Sonnet`/`Haiku` only. No version numbers. Legacy DB values (`claude-sonnet-4-6`) display as the matching alias on load. |
+| UI-REG-226 | Saved indicator flashes on each successful save | Live | #226 | After any successful `saveSetting()`, `#settings-saved-indicator` appears top-right of modal with `✓ Saved`, fades after ~1.5s. Failure path still surfaces via the error banner (no overlap). |
+| UI-REG-227 | Session-name field replaces free-form prompt textarea | Live | #227 | New-session modal has single-line `#new-session-name` (label "Session name", maxlength 60). Submit body uses `name`, not `prompt`. Sidebar shows the typed name verbatim. |
+| UI-REG-228-A | File tree does not collapse on tab close | Live | #228 | Open editor → close tab → tree state preserved. Pre-fix expanded directories collapsed every tab switch. |
+| UI-REG-228-B | Manual ↻ button preserves expanded state | Live | #228 | Click `#panel-refresh-files`; after rebuild settles (~2s), the same expanded directories are expanded again. |
+| UI-REG-MODE-REMOVED | Status bar no longer shows hardcoded "Mode: bypass" | Visual | mcp-rework | Bottom status bar contains only Model, optional Thinking, and Context items. No Mode item. |
+
+### 7.42 MCP Tool Catalogue from the Browser
+
+These are not new UI surfaces but are sanity checks that the front-end (and any future tool-list panel) reflects the new flat-tool world.
+
+| ID | Scenario | Layer | Expected Outcome |
+|----|----------|-------|------------------|
+| UI-MCP-CAT-01 | `fetch('/api/mcp/tools')` from the page returns 45 names | Live | `tools.length === 45`; all flat-named (`file_*` / `session_*` / `project_*` / `task_*`); no double-prefix |
+| UI-MCP-CAT-02 | Old action-router shape rejected | Live | `POST /api/mcp/call {tool:"workbench_files", args:{action:"list"}}` returns HTTP 404 with `Unknown tool: workbench_files` |
+
 ---
 
 ## 8. End-to-End Workflow Scenarios (`e2e-workflows.spec.js`)
@@ -1129,9 +1201,9 @@ Workbench wraps Claude Code sessions in tmux. Users interact with Claude through
 
 | ID | Tool | Verification | Gray-Box |
 |----|------|-------------|----------|
-| CLI-10 | `workbench_tasks action=get` | Task list shown in terminal | -- |
-| CLI-11 | `workbench_tasks action=add` | Task added | Tasks API shows new task |
-| CLI-12 | `workbench_sessions action=grep` | Search results shown | -- |
+| CLI-10 | `task_find` | Task list shown in terminal | -- |
+| CLI-11 | `task_add` | Task added | Tasks API shows new task |
+| CLI-12 | `session_find` | Search results shown | -- |
 | CLI-13 | ~~`workbench_get_project_notes`~~ REMOVED | — | Notes endpoint deleted |
 | CLI-14 | ~~`workbench_smart_compaction`~~ REMOVED | — | Feature deleted |
 

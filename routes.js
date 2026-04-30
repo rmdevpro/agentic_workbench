@@ -19,7 +19,10 @@ const crypto = require('crypto');
 const express = require('express');
 const { registerMcpRoutes } = require('./mcp-tools');
 const { registerWebhookRoutes } = require('./webhooks');
-const jqftConnector = require('jqueryfiletree/dist/connectors/jqueryFileTree');
+// File-tree directory listing endpoint. Replaced the upstream jqueryFileTree
+// node connector (was 2014-era sync I/O, no folder-first sort, no in-place
+// refresh on the front-end) with a JSON endpoint feeding a vanilla-JS tree
+// component in public/index.html.
 
 const SESSION_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 const PROJECT_NAME_MAX_LEN = 255;
@@ -472,7 +475,12 @@ function registerCoreRoutes(
       if (!filePath) return res.status(400).send('path required');
       const fileStat = await stat(filePath);
       if (!fileStat.isFile()) return res.status(400).send('not a file');
-      if (fileStat.size > 10 * 1024 * 1024) return res.status(413).send('file too large (>10MB)');
+      // No size cap. res.sendFile() streams from disk — server memory isn't
+      // at risk regardless of file size. Earlier 10 MB / 50 MB caps were
+      // defensive cargo-cult that silently broke the file viewer for
+      // legitimate large training/composite PNGs without preventing any
+      // threat that other paths (terminal sessions in the same UI) don't
+      // already permit.
       res.sendFile(filePath);
     } catch (err) {
       res.status(400).send(`Cannot read file: ${err.message}`);
@@ -530,9 +538,26 @@ function registerCoreRoutes(
     }
   });
 
-  // ── POST /api/jqueryfiletree ───────────────────────────────────────────────
+  // ── POST /api/files/list ───────────────────────────────────────────────────
+  // Lists a directory's immediate children. Folder-first, case-insensitive
+  // alpha within each group. Used by the FileTree component in
+  // public/index.html. Returns JSON, no HTML, no encoding gotchas.
 
-  app.post('/api/jqueryfiletree', jqftConnector.getDirList);
+  app.post('/api/files/list', async (req, res) => {
+    const dirPath = req.body.path;
+    if (!dirPath) return res.status(400).json({ error: 'path required' });
+    const fsp = require('fs/promises');
+    try {
+      const dirents = await fsp.readdir(dirPath, { withFileTypes: true });
+      const cmp = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+      const dirs = dirents.filter(e => e.isDirectory()).sort(cmp).map(e => ({ name: e.name, kind: 'directory' }));
+      const files = dirents.filter(e => !e.isDirectory()).sort(cmp).map(e => ({ name: e.name, kind: 'file' }));
+      res.json({ path: dirPath, entries: [...dirs, ...files] });
+    } catch (err) {
+      const status = err.code === 'ENOENT' ? 404 : err.code === 'EACCES' ? 403 : 500;
+      res.status(status).json({ error: err.message, code: err.code });
+    }
+  });
 
   // ── POST /api/projects ─────────────────────────────────────────────────────
 
@@ -1155,7 +1180,7 @@ function registerCoreRoutes(
       vector_custom_url: '',
       vector_custom_key: '',
       vector_collection_documents: { enabled: true, dims: 384, patterns: ['*.md', '*.txt', '*.pdf', '*.rst', '*.adoc'] },
-      vector_collection_code: { enabled: false, dims: 384, patterns: ['*.js', '*.ts', '*.py', '*.go', '*.rs', '*.java', '*.sh', 'Dockerfile', 'Makefile', '*.yml', '*.yaml', '*.json'] },
+      vector_collection_code: { enabled: true, dims: 384, patterns: ['*.js', '*.ts', '*.py', '*.go', '*.rs', '*.java', '*.sh', 'Dockerfile', 'Makefile', '*.yml', '*.yaml', '*.json'] },
       vector_collection_claude: { enabled: true, dims: 384 },
       vector_collection_gemini: { enabled: true, dims: 384 },
       vector_collection_codex: { enabled: true, dims: 384 },
@@ -1253,23 +1278,26 @@ function registerCoreRoutes(
 
   // ── CLI Credentials Check ─────────────────────────────────────────────────
 
-  app.get('/api/cli-credentials', (req, res) => {
-    const fs = require('fs');
+  app.get('/api/cli-credentials', async (req, res) => {
+    const fsp = require('fs/promises');
     const { join } = require('path');
     const home = safe.HOME;
 
     // Gemini: check for credentials file OR GOOGLE_API_KEY in env OR key in DB settings
     const geminiCredFile = join(home, '.gemini', 'gemini-credentials.json');
-    const hasGemini = fs.existsSync(geminiCredFile) ||
-      !!process.env.GOOGLE_API_KEY ||
+    let hasGemini = !!process.env.GOOGLE_API_KEY ||
       !!process.env.GEMINI_API_KEY ||
       !!db.getSetting('gemini_api_key', '');
+    if (!hasGemini) {
+      try { await fsp.access(geminiCredFile); hasGemini = true; }
+      catch { /* no creds file */ }
+    }
 
     // Codex: check auth.json for OPENAI_API_KEY
     let hasOpenai = !!process.env.OPENAI_API_KEY || !!db.getSetting('codex_api_key', '');
     if (!hasOpenai) {
       try {
-        const codexAuth = JSON.parse(fs.readFileSync(join(home, '.codex', 'auth.json'), 'utf-8'));
+        const codexAuth = JSON.parse(await fsp.readFile(join(home, '.codex', 'auth.json'), 'utf-8'));
         hasOpenai = !!codexAuth.OPENAI_API_KEY;
       } catch { /* no auth file */ }
     }
@@ -1444,7 +1472,21 @@ function registerCoreRoutes(
       if (!q || q.length < 2) return res.json({ results: [] });
       if (q.length > SEARCH_QUERY_MAX_LEN)
         return res.status(400).json({ error: `query too long (max ${SEARCH_QUERY_MAX_LEN})` });
-      const results = await sessionUtils.searchSessions(q, null, 20);
+      // #230: sidebar search filters by name only — UI renders r.name, so
+      // transcript-content matches surface sessions whose names don't contain
+      // the query and break user expectations.
+      const rows = db.searchSessionsByName(q);
+      const results = rows.map((s) => ({
+        session_id: s.id,
+        sessionId: s.id,
+        project: s.project_name,
+        name: s.name,
+        match_count: 1,
+        matchCount: 1,
+        snippets: [s.name],
+        matches: [{ type: 'name', text: s.name }],
+        cli_type: s.cli_type || 'claude',
+      }));
       res.json({ results });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -1554,8 +1596,8 @@ function registerCoreRoutes(
   // Generic delivery of text/keys to a session's tmux pane via server-side
   // load-buffer/paste-buffer/send-keys. Robust to a closed terminal WS on
   // the client (e.g. browser tab backgrounded during OAuth flow). Shape
-  // mirrors the planned `workbench_sessions send_text` / `send_key` MCP
-  // actions so the MCP rework can reuse the same primitives.
+  // mirrors the `session_send_text` / `session_send_key` MCP tools, which
+  // share the same underlying safe-exec primitives.
 
   const SEND_TEXT_MAX_LEN = 8192;
   const ALLOWED_NAMED_KEYS = new Set([

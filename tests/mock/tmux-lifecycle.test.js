@@ -12,6 +12,14 @@ function makeLifecycle(overrides = {}) {
   const existing = new Set(overrides.existing || []);
   const safe = {
     sanitizeTmuxName: (n) => n.replace(/[^a-zA-Z0-9_-]/g, '_'),
+    // #156: tmuxName moved into safe-exec as tmuxNameFor (canonical source).
+    // Match the real implementation's wb_<id12>_<hash4> shape so TMX-01's
+    // regex matches.
+    tmuxNameFor: (id) => {
+      const safeId = String(id).slice(0, 12);
+      const hash = Math.random().toString(36).slice(2, 6);
+      return `wb_${safeId}_${hash}`;
+    },
     tmuxExists: async (n) => existing.has(n),
     tmuxKill: async (n) => {
       killed.push(n);
@@ -28,10 +36,18 @@ function makeLifecycle(overrides = {}) {
   };
   const logger = { info() {}, warn() {}, error() {}, debug() {} };
   const onKilled = [];
+  // tmux-lifecycle.js now reads idle/scan/max-sessions knobs from config.
+  // Map test overrides into the config keys it actually queries.
+  const configValues = {
+    'tmux.maxSessions': overrides.max ?? 1,
+    'tmux.idleWithTabDays': overrides.idleWithTabDays ?? 99999,
+    'tmux.idleWithoutTabDays': overrides.idleWithoutTabDays ?? 4,
+    'tmux.scanIntervalSeconds': overrides.scanIntervalSeconds ?? 60,
+  };
+  const config = { get: (k, fb) => configValues[k] ?? fb };
   const lc = createTmuxLifecycle({
     safe,
-    MAX_TMUX_SESSIONS: overrides.max ?? 1,
-    TMUX_CLEANUP_DELAY: overrides.delay ?? 10,
+    config,
     logger,
   });
   lc.setOnSessionKilled((tmux) => onKilled.push(tmux));
@@ -72,8 +88,11 @@ test('TMX-07: cancelTmuxCleanup re-adds session to activeTabs', async () => {
   assert.deepEqual(killed, []);
 });
 
-test('TMX-08: enforceTmuxLimit kills oldest sessions over limit (all prefixes)', async () => {
-  // Use recent timestamps so idle-timeout does not fire; limit=1 means two oldest are killed
+test('TMX-08: enforceTmuxLimit kills oldest sessions over limit (any prefix)', async () => {
+  // Use recent timestamps so idle-timeout does not fire; limit=1 means two oldest are killed.
+  // Mixed prefixes (wb_*, regular_*) prove the limit logic doesn't filter by prefix —
+  // post-bulldozer the only canonical prefix is wb_, but the lifecycle still has to kill
+  // legacy/foreign-prefixed sessions if it encounters them.
   const recentBase = Math.floor(Date.now() / 1000);
   const t1 = recentBase - 10;
   const t2 = recentBase - 5;
@@ -81,7 +100,7 @@ test('TMX-08: enforceTmuxLimit kills oldest sessions over limit (all prefixes)',
   const { lifecycle, killed } = makeLifecycle({
     max: 1,
     existing: ['wb_a', 'wb_b', 'regular_c'],
-    tmuxExecAsync: async () => `wb_a ${t1}\nbp_b ${t2}\nregular_c ${t3}\n`,
+    tmuxExecAsync: async () => `wb_a ${t1}\nwb_b ${t2}\nregular_c ${t3}\n`,
   });
   await lifecycle.enforceTmuxLimit();
   assert.deepEqual(killed, ['wb_a', 'wb_b']);
@@ -98,11 +117,13 @@ test('TMX-08: enforceTmuxLimit handles no-server-running gracefully', async () =
   assert.deepEqual(killed, []);
 });
 
-test('TMX-09: cleanOrphanedTmuxSessions kills ALL idle sessions (not just wb_)', async () => {
-  // lastActivity=0 makes all sessions ancient; idle-timeout path kills everything
+test('TMX-09: cleanOrphanedTmuxSessions kills ALL idle sessions (any prefix)', async () => {
+  // lastActivity=0 makes all sessions ancient; idle-timeout path kills everything.
+  // Same reasoning as TMX-08: post-bulldozer only wb_* is canonical, but the
+  // cleaner must still nuke legacy-prefixed sessions if encountered.
   const { lifecycle, killed } = makeLifecycle({
     existing: ['wb_one', 'wb_two', 'regular'],
-    tmuxExecAsync: async () => 'wb_one 0\nbp_two 0\nregular 0\n',
+    tmuxExecAsync: async () => 'wb_one 0\nwb_two 0\nregular 0\n',
   });
   await lifecycle.cleanOrphanedTmuxSessions();
   assert.deepEqual(killed, ['wb_one', 'wb_two', 'regular']);
