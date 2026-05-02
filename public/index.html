@@ -1446,21 +1446,6 @@ build/**</textarea>
       term.loadAddon(fitAddon);
       term.loadAddon(new WebLinksAddon.WebLinksAddon());
       term.open(paneEl);
-      // #173: keep xterm's scrollbar range in sync with buffer growth even while
-      // the user is scrolled up. Without this, scrollHeight stops tracking new rows
-      // appended above the viewport and the scrollbar runs out of track before the
-      // real bottom — user has to press Ctrl+End / down-arrow to recover.
-      // rAF-debounced so high-throughput streams (e.g. long Claude responses)
-      // collapse multiple onWriteParsed events into one refresh per frame.
-      let refreshScheduled = false;
-      term.onWriteParsed(() => {
-        if (refreshScheduled) return;
-        refreshScheduled = true;
-        requestAnimationFrame(() => {
-          refreshScheduled = false;
-          try { term.refresh(0, term.rows - 1); } catch { /* ignore */ }
-        });
-      });
 
       const tab = {
         id: tabId, tmux: tmuxSession, name, project, cli_type: cliType || 'claude',
